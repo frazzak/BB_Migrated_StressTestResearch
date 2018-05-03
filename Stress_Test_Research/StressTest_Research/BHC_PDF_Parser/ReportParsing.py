@@ -474,7 +474,7 @@ def report_parser_dataframer(reportsourcefolder = "/Users/phn1x/icdm2018_researc
 ###File path variables
 # File naming and renameing for input.
 homepath = os.environ['HOME']
-basepath = os.path.join(homepath,'ICDM_Research/Stress_Test_Research/StressTest_Research/')
+basepath = os.path.join(homepath,'icdm2018_research_BB/Stress_Test_Research/StressTest_Research/')
 sourcefolder = os.path.join(basepath,"unsecured_pdf_complete")
 os.listdir(sourcefolder)
 ReportName_prefix = 'FFIEC101_'
@@ -494,7 +494,7 @@ result_ffiec101.to_csv(os.path.join(basepath,"ParsedFiles/ffiec101_out.csv"),sep
 ###File path variables
 # File naming and renameing for input.
 homepath = os.environ['HOME']
-basepath = os.path.join(homepath,'ICDM_Research/Stress_Test_Research/StressTest_Research/')
+basepath = os.path.join(homepath,'icdm2018_research_BB/Stress_Test_Research/StressTest_Research/')
 sourcefolder = os.path.join(basepath,"unsecured_pdf_complete")
 os.listdir(sourcefolder)
 ReportName_prefix = 'FFIEC102_'
@@ -519,7 +519,7 @@ result_ffiec102.to_csv(os.path.join(basepath,"ParsedFiles/ffiec102_out.csv"),sep
 ###File path variables
 # File naming and renameing for input.
 homepath = os.environ['HOME']
-basepath = os.path.join(homepath,'ICDM_Research/Stress_Test_Research/StressTest_Research/')
+basepath = os.path.join(homepath,'icdm2018_research_BB/Stress_Test_Research/StressTest_Research/')
 sourcefolder = os.path.join(basepath,"unsecured_pdf_complete")
 os.listdir(sourcefolder)
 ReportName_prefix = 'FRY15'
