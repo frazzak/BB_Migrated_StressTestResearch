@@ -574,18 +574,6 @@ result_ffiec102.shape
 
 #Output to CSV
 result_ffiec102.to_csv(os.path.join(basepath,"ParsedFiles/ffiec102_out.csv"),sep = ",",encoding = "utf-8", index= False)
-
-
-
-ffiecissueslistpath =  ['/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/StressTest_Research/unsecured_pdf_complete/FFIEC102_1131787_20151231.PDF.pdf', 
- '/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/StressTest_Research/unsecured_pdf_complete/FFIEC102_1132449_20151231.PDF.pdf',
- '/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/StressTest_Research/unsecured_pdf_complete/FFIEC102_1245415_20151231.PDF.pdf', # May be fine
-  '/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/StressTest_Research/unsecured_pdf_complete/FFIEC102_1378434_20151231.PDF.pdf',
-]
-
-
-del(result_ffiec102)
-result_ffiec102 = report_parser_dataframer(reportsourcefolder = "/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/StressTest_Research/unsecured_pdf_complete/", reportfilepath = ffiecissueslistpath[0], extension = ".PDF.pdf")
 result_ffiec102.shape
 
 #Fix bugs with alignment on FFIEC102
@@ -673,7 +661,6 @@ result_output.shape
 #Output to CSV
 result_output.to_csv(os.path.join(basepath,"ParsedFiles/result_output.csv"),sep = ",",encoding = "utf-8", index= False)
 
-paths
 
 
 
