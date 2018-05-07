@@ -217,11 +217,13 @@ def report_column_alignmentstruct(tabulaList_df = None, ReportType = "FFIEC101",
                     #result_df_tmp.iloc[0,3] = np.nan
                     
                     result_df_tmp.iloc[:,0] = result_df_tmp[[0,1]].astype(str).apply(lambda x: ''.join(x), axis=1)
+                    
                     result_df_tmp[[1]] = np.nan
-                    result_df_tmp.iloc[:,1] = result_df_tmp.iloc[:,1].astype(object)
+                    #result_df_tmp.iloc[:,1] = result_df_tmp.iloc[:,1].astype(object)
                     result_df_tmp.iloc[0,0] = result_df_tmp.iloc[0,3]
                     result_df_tmp.iloc[0,3] = np.nan
                     result_df_tmp[[3]] = result_df_tmp[[3]].astype(str)
+                    result_df_tmp[[3]] = result_df_tmp[[3]].replace("nan",np.nan)
                     
                     
                 print(result_df_tmp)
@@ -254,7 +256,7 @@ def report_column_alignmentstruct(tabulaList_df = None, ReportType = "FFIEC101",
                         result_df_tmp.iloc[y,1] = result_df_tmp.iloc[y,1].split("Dollar Amounts in Thousands ")[-1]
                    
                     
-                    elif result_df_tmp.iloc[y,1] is not np.nan and ((isinstance(result_df_tmp.iloc[y,1], float) and result_df_tmp.iloc[y,1].astype(str) not in [np.nan,"nan","NaN"]) or (isinstance(result_df_tmp.iloc[y,1], str) and result_df_tmp.iloc[y,1] not in [np.nan,"nan","NaN"])) and bool(re.match(repattern2,result_df_tmp.iloc[y,1])):
+                    elif result_df_tmp.iloc[y,1] is not np.nan and  (( isinstance(result_df_tmp.iloc[y,1], float) and result_df_tmp.iloc[y,1].astype(str) not in [np.nan,"nan","NaN"]) or (isinstance(result_df_tmp.iloc[y,1], str) and result_df_tmp.iloc[y,1] not in [np.nan,"nan","NaN"])) and bool(re.match(repattern2,result_df_tmp.iloc[y,1])):
                         print("Found Consecutive space and periods to remove")
                         print(result_df_tmp.iloc[y,1])
                         result_df_tmp.iloc[y,1] =  re.sub(repattern2,"",result_df_tmp.iloc[y,1]).strip()
@@ -374,6 +376,8 @@ def report_column_alignmentstruct(tabulaList_df = None, ReportType = "FFIEC101",
                         result_df_tmp["Amount"][result_df_tmp["Description"].str.match("Backtesting (over the most recent calendar quarter)").fillna(False)] = np.nan
                         result_df_tmp["Description"][result_df_tmp["Description"].str.match("Backtesting (over the most recent calendar quarter)").fillna(False)] = result_df_tmp["Description"][result_df_tmp["Description"].str.match("Backtesting (over the most recent calendar quarter)").fillna(False)] + " |Number"
                         
+                        print("Replace ending nan description ")
+                        result_df_tmp["Description"][result_df_tmp["Description"].str.endswith("nan").fillna(False)] = result_df_tmp["Description"][result_df_tmp["Description"].str.endswith("nan").fillna(False)].replace("nan","")
                         
                         print("Post Fix MRRR Number Column Issue")
                         result_df_tmp["ReportCode"][result_df_tmp["Amount"].str.match("MRRR Number").fillna(False)] = "MRRR"
@@ -557,7 +561,7 @@ homepath = os.environ['HOME']
 basepath = os.path.join(homepath,'icdm2018_research_BB/Stress_Test_Research/StressTest_Research/')
 sourcefolder = os.path.join(basepath,"unsecured_pdf_complete")
 os.listdir(sourcefolder)
-ReportName_prefix = 'FFIEC102_'
+ReportName_prefix = 'FFIEC102_1069778_20161231'
 ReportName_suffix = '.PDF.pdf'
 paths = [ os.path.join(sourcefolder,fn) for fn in os.listdir(sourcefolder) if fn.startswith(ReportName_prefix) & fn.endswith(ReportName_suffix)]
 ########
@@ -663,7 +667,6 @@ len(paths)
 #del(result_output)
 result_output = report_parser_dataframer(reportsourcefolder = "/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/StressTest_Research/unsecured_pdf_complete/", reportfilepath = paths, extension = ".PDF.pdf")
 result_output.shape
-
 
 
 
