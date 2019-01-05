@@ -12,7 +12,7 @@ import pandas as pd
 import re
 import numpy as np
 import tabula
-
+import time
 #Prep Dataframe to have metadata for parsing using pandas data parsing and cleaning
 # 2017: Skip 10 rows
 #Get all Schedule Names and do proper mapping for each report
@@ -380,9 +380,11 @@ def report_column_alignmentstruct(tabulaList_df = None, ReportType = "FFIEC101",
                         result_df_tmp["Description"][result_df_tmp["Description"].str.endswith("nan").fillna(False)] = result_df_tmp["Description"][result_df_tmp["Description"].str.endswith("nan").fillna(False)].replace("nan","")
                         
                         print("Post Fix MRRR Number Column Issue")
-                        result_df_tmp["ReportCode"][result_df_tmp["Amount"].str.match("MRRR Number").fillna(False)] = "MRRR"
-                        result_df_tmp["Description"][result_df_tmp["Amount"].str.match("MRRR Number").fillna(False)] = "Number"
-                        result_df_tmp["Amount"][result_df_tmp["Amount"].str.match("MRRR Number").fillna(False)] = np.nan
+                        print(result_df_tmp)
+                        result_df_tmp["Amount"][result_df_tmp["Amount"].astype(str).str.match("MRRR Number").fillna(False)] = np.nan
+                        result_df_tmp["ReportCode"][result_df_tmp["Amount"].astype(str).str.match("MRRR Number").fillna(False)] = "MRRR"
+                        result_df_tmp["Description"][result_df_tmp["Amount"].astype(str).str.match("MRRR Number").fillna(False)] = "Number"
+                        
                     else: print("Skipping Post Cleanup")
                     
                 result_df[i] = result_df_tmp
@@ -427,12 +429,14 @@ def report_parser_dataframer(reportsourcefolder = "/Users/phn1x/icdm2018_researc
             result_df = list()                 
             ReportData = os.path.basename(y).replace(extension,"").split("_")
             print("Setting Tabula Page Parameters")
-            if ReportData[0] == "FFIEC101" and ReportData[2] < "20160101":
+            if ReportData[0] == "FFIEC101" and ReportData[2] < "20140401":
+                filepages = "2-4"
+            elif    ReportData[0] == "FFIEC101" and ReportData[2] < "20160701":
                 filepages = "2-5"
-            elif ReportData[0] == "FFIEC101" and ReportData[2] > "20160101":
+            elif ReportData[0] == "FFIEC101" and ReportData[2] > "20160701":
                 filepages = "2-6"
             elif ReportData[0] == "FFIEC102":
-                filepages = "all"
+                filepages = "2-4"
             elif ReportData[0] == "FRY15" and ReportData[2] > "20150101":
                 filepages = "2-5"
                 #Additional Logic and Parsing Needed to Process Short-Term Wholesale Funding  Schedule G page 6
@@ -489,12 +493,14 @@ def report_parser_dataframer(reportsourcefolder = "/Users/phn1x/icdm2018_researc
         ReportData = os.path.basename(reportfilepath).replace(extension,"").split("_")
         
         print("Setting Tabula Page Parameters")
-        if ReportData[0] == "FFIEC101" and ReportData[2] < "20160101":
+        if ReportData[0] == "FFIEC101" and ReportData[2] < "20140401":
+            filepages = "2-4"
+        elif    ReportData[0] == "FFIEC101" and ReportData[2] < "20160701":
             filepages = "2-5"
-        elif ReportData[0] == "FFIEC101" and ReportData[2] > "20160101":
+        elif ReportData[0] == "FFIEC101" and ReportData[2] > "20160701":
             filepages = "2-6"
         elif ReportData[0] == "FFIEC102":
-            filepages = "all"
+            filepages = "2-6"
         elif ReportData[0] == "FRY15" and ReportData[2] > "20150101":
             filepages = "2-5"
             #Additional Logic and Parsing Needed to Process Short-Term Wholesale Funding  Schedule G page 6
@@ -526,14 +532,252 @@ def report_parser_dataframer(reportsourcefolder = "/Users/phn1x/icdm2018_researc
         returnobj = master_result.dropna(axis=1,how='all')
         print("Final Clean up of string nans")
         returnobj = returnobj.replace("nan",np.nan)
+        
+        
+        
+        
         returnobj = returnobj.reset_index(drop = True)
         
+    
+    
+    DescriptionReportCodes = ["2170","FS88","FS90","M336","M341","Y832","Y831","M335"]
+    
+    print("Post Parsing Fixes")
+
+    #Bad Parse post fix
+    print("Fixing Description\ReportCode bad parses for :", DescriptionReportCodes)
+    for i in DescriptionReportCodes:
+        returnobj["ReportCode"][returnobj["Description"].astype(str).str.endswith(i).fillna(False)] = i
+        returnobj["Description"][returnobj["Description"].astype(str).str.endswith(i).fillna(False)] = returnobj["Description"][returnobj["Description"].astype(str).str.endswith(i).fillna(False)].str.replace(i,"").str.strip()
+    
+    
+    #NO report Code post fix
+    print("Creating ReportCode Placeholders for missing ReportCodes")
+    #returnobj["ReportCode"][returnobj["ReportCode"].isnull()][~returnobj["IndexInfo"].isin(["SectionInfo","HeaderInfo"])] = returnobj["Report_Type"][returnobj["ReportCode"].isnull()][~returnobj["IndexInfo"].isin(["SectionInfo","HeaderInfo"])] + "_" + returnobj["IndexInfo"][returnobj["ReportCode"].isnull()][~returnobj["IndexInfo"].isin(["SectionInfo","HeaderInfo"])]
+    
+    print('Generating Placeholder ReportCodes')
+    updatedReportsCodes = returnobj["Report_Type"][returnobj["ReportCode"].isnull()][~returnobj["IndexInfo"].isin(["SectionInfo","HeaderInfo"])] + "_" + returnobj["IndexInfo"][returnobj["ReportCode"].isnull()][~returnobj["IndexInfo"].isin(["SectionInfo","HeaderInfo"])].str.strip(".").str.strip()    
+    print('Generating Index for Update')
+    index1 = returnobj["ReportCode"][~returnobj["IndexInfo"].isin(["SectionInfo","HeaderInfo"])][returnobj["ReportCode"].isnull()].index
+    print('Updating with Placeholders')
+    returnobj.loc[index1,'ReportCode'] = updatedReportsCodes
+    
+    #Fill in Report Code for "1=Yes"
+    #Remove 1=Yes
+    print('Generating Placeholder ReportCodes for 1=Yes')
+    updatedReportsCodes = returnobj["Report_Type"][returnobj["ReportCode"].astype(str).str.match("1=Yes")] + "_" + returnobj["IndexInfo"][returnobj["ReportCode"].astype(str).str.match("1=Yes")].str.strip(".").str.strip()    
+    print('Generating Index for Update')
+    index1 = returnobj["ReportCode"][returnobj["ReportCode"].astype(str).str.match("1=Yes")].index
+    print('Updating with Placeholders')
+    returnobj.loc[index1,'ReportCode'] = updatedReportsCodes
+    
+
+
+    print("Fill in Blank Descriptions")
+    test1 = returnobj["ReportCode"][returnobj["Description"].isnull()][~returnobj["IndexInfo"].isin(["SectionInfo","HeaderInfo"])]
+
+    #Remove ending nan
+    
+    
+    print('Replacing Ending Nans')
+    updatedReportsCodes = returnobj["Description"][returnobj["Description"].astype(str).str.endswith("nan")][~returnobj["IndexInfo"].isin(["SectionInfo","HeaderInfo"])].str.replace("nan","").str.strip()    
+    print('Generating Index for Update')
+    index1 = returnobj["Description"][returnobj["Description"].astype(str).str.endswith("nan")][~returnobj["IndexInfo"].isin(["SectionInfo","HeaderInfo"])].index
+    print('Updating with Placeholders')
+    returnobj.loc[index1,'Description'] = updatedReportsCodes
+
+
+    #Missing Description Names
+    test2 = test1.unique()    
+    for i in test2:
+        
+        test3 = returnobj["Description"][returnobj["ReportCode"].astype(str).str.match(i)].unique()
+                
+        if len(test3) > 1:
+            print(i)
+            #Drop Null
+            print(test3)
+            test4 = [x for x in test3 if str(x) != 'nan']    
+            print(test4)
+            test5 = test4[0]    
+            returnobj["Description"][returnobj["ReportCode"].astype(str).str.match(i)] = test5
+            print(returnobj["Description"][returnobj["ReportCode"].astype(str).str.match(i)].unique())
+        
+
+            print("Fill Standard Descriptions for same ReportCodes")
+            test1 = returnobj["ReportCode"][~returnobj["IndexInfo"].isin(["SectionInfo","HeaderInfo"])]
+            
+            #Missing Description Names
+            test2 = test1.unique()    
+            for i in test2:
+                test3 = returnobj["Description"][returnobj["ReportCode"].astype(str).str.match(i)].unique()
+                        
+                if len(test3) > 1:
+                    print(i)
+                    print(test3)
+                    #Drop Null
+                    test4 = [x for x in test3 if str(x) != 'nan']    
+                    print(test4)
+                    test5 = test4[-1] #Give last description in array    
+                    returnobj["Description"][returnobj["ReportCode"].astype(str).str.match(i)] = test5
+                    print(returnobj["Description"][returnobj["ReportCode"].astype(str).str.match(i)].unique())
+
+
+    
+    
+    #print('Find in Amount Column Indexes with multiple periods')
+    index1 = returnobj["Description"][returnobj["Description"].astype(str).str.endswith(". . . . . .")].index
+    returnobj.loc[index1,"Description"]= returnobj.loc[index1,"Description"].str.replace(". .","").str.strip()
+    
+    
+    #print('Find in Amount Column Commas to remove')
+    
+    
+    # print('Remove First Period if multiple periods in Amount Column')
+    
+    
+    # Merge Similar Columns
+    
+    
+    print('Update Descriptions and Report Code to trip white spaces' )
+    returnobj["Description"] = returnobj["Description"].str.strip()
+    returnobj["ReportCode"] = returnobj["ReportCode"].str.strip()
+
     return(returnobj)
 
 
+#Build Transpose and rearrange Create Function
+
+#Column Names
+def reporttransposerarrangerbycell(result_output2, verbose = False):
+    start_time = time.time()
+    sincelast = 0
+    print("Creating Dataframe Structure")
+    print("Adding Standard Identifier Columns")
+    d1 = pd.DataFrame([],columns = ["Report_Type","Report_RSSD","Report_Date"])
+    ReportCodes = pd.DataFrame([],columns = pd.Series(result_output2["ReportCode"][~result_output2["IndexInfo"].isin(["SectionInfo","HeaderInfo"])].unique()))
+    if verbose:
+        print("Adding ReportCodes from Raw File and Binding to DataFrame")
+    d2 = pd.concat([d1,ReportCodes], axis=1)
+
+
+    #Get initial Data for First Rows
+    print("Creating Identity Rows")    
+    d3 = result_output2[["Report_Type","Report_RSSD","Report_Date"]][~result_output2["IndexInfo"].isin(["SectionInfo","HeaderInfo"])]
+    if verbose:
+        print("Dropping duplicates")
+    d4 = d3.drop_duplicates(subset = ["Report_Type","Report_RSSD","Report_Date"])
+    if verbose:
+        print("Inserting Rows to Dataframe")
+    d2[["Report_Type","Report_RSSD","Report_Date"]] = d4
+
+    print("Transposing and strucutring data from raw object to new structure")    
+    for i in range(0,len(d2)):
+        tmp_ReportType = d2.iloc[i,0]    
+        tmp_ReportRSSD = d2.iloc[i,1].astype(str)
+        tmp_ReportDate = d2.iloc[i,2].astype(str)
+        tmp_colnames = result_output2["ReportCode"][~result_output2["IndexInfo"].isin(["SectionInfo","HeaderInfo"])][result_output2["Report_Type"] == tmp_ReportType].unique()
+        print("Populating Row: ", i, "of ", len(d2), "(",(i/len(d2)) * 100, "% Completed)")
+        elapsed_time = time.time() - start_time
+        sincelast = elapsed_time - sincelast
+        print("Since Last: ", sincelast, " Time Elapsed: ", elapsed_time)
+        for y in tmp_colnames:
+            if verbose:
+                print(y)
+            tmp_ColNum = d2.columns.get_loc(y)
+            if verbose:
+                print(i," ",tmp_ColNum)
+            #Matching to other data frame.
+            tmp_value = result_output2["Amount"][result_output2["ReportCode"].astype(str).str.match(y)][result_output2["Report_RSSD"].astype(str).str.match(tmp_ReportRSSD)][result_output2["Report_Date"].astype(str).str.match(tmp_ReportDate)][result_output2["Report_Type"].astype(str).str.match(tmp_ReportType)]
+            if verbose:
+                print(tmp_value, len(tmp_value))
+            
+            if tmp_value.empty:
+                if verbose:
+                    print("Series is empty, setting NAN")
+                d2.iloc[i,tmp_ColNum] = np.nan
+            elif not tmp_value.isnull().all() and len(tmp_value) == 1:
+                d2.iloc[i,tmp_ColNum] = tmp_value.values[0]
+            elif tmp_value.isnull().all():
+                if verbose:
+                    print("Series is NULL, setting NAN")
+                d2.iloc[i,tmp_ColNum] = np.nan
+                
+            else:
+                if verbose:
+                    print(" has multiple values")
+                tmp_value2 =  [x for x in tmp_value if str(x) != 'nan']    
+                if verbose:
+                    print("Dropping Nans and Duplicates from array of multiple values")
+                #tmp_value3 = tmp_value2.unique
+               # print("Value being set: ", list(set(tmp_value2))[0])
+                d2.iloc[i,tmp_ColNum] = list(set(tmp_value2))[0]
+    return(d2)
+
+def reporttransposerarrangerbycolumn(result_output2, verbose = False):
+    start_time = time.time()
+    sincelast = 0
+    print("Creating Dataframe Structure")
+    print("Adding Standard Identifier Columns")
+    d1 = pd.DataFrame([],columns = ["Report_Type","Report_RSSD","Report_Date"])
+    ReportCodes = pd.DataFrame([],columns = pd.Series(result_output2["ReportCode"][~result_output2["IndexInfo"].isin(["SectionInfo","HeaderInfo"])].unique()))
+    ReportCodes.sort_index(axis=1, inplace=True)
+    
+    if verbose:
+        print("Adding ReportCodes from Raw File and Binding to DataFrame")
+    d2 = pd.concat([d1,ReportCodes], axis=1)
+
+    #Get initial Data for First Rows
+    print("Creating Identity Rows")    
+    d3 = result_output2[["Report_Type","Report_RSSD","Report_Date"]][~result_output2["IndexInfo"].isin(["SectionInfo","HeaderInfo"])]
+    if verbose:
+        print("Dropping duplicates")
+    d4 = d3.drop_duplicates(subset = ["Report_Type","Report_RSSD","Report_Date"])
+    if verbose:
+        print("Inserting Rows to Dataframe")
+    d2[["Report_Type","Report_RSSD","Report_Date"]] = d4[["Report_Type","Report_RSSD","Report_Date"]]
+
+    print("Transposing and strucutring data from raw object to new structure")    
+    
+    a = d2[['Report_Type', 'Report_RSSD', 'Report_Date']].reset_index(drop = True)
+    d2 = d2.reset_index(drop=True)
+    #for i in range(0,len(d2)):
+    #    tmp_ReportType = d2.iloc[i,0]    
+    #    tmp_ReportRSSD = d2.iloc[i,1].astype(str)
+    #    tmp_ReportDate = d2.iloc[i,2].astype(str)
+    #tmp_colnames = result_output2["ReportCode"][~result_output2["IndexInfo"].isin(["SectionInfo","HeaderInfo"])][result_output2["Report_Type"] == tmp_ReportType].unique()
+    tmp_colnames = [column for column in d2.columns.values if column not in ['index','Report_Type', 'Report_RSSD', 'Report_Date']]
+        #print("Populating Row: ", i, "of ", len(d2), "(",(i/len(d2)) * 100, "% Completed)")
+        #elapsed_time = time.time() - start_time
+        #sincelast = elapsed_time - sincelast
+        #print("Since Last: ", sincelast, " Time Elapsed: ", elapsed_time)
+    for y in tmp_colnames:
+        tmp_ColNum = d2.columns.get_loc(y)
+        elapsed_time = time.time() - start_time
+        sincelast = elapsed_time - sincelast
+
+        
+        print("Since Last: ", sincelast, " Time Elapsed: ", elapsed_time)
+        print("Populating Column: ", y, "of ", len(tmp_colnames), "(",(tmp_ColNum/len(tmp_colnames)) * 100, "% Completed)")
+        print("Getting Values from Raw DataFrame for ReportCode")
+        b = result_output2[['Report_Type', 'Report_RSSD', 'Report_Date','Amount']][result_output2["ReportCode"] == y].reset_index(drop = True)
+        b.drop_duplicates(subset = ['Report_Type', 'Report_RSSD', 'Report_Date','Amount'])
+        print("Merging on Identifiers to New Dataframe")
+        d2[y] = a.merge(b,how = 'left', on = ['Report_Type', 'Report_RSSD', 'Report_Date'])['Amount']
+        print("Cleaning Up Data (Two periods)")
+        d2[y][d2[y].str.count("\.") > 1] = d2[y][d2[y].str.count("\.") > 1].str.replace("\.","",n = 1)
+        print("Cleaning Up Data (AMOUNT)  ")
+        d2[y][d2[y].str.match("Amount").fillna(False)] = np.nan
+    print("Setting ReportDate to DateTime")
+    d2["Report_Date"] = pd.to_datetime(d2["Report_Date"],format = "%Y%m%d")
+    print("Cleaning Up Identifier Rows")
+    d2["Report_RSSD"] = d2["Report_RSSD"].astype(str).str.strip()    
+    return(d2)
 
 
 
+
+    
 #FFIEC_101
 ###File path variables
 # File naming and renameing for input.
@@ -545,23 +789,28 @@ ReportName_prefix = 'FFIEC101_'
 ReportName_suffix = '.PDF.pdf'
 paths = [ os.path.join(sourcefolder,fn) for fn in os.listdir(sourcefolder) if fn.startswith(ReportName_prefix) & fn.endswith(ReportName_suffix)]
 ########
-
+len(paths)
 del(result_ffiec101)
 result_ffiec101 = report_parser_dataframer(reportsourcefolder = "/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/StressTest_Research/unsecured_pdf_complete/", reportfilepath = paths, extension = ".PDF.pdf")
 result_ffiec101.shape
 #Output to CSV
-result_ffiec101.to_csv(os.path.join(basepath,"ParsedFiles/ffiec101_out.csv"),sep = ",",encoding = "utf-8", index= False)
+result_ffiec101.to_csv(os.path.join(basepath,"ParsedFiles/ffiec101_out_2.csv"),sep = ",",encoding = "utf-8", index= False)
+
 
 
 
 #FFIEC_102
+
+
+
+
 ###File path variables
 # File naming and renameing for input.
 homepath = os.environ['HOME']
 basepath = os.path.join(homepath,'icdm2018_research_BB/Stress_Test_Research/StressTest_Research/')
 sourcefolder = os.path.join(basepath,"unsecured_pdf_complete")
 os.listdir(sourcefolder)
-ReportName_prefix = 'FFIEC102_1069778_20161231'
+ReportName_prefix = 'FFIEC102_'
 ReportName_suffix = '.PDF.pdf'
 paths = [ os.path.join(sourcefolder,fn) for fn in os.listdir(sourcefolder) if fn.startswith(ReportName_prefix) & fn.endswith(ReportName_suffix)]
 ########
@@ -573,8 +822,7 @@ result_ffiec102.shape
 #result_ffiec102["Amount"].str.replace("__ _ ","")
 
 #Output to CSV
-result_ffiec102.to_csv(os.path.join(basepath,"ParsedFiles/ffiec102_out.csv"),sep = ",",encoding = "utf-8", index= False)
-result_ffiec102.shape
+result_ffiec102.to_csv(os.path.join(basepath,"ParsedFiles/ffiec102_out_1.csv"),sep = ",",encoding = "utf-8", index= False)
 
 #Fix bugs with alignment on FFIEC102
 
@@ -603,7 +851,7 @@ result_fry15.shape
 
 
 #Output to CSV
-result_fry15.to_csv(os.path.join(basepath,"ParsedFiles/fry15_out.csv"),sep = ",",encoding = "utf-8", index= False)
+result_fry15.to_csv(os.path.join(basepath,"ParsedFiles/fry15_out_1.csv"),sep = ",",encoding = "utf-8", index= False)
 
 
 
@@ -659,32 +907,128 @@ result_output.shape
 
 
 #Output to CSV
-result_output.to_csv(os.path.join(basepath,"ParsedFiles/result_output.csv"),sep = ",",encoding = "utf-8", index= False)
+result_output.to_csv(os.path.join(basepath,"ParsedFiles/result_output_2.csv"),sep = ",",encoding = "utf-8", index= False)
+#Backup
+result_output2 = pd.read_csv(os.path.join(basepath,"ParsedFiles/result_output_2.csv"))
 
 
 
 
+test1 = result_output2["ReportCode"][result_output2["Description"].isnull()][~result_output2["IndexInfo"].isin(["SectionInfo","HeaderInfo"])]
 
 
 
 
+#Removes Ending Nans
+print('Replacing Ending Nans')
+updatedReportsCodes = result_output2["Description"][result_output2["Description"].astype(str).str.endswith("nan")][~result_output2["IndexInfo"].isin(["SectionInfo","HeaderInfo"])].str.replace("nan","").str.strip()    
+print('Generating Index for Update')
+index1 = result_output2["Description"][result_output2["Description"].astype(str).str.endswith("nan")][~result_output2["IndexInfo"].isin(["SectionInfo","HeaderInfo"])].index
+print('Updating with Placeholders')
+result_output2.loc[index1,'Description'] = updatedReportsCodes
+
+
+#Missing Description Names
+test2 = test1.unique()
+
+
+for i in test2:
+    print(i)
+    test3 = result_output2["Description"][result_output2["ReportCode"].astype(str).str.match(i)].unique()
+    
+    
+    if len(test3) > 1:
+        print(test3)
+        #Drop Null
+        test4 = [x for x in test3 if str(x) != 'nan']    
+        print(test4)
+        test5 = test4[-1]
+        result_output2["Description"][result_output2["ReportCode"].astype(str).str.match(i)] = test5
+        print(result_output2["Description"][result_output2["ReportCode"].astype(str).str.match(i)].unique())
+        
+
+#result_output2.to_csv(os.path.join(basepath,"ParsedFiles/result_output2.csv"),sep = ",",encoding = "utf-8", index= False)
+
+
+
+print(result_output2["Description"][result_output2["ReportCode"].astype(str).str.match("Y832")].str.strip().unique())
+
+len(result_output2["Description"].str.strip().unique())
+    
+
+
+ReportCodes = result_output2["ReportCode"][~result_output2["IndexInfo"].isin(["SectionInfo","HeaderInfo"])]
+
+
+#Provide Standard Description for same report codes
+
+print("Fill Standard Descriptions for same ReportCodes")
+test1 = result_output2["ReportCode"][~result_output2["IndexInfo"].isin(["SectionInfo","HeaderInfo"])]
+
+#Missing Description Names
+test2 = test1.unique()    
+for i in test2:
+    test3 = result_output2["Description"][result_output2["ReportCode"].astype(str).str.match(i)].unique()
+            
+    if len(test3) > 1:
+        print(i)
+        print(test3)
+        #Drop Null
+        test4 = [x for x in test3 if str(x) != 'nan']    
+        print(test4)
+        test5 = test4[-1] #Give last description in array    
+        result_output2["Description"][result_output2["ReportCode"].astype(str).str.match(i)] = test5
+        print(result_output2["Description"][result_output2["ReportCode"].astype(str).str.match(i)].unique())
+    
+
+
+
+result_output2.to_csv(os.path.join(basepath,"ParsedFiles/result_output3.csv"),sep = ",",encoding = "utf-8", index= False)
+
+result_output2 = pd.read_csv(os.path.join(basepath,"ParsedFiles/result_output3.csv"))
+
+index1 = result_output2["Description"][result_output2["Description"].astype(str).str.endswith(". . . . . .")].index
+
+result_output2.loc[index1,"Description"]= result_output2.loc[index1,"Description"].str.replace("\. \.","").str.strip()
+
+
+#Remove 1=Yes
+print('Generating Placeholder ReportCodes for 1=Yes')
+updatedReportsCodes = result_output2["Report_Type"][result_output2["ReportCode"].astype(str).str.match("1=Yes")] + "_" + result_output2["IndexInfo"][result_output2["ReportCode"].astype(str).str.match("1=Yes")].str.strip(".").str.strip()    
+print('Generating Index for Update')
+index1 = result_output2["ReportCode"][result_output2["ReportCode"].astype(str).str.match("1=Yes")].index
+print('Updating with Placeholders')
+result_output2.loc[index1,'ReportCode'] = updatedReportsCodes
 
 
 
 
+result_output2.to_csv(os.path.join(basepath,"ParsedFiles/result_output4.csv"),sep = ",",encoding = "utf-8", index= False)
+
+###Transpose and rearrange
 
 
+result_output3 = reporttransposerarrangerbycolumn(result_output2, verbose = False)
 
 
+ReportCodes = pd.DataFrame(result_output2["ReportCode"][~result_output2["IndexInfo"].isin(["SectionInfo","HeaderInfo"])].unique(), columns = ["ReportCode"])
+
+FFIEC101_Transformed = result_output3.loc[result_output3["Report_Type"] == "FFIEC101"].dropna(axis="columns", how = "all")
+FFIEC102_Transformed = result_output3.loc[result_output3["Report_Type"] == "FFIEC102"].dropna(axis="columns", how = "all")
+FRY15_Transformed = result_output3.loc[result_output3["Report_Type"] == "FRY15"].dropna(axis="columns", how = "all")
+DataDictionary = result_output2[["ReportCode","Description","IndexInfo"]].drop_duplicates(subset = ["ReportCode","Description","IndexInfo"])
 
 
+FFIEC101_Transformed.to_csv(os.path.join(basepath,"ParsedFiles/FFIEC101_Transformed.csv"),sep = ",",encoding = "utf-8", index= False)
+FFIEC102_Transformed.to_csv(os.path.join(basepath,"ParsedFiles/FFIEC102_Transformed.csv"),sep = ",",encoding = "utf-8", index= False)
+FRY15_Transformed.to_csv(os.path.join(basepath,"ParsedFiles/FRY15_Transformed.csv"),sep = ",",encoding = "utf-8", index= False)
+DataDictionary.to_csv(os.path.join(basepath,"ParsedFiles/DataDictionary.csv"),sep = ",",encoding = "utf-8", index= False)
 
 
+FFIEC102_Transformed['S363'][FFIEC102_Transformed['S363'].str.count("\.") > 1].str.replace("\.","",n = 1)
+
+FFIEC102_Transformed['MRRR'][FFIEC102_Transformed['MRRR'].str.match("Amount").fillna(False)]
 
 
-
-
-
-
-
+pd.to_datetime(FFIEC102_Transformed['Report_Date'],format = "%Y%m%d")
 
