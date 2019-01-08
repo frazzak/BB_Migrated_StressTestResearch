@@ -1,19 +1,20 @@
 
 # TODO: Create Python Class Library
-#TODO: Phase 1: Event Data Acquisition.
+#DONE: Phase 1: Event Data Acquisition.
     #A. Web Scrape Events Data (Done in R already) +++++++++++++++Complete           
         ## leverage Rpy to run script and import data frame?+++++++++++++++Complete
         ## Events , FRB, CEBS, EBA, IMF, FSB+++++++++++++++Complete
         #FSB events not being scrapped properly. 2017 and 2018 events.
         
         ## Normalize and Combine Events with proper tagging.+++++++++++++++Complete
-        ## Provide Event Type out of Categories, Announcement, Results, Schedule, Etc.
+        ## Provide Event Type out of Categories, Announcement, Results, Schedule, Etc. +++++++++++++++Complete
         
 
 #TODO: Phase 2: Indicies and Identifier Acquisition
 
-    #A. World Returns, Daily, Monthly, Consituents.
-        ## Fic Codes, Country Level, 
+    #A. World Returns, Daily, Monthly, Consituents. - Inprogress
+        ## Fic Codes, Country Level,  - Inprogress
+
     #B. Region Level Index Returns
         #Ticker, GVKEY, PERMCO, PERMNO
     #C. Sector Level Index Returns
@@ -417,7 +418,7 @@ def getevents_data(eventscolumnlist = ['title','date','country','category','sour
     if "fsb" in source:
         print("Started: Scraping Events from FSB")
         tmp_raw = fsb_events()
-        print("Finshed: Scraping Events from FSB")
+        print("Finished: Scraping Events from FSB")
         print("Adding Events to ResultsDataframe")
         if not events_combined.empty:
             events_combined = pd.concat([events_combined,tmp_raw[eventscolumnlist]])
@@ -467,104 +468,199 @@ def getevents_data(eventscolumnlist = ['title','date','country','category','sour
     
 
     print("Events Scraping Completed")
+    events_combined = events_normalize(events_combined)
     events_combined = events_combined.reset_index()
+
     return(events_combined)
 
+def events_normalize(events = None, source = ["eba","fsb","imf","frb"]):
 
-
-def events_normalize(events = None):
-
-    #Check for Column
+    print("Check for Column annctype")
     if 'annctype' not in events.columns:
-    events['annctype'] = ""
-
-
-    #EBA
+        print("Creating Column annctype")
+        events['annctype'] = ""
 
 
 
-    #FSB
+    if "eba" in source:
+        #print("EBA")
+        print("EBA tagging rules")
+        # Focus on the Stress Testing Events.
+        # Remove Press Releases not related.
 
-    #IMF
+        sourcetuple = ('EBA','CEBS')
+        # Announcements
+        AnnouncementStrings = "Announce|announce|launch|update|next|publishes|Publishes|" \
+                              " Publishes|publish|consultation|monitoring exercise" \
+                              "|Consult|consult|acknowledges|Survey|Speech|speech|survey" \
+                              "|Report on|report on|paper on| Comments| comment"
 
-    #FRB
+        StressTest_terms = "stress test|stress|CET1|instruments|transparency exercise" \
+                           "|Tier 1|Stress Test|EU banks| EU bank|Euro-wide|EU-wide" \
+                           "|capital|capital requirements|supervisory"
+        events['annctype'][(events['source'].str.endswith(sourcetuple))
+                           & (events['title'].str.contains(AnnouncementStrings))
+                           & (events['title'].str.contains(StressTest_terms))] = "Announcement"
 
+        # Statement
+        StatementStrings = "statement|press release|state of play"
+        events['annctype'][(events['source'].str.endswith(sourcetuple))
+                           & (events['title'].str.contains(StatementStrings))
+                           & (events['title'].str.contains(StressTest_terms))] = "Statement"
+
+        # Methodology
+        MethodologyStrings = "methodology|templates|infographic"
+        events['annctype'][(events['source'].str.endswith(sourcetuple))
+                           & (events['title'].str.contains(MethodologyStrings))
+                           & (events['title'].str.contains(StressTest_terms))] = "Methodology"
+
+        # Results
+        ResultsStrings = "result|Results"
+        events['annctype'][(events['source'].str.endswith(sourcetuple))
+                           & (events['title'].str.contains(ResultsStrings))
+                           & (events['title'].str.contains(StressTest_terms))] = "Results"
+
+        # Recommendation
+        RecommendationStrings = "Recommendation|recommendation"
+        events['annctype'][(events['source'].str.endswith(sourcetuple))
+                           & (events['title'].str.contains(RecommendationStrings))
+                           & (events['title'].str.contains(StressTest_terms))] = "Recommendation"
+
+        print("Removing unnecessary events from dataframe")
+        events = events.drop(events[(events['source'].str.endswith(sourcetuple)) & (events['annctype'] == "")].index)
+        print("EBA Events normalize complete")
+
+
+
+
+    if "fsb" in source:
+        print("FSB tagging rules")
+
+        sourcetuple = ('FSB')
+        # Results
+        ResultsStrings = "Global Shadow Banking Monitoring Report"
+        events['annctype'][(events['source'].str.endswith(sourcetuple))
+                      & (events['annctype'] == "")
+                      & (events['title'].str.contains(ResultsStrings))] = "Results"
+
+        #Recommendations
+        RecommendationStrings = "Recommendation|recommends|recommendation"
+        events['annctype'][(events['source'].str.endswith(sourcetuple))
+                           & (events['title'].str.contains(RecommendationStrings))] = "Recommendation"
+
+        # Announcements
+        AnnouncementStrings = "Plenary|plenary|Implementation|note|shadow banking|RCG|FSB|G20"
+        events['annctype'][(events['source'].str.endswith(sourcetuple))
+                           & (events['title'].str.contains(AnnouncementStrings))] = "Announcement"
+
+        # Statement
+        StatementStrings = "Chair|Progress|progress|discusses"
+        events['annctype'][(events['source'].str.endswith(sourcetuple))
+                           & (events['title'].str.contains(StatementStrings))] = "Statement"
+
+        # Methodology
+        MethodologyStrings = "Instruction|framework|Standards|guideline|Guideline"
+        events['annctype'][(events['source'].str.endswith(sourcetuple))
+                           & (events['title'].str.contains(MethodologyStrings))] = "Methodology"
+
+        print("Tagging remaining as announcement on dataframe")
+        events['annctype'][(events['source'].str.endswith(sourcetuple)) & (events['annctype'] == "")] = "Announcement"
+        print("FSB Events normalize complete")
+
+    if "imf" in source:
+        print("IMF tagging rules")
+        sourcetuple  = ('IMF')
+        # Methodology
+        MethodologyStrings = "Technical Note| Publication"
+        events['annctype'][(events['source'].str.endswith(sourcetuple))
+                           & (events['title'].str.contains(MethodologyStrings))] = "Methodology"
+
+        print("Tagging remaining as results on dataframe")
+        events['annctype'][(events['source'].str.endswith(sourcetuple)) & (events['annctype'] == "")] = "Results"
+
+        print("IMF Events normalize complete")
+
+    if "frb" in source:
+        print("FRB tagging rules")
+        sourcetuple = ('FRB')
+        # Results
+        ResultsStrings = "completes Comprehensive Capital Analysis and Review|announces summary results|releases results|releases summary results|announces results"
+        events['annctype'][(events['source'].str.endswith(sourcetuple))
+                           & (events['annctype'] == "")
+                           & (events['title'].str.contains(ResultsStrings))] = "Results"
+
+        # Methodology
+        MethodologyStrings = "releases scenarios|methodology|released instructions|Methodology|releases supervisory|scenarios|announces finalized"
+        events['annctype'][(events['source'].str.endswith(sourcetuple))
+                           & (events['title'].str.contains(MethodologyStrings))] = "Methodology"
+
+        # Announcement
+        AnnouncementStrings = "schedule for results|announces schedule for|announces that|announces it|launches"
+        events['annctype'][(events['source'].str.endswith(sourcetuple))
+                           & (events['title'].str.contains(AnnouncementStrings))] = "Announcement"
+        # Statement
+        StatementStrings = "Publishes|publishes|statement|statements|Statement|issues|issue|seek comment|approves|releases paper|invites comment|releases guidance|proposes rule"
+        events['annctype'][(events['source'].str.endswith(sourcetuple))
+                           & (events['title'].str.contains(StatementStrings))] = "Statement"
+
+        print("Tagging remaining as results on dataframe")
+        events['annctype'][(events['source'].str.endswith(sourcetuple)) & (events['annctype'] == "")] = "Announcement"
+        print("FRB Events normalize complete")
+
+
+    return(events)
+
+
+
+def getWorldIndices()
 
     return()
 
+
+import requests, json
+from pandas.io.json import json_normalize
+
+
+#JSON to Pandas Dataframe.
+#UN Country Data
+# Reporting Countries and Areas
+jsonurl = "https://comtrade.un.org/data/cache/reporterAreas.json"
+reportingCountryCodes = pd.read_json(jsonurl,orient='columns')
+reportingCountryCodes = pd.read_json( (test['results']).to_json(), orient='index')
+
+jsonurl = 'https://comtrade.un.org/data/cache/partnerAreas.json'
+partnerCountryCodes = pd.read_json(jsonurl,orient='columns')
+partnerCountryCodes = pd.read_json( (test['results']).to_json(), orient='index')
+
+#UN Dataframe combined
+UN_CountryCodes = pd.concat([reportingCountryCodes,partnerCountryCodes])
+
+UN_CountryCodes.text.unique()
+
+
+test = events_cleaned[["country","source"]].replace("Republic of","").merge(UN_CountryCodes,left_on = 'country', right_on = 'text', how = 'left' )
+
+test2 = test[test["source"] == "IMF"].sort_values("text")
+
 #Insertition Point
-events = []
-events = getevents_data()
+#events = []
+#Run WebScraper
+#events = getevents_data()
 
-#create copy of events
-events_backup = events
+#Export the raw event file
+#events.to_csv("events.csv",sep = ",")
 
-events['annctype'] = ""
+#Import events file
+#events = pd.read_csv("events.csv")
 
-
-
-#EBA
-#Focus on the Stress Testing Events.
-#Remove Press Releases not related.
-
-
-#Announcements
-AnnouncementStrings = "Announce|announce|launch|update|next|publishes|Publishes|" \
-                      " Publishes|publish|consultation|monitoring exercise" \
-                      "|Consult|consult|acknowledges|Survey|Speech|speech|survey" \
-                     "|Report on|report on|paper on| Comments| comment"
-StressTest_terms = "stress test|stress|CET1|instruments|transparency exercise" \
-                         "|Tier 1|Stress Test|EU banks| EU bank|Euro-wide|EU-wide" \
-                   "|capital|capital requirements|supervisory"
-events['annctype'][(events['source'].str.endswith("EBA"))
-              & (events['title'].str.contains(AnnouncementStrings))
-              & (events['title'].str.contains(StressTest_terms))] =  "Announcement"
-
-#Statement
-StatementStrings = "statement|press release|state of play"
-events['annctype'][(events['source'].str.endswith("EBA"))
-              & (events['title'].str.contains(StatementStrings))
-              & (events['title'].str.contains(StressTest_terms))] = "Statement"
-
-#Methodology
-MethodologyStrings = "methodology|templates|infographic"
-events['annctype'][(events['source'].str.endswith("EBA"))
-              & (events['title'].str.contains(MethodologyStrings))
-              & (events['title'].str.contains(StressTest_terms))] = "Methodology"
+events_cleaned = events_normalize(events)
 
 
 
-#Results
-ResultsStrings = "result|Results"
-events['annctype'][(events['source'].str.endswith("EBA"))
-              & (events['title'].str.contains(ResultsStrings))
-              & (events['title'].str.contains(StressTest_terms))] = "Results"
-
-#Recommendation
-RecommendationStrings = "Recommendation|recommendation"
-events['annctype'][(events['source'].str.endswith("EBA"))
-              & (events['title'].str.contains(RecommendationStrings))
-              & (events['title'].str.contains(StressTest_terms))] = "Recommendation"
-
-test = events[(events['source'].str.endswith("EBA")) & (events['annctype'] == "")]
 
 
-#events = events_backup
-#events.reset_index()
-#Results
-#Create Column annctype
 
-#IMF
-#All events should be results as they are the date the Assement came out.
-#events['annctype'][events['source'] == "IMF"] = "Results"
+events_cleaned['country'].unique()
 
 
-#FRB
-#test = events[events['title'].str.contains("announces results|releases results")]
-#events['annctype'][events['title'].str.contains("announces results|releases results")] = "Results"
-
-
-#FSB
-#test = events[(events['source'].str.contains('FSB')) & (events['title'].str.contains("Monitoring Report| "))]
-#test2 = events[events['source'].str.contains('FSB')]
 
