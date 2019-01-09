@@ -606,17 +606,13 @@ def events_normalize(events = None, source = ["eba","fsb","imf","frb"]):
         print("Tagging remaining as results on dataframe")
         events['annctype'][(events['source'].str.endswith(sourcetuple)) & (events['annctype'] == "")] = "Announcement"
         print("FRB Events normalize complete")
+        return(events)
 
 
-    return(events)
 
 
 
-def getWorldIndices()
-
-    return()
-
-
+#def normalize_countrycodes()
 import requests, json
 from pandas.io.json import json_normalize
 
@@ -626,21 +622,170 @@ from pandas.io.json import json_normalize
 # Reporting Countries and Areas
 jsonurl = "https://comtrade.un.org/data/cache/reporterAreas.json"
 reportingCountryCodes = pd.read_json(jsonurl,orient='columns')
-reportingCountryCodes = pd.read_json( (test['results']).to_json(), orient='index')
+reportingCountryCodes = pd.read_json( (reportingCountryCodes['results']).to_json(), orient='index')
 
 jsonurl = 'https://comtrade.un.org/data/cache/partnerAreas.json'
 partnerCountryCodes = pd.read_json(jsonurl,orient='columns')
-partnerCountryCodes = pd.read_json( (test['results']).to_json(), orient='index')
+partnerCountryCodes = pd.read_json( (partnerCountryCodes['results']).to_json(), orient='index')
 
 #UN Dataframe combined
 UN_CountryCodes = pd.concat([reportingCountryCodes,partnerCountryCodes])
 
-UN_CountryCodes.text.unique()
+UN_CountryCodes = UN_CountryCodes.drop_duplicates()
+
+#Added Kosovo, Gurensey,Jersey
+tmp = {"id":"XKX","text":"Kosovo"}
+UN_CountryCodes = UN_CountryCodes.append(tmp, ignore_index = True)
+tmp = {"id":"GGY","text":"Guernsey"}
+UN_CountryCodes = UN_CountryCodes.append(tmp, ignore_index = True)
+tmp = {"id":"832","text":"Jersey"}
+UN_CountryCodes = UN_CountryCodes.append(tmp, ignore_index = True)
+tmp = {"id":"833","text":"Isle of Man"}
+UN_CountryCodes = UN_CountryCodes.append(tmp, ignore_index = True)
 
 
-test = events_cleaned[["country","source"]].replace("Republic of","").merge(UN_CountryCodes,left_on = 'country', right_on = 'text', how = 'left' )
 
-test2 = test[test["source"] == "IMF"].sort_values("text")
+UN_CountryCodes = UN_CountryCodes.drop_duplicates()
+UN_CountryCodes.reset_index()
+
+
+
+#Add to FIC Code File
+#test["FIC"][test["country"].str.contains("Kosovo")] = "XKX"
+#test["id"][test["country"].str.contains("Kosovo")] = "XKX"
+#test["text"][test["country"].str.contains("Kosovo")] = "Kosovo"
+
+UN_CountryCodes[UN_CountryCodes["text"].str.contains("China")]
+
+
+
+
+test = events_cleaned[["country","source"]]
+#test["cl_country"] = ""
+test["FIC"] = np.nan
+
+
+#Initial Merge
+test = test.merge(UN_CountryCodes,left_on = 'country', right_on = 'text', how = 'left' )
+
+
+test = test.sort_values("text")
+
+#Rule 1
+#Replace "Republic of"
+findstr = "Republic of "
+replacestr = "Rep. of "
+
+idxrows = test["country"][(pd.isnull(test["text"])) & (test["source"] == "IMF") & (test["country"].str.startswith(findstr))].index
+
+test["country"][idxrows] = test["country"][idxrows].str.replace(findstr,replacestr)
+
+test = test[["country","source","FIC"]].merge(UN_CountryCodes,left_on = 'country', right_on = 'text', how = 'left' )
+
+#Remove Prefix
+findstr = "Rep. of "
+replacestr = ""
+idxrows = test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF")][test["country"].str.startswith(findstr)].index
+test["country"][idxrows]= test["country"][idxrows].str.replace(findstr,replacestr)
+
+test = test[["country","source","FIC"]].merge(UN_CountryCodes,left_on = 'country', right_on = 'text', how = 'left' )
+
+
+
+
+
+
+#Rule 2
+
+
+#Hong Kong
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Hong Kong"))] = "China, Hong Kong SAR"
+#China
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Republic of China"))] = "China"
+
+#United States
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("United States"))] = "USA"
+
+#Tanzania
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Tanzania"))] = "United Rep. of Tanzania"
+
+#Czech Republic
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Czech Republic"))] = "Czechia"
+
+#Slovak Republic
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Slovak"))] = "Slovakia"
+
+#The Republic of Latvia
+
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Latvia"))] = "Latvia"
+
+
+#The Republic of Kazakhstan
+
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Kazakhstan"))] = "Kazakhstan"
+
+
+#Central African Republic
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Central African Republic"))] = "Central African Rep."
+
+
+#Kyrgyz Republic
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Kyrgyz"))] = "Kyrgyzstan"
+
+
+
+#Netherlands
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Netherlands"))] = "Netherlands"
+
+#Turks and Caicos Islands
+
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Turks and Caicos Islands"))] = "Turks and Caicos Isds"
+
+#Bosnia and Herzegovina
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Bosnia and Herzegovina"))] = "Bosnia Herzegovina"
+
+
+#Democratic Republic of the Congo
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Democratic Republic of the Congo"))] = "Dem. Rep. of the Congo"
+
+
+
+#British Virgin Islands
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("British Virgin Islands"))] = "Br. Virgin Isds"
+
+#Kingdom of Bahrain
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Bahrain"))] = "Bahrain"
+
+#Former Yugoslav Republic of Macedonia
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Former Yugoslav Republic of Macedonia"))] = "TFYR of Macedonia"
+
+#Join
+test = test[["country","source","FIC"]].merge(UN_CountryCodes,left_on = 'country', right_on = 'text', how = 'left' )
+
+
+test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF")].unique()
+
+
+UN_CountryCodes[UN_CountryCodes["text"].str.contains("Macedonia")]
+
+
+
+
+
+
+#test[test["source"] == "IMF"].sort_values("text")
+
+
+
+#    return()
+
+
+def getWorldIndices():
+
+    return()
+
+
+
 
 #Insertition Point
 #events = []
@@ -651,16 +796,10 @@ test2 = test[test["source"] == "IMF"].sort_values("text")
 #events.to_csv("events.csv",sep = ",")
 
 #Import events file
-#events = pd.read_csv("events.csv")
+events = pd.read_csv("events.csv")
 
 events_cleaned = events_normalize(events)
-
-
-
-
-
-
-events_cleaned['country'].unique()
+#events_cleaned['country'].unique()
 
 
 
