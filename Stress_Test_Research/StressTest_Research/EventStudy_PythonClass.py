@@ -473,7 +473,7 @@ def getevents_data(eventscolumnlist = ['title','date','country','category','sour
 
     return(events_combined)
 
-def events_normalize(events = None, source = ["eba","fsb","imf","frb"]):
+def events_normalize_annctype(events = None, source = ["eba","fsb","imf","frb"]):
 
     print("Check for Column annctype")
     if 'annctype' not in events.columns:
@@ -610,154 +610,358 @@ def events_normalize(events = None, source = ["eba","fsb","imf","frb"]):
 
 
 
+#print("China")
+#events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == "IMF") & (
+#    events_cleaned["country"].str.contains("Republic of China"))] = "China"
+
+#print("United States")
+#events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == "IMF") & (
+#    events_cleaned["country"].str.contains("United States"))] = "USA"
+
+#print("Tanzania")
+#events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == "IMF") & (
+#    events_cleaned["country"].str.contains("Tanzania"))] = "United Rep. of Tanzania"
+
+#print("Czech Republic")
+#events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == "IMF") & (
+#    events_cleaned["country"].str.contains("Czech Republic"))] = "Czechia"
+
+#print("Slovak Republic")
+#events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == "IMF") & (
+#    events_cleaned["country"].str.contains("Slovak"))] = "Slovakia"
+
+#print("The Republic of Latvia")
+
+#events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == "IMF") & (
+#    events_cleaned["country"].str.contains("Latvia"))] = "Latvia"
+
+#print("The Republic of Kazakhstan")
+#events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == "IMF") & (
+#    events_cleaned["country"].str.contains("Kazakhstan"))] = "Kazakhstan"
+
+#print("Central African Republic")
+#events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == "IMF") & (
+#    events_cleaned["country"].str.contains("Central African Republic"))] = "Central African Rep."
+
+#print("Kyrgyz Republic")
+#events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == "IMF") & (
+#    events_cleaned["country"].str.contains("Kyrgyz"))] = "Kyrgyzstan"
+
+#print("Netherlands")
+#events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == "IMF") & (
+#    events_cleaned["country"].str.contains("Netherlands"))] = "Netherlands"
+
+#print("Turks and Caicos Islands")
+
+#events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == "IMF") & (
+#    events_cleaned["country"].str.contains("Turks and Caicos Islands"))] = "Turks and Caicos Isds"
+
+#print("Bosnia and Herzegovina")
+#events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == "IMF") & (
+#    events_cleaned["country"].str.contains("Bosnia and Herzegovina"))] = "Bosnia Herzegovina"
+
+#print("Democratic Republic of the Congo")
+#events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == "IMF") & (
+#    events_cleaned["country"].str.contains("Democratic Republic of the Congo"))] = "Dem. Rep. of the Congo"
+
+#print("British Virgin Islands")
+#events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == "IMF") & (
+#    events_cleaned["country"].str.contains("British Virgin Islands"))] = "Br. Virgin Isds"
+
+#print("Kingdom of Bahrain")
+#events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == "IMF") & (
+#    events_cleaned["country"].str.contains("Bahrain"))] = "Bahrain"
+
+#print("Former Yugoslav Republic of Macedonia")
+#events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == "IMF") & (
+#    events_cleaned["country"].str.contains("Former Yugoslav Republic of Macedonia"))] = "TFYR of Macedonia"
+
+#print("Central African Economic and Monetary Community")
+#events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == "IMF") & (
+#    events_cleaned["country"].str.contains(
+#        "Central African Economic and Monetary Community"))] = "Central African Economic and Monetary Community"
 
 
-#def normalize_countrycodes()
-import requests, json
-from pandas.io.json import json_normalize
+#Make into function.
+#Takes tagged events with UN_CountryCodes
+#Runs Rules to fix country names to fit UN Code standard.
+
+
+findstr_dict = { 'source': ["IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF"] ,
+                'findstr':["Republic of ","Rep. of ","Hong Kong","Republic of China","United States","Tanzania","Czech Republic",
+                           "Slovak","Latvia","Kazakhstan","Central African Republic","Kyrgyz","Netherlands","Turks and Caicos Islands",
+                           "Bosnia and Herzegovina","Democratic Republic of the Congo","British Virgin Islands","Bahrain"
+                            ,"Former Yugoslav Republic of Macedonia","Central African Economic and Monetary Community"],
+                'replacestr':["Rep. of ","","China, Hong Kong SAR","China","USA","United Rep. of Tanzania","Czechia","Slovakia",
+                              "Latvia","Kazakhstan","Central African Rep.","Kyrgyzstan","Netherlands","Turks and Caicos Isds",
+                              "Bosnia Herzegovina","Dem. Rep. of the Congo","Br. Virgin Isds","Bahrain","TFYR of Macedonia","Central African Economic and Monetary Community"],
+                'rule':[1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+                'ruleorder':[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]}
+
+
+
+findstr_dict.keys()
+
+findstr_dict['source'].__len__()
+findstr_dict['findstr'].__len__()
+findstr_dict['replacestr'].__len__()
+findstr_dict['rule'].__len__()
+findstr_dict['ruleorder'].__len__()
+
+
+normalize_dict_pd = pd.DataFrame.from_dict(findstr_dict)
+normalize_dict_pd.sort_values("ruleorder")
+
+
+
+
+
+def normalize_events_CountryCodes_UN(events_cleaned,UN_CountryCodes,findstr_dict = { 'source': ["IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF"] ,
+                                                                                    'findstr':["Republic of ","Rep. of ","Hong Kong","Republic of China","United States","Tanzania","Czech Republic",
+                                                                                   "Slovak","Latvia","Kazakhstan","Central African Republic","Kyrgyz","Netherlands","Turks and Caicos Islands",
+                                                                                   "Bosnia and Herzegovina","Democratic Republic of the Congo","British Virgin Islands","Bahrain"
+                                                                                    ,"Former Yugoslav Republic of Macedonia","Central African Economic and Monetary Community"],
+                                                                                    'replacestr':["Rep. of ","","China, Hong Kong SAR","China","USA","United Rep. of Tanzania","Czechia","Slovakia",
+                                                                                  "Latvia","Kazakhstan","Central African Rep.","Kyrgyzstan","Netherlands","Turks and Caicos Isds",
+                                                                                  "Bosnia Herzegovina","Dem. Rep. of the Congo","Br. Virgin Isds","Bahrain","TFYR of Macedonia"
+                                                                                        ,"Central African Economic and Monetary Community"],
+                                                                                'rule':[1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+                                                                                'ruleorder':[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]},
+                                                                                columns_orig = ["title","date","country","category","source","annctype"]):
+    print("Creating Rule Set")
+    normalize_dict_pd = pd.DataFrame.from_dict(findstr_dict)
+    normalize_dict_pd = normalize_dict_pd.sort_values("ruleorder")
+#    print("Sotring Original Columns")
+
+    print("Initial Join to UN_CountryCodes")
+    events_cleaned = events_cleaned.merge(UN_CountryCodes,left_on = 'country', right_on = 'text', how = 'left' )
+
+    print("Applying Rules")
+    for i in range(len(normalize_dict_pd)):
+        if normalize_dict_pd.loc[i]["rule"] == 1:
+            print("RuleOrder: " + str(normalize_dict_pd.loc[i]["ruleorder"])  + " Rule: " + str(normalize_dict_pd.loc[i]["rule"]) + " Source: " + normalize_dict_pd.loc[i]["source"])
+            print(" Replace Country Title: " + normalize_dict_pd.loc[i]["findstr"] + " with: " + normalize_dict_pd.loc[i]["replacestr"])
+            #Get Index Rows for matching Pattern
+            idxrows = events_cleaned["country"][(pd.isnull(events_cleaned["text"]))
+                                                & (events_cleaned["source"] == normalize_dict_pd.loc[i]["source"])
+                                                & (events_cleaned["country"].str.startswith(normalize_dict_pd.loc[i]["findstr"]))].index
+
+            #Replace the String in subset
+            events_cleaned["country"][idxrows] = test["country"][idxrows].str.replace(normalize_dict_pd.loc[i]["findstr"], normalize_dict_pd.loc[i]["replacestr"])
+
+
+            #Merge to the UNcodes to see how many resolve for next iteration
+            events_cleaned = events_cleaned[columns_orig].merge(UN_CountryCodes, left_on='country', right_on='text',
+                                                            how='left')
+
+        if normalize_dict_pd.loc[i]["rule"] == 2:
+            print("RuleOrder: " + str(normalize_dict_pd.loc[i]["ruleorder"]) + " Rule: " + str(normalize_dict_pd.loc[i]["rule"]) + " Source: " + normalize_dict_pd.loc[i]["source"])
+            print(" Replace Country Title: " + normalize_dict_pd.loc[i]["findstr"] + " with: " + normalize_dict_pd.loc[i]["replacestr"])
+
+            events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == normalize_dict_pd.loc[i]["source"]) & (
+            events_cleaned["country"].str.contains(normalize_dict_pd.loc[i]["findstr"]))] = normalize_dict_pd.loc[i]["replacestr"]
+
+    print("Final Merge with all Rules completed")
+    events_cleaned = events_cleaned[columns_orig].merge(UN_CountryCodes, left_on='country', right_on='text',
+                                                        how='left')
+    print("Number of rows that did not match: ", events_cleaned["country"][pd.isnull(events_cleaned['text'])].__len__())
+
+
+
+    print("Dropping Index Column")
+    events_cleaned = events_cleaned.drop("index", axis =1)
+    print('Renaming Columns')
+    events_cleaned = events_cleaned.rename(columns = {"id" : "UN_CodeID","text":"UN_CountryName"})
+    #print(events_cleaned.columns)
+    #columns_orig.extend(["UNCode_id","UNCountry_Name"])
+    #print(columns_orig)
+    #events_cleaned.columns = columns_orig
+    return(events_cleaned)
+
+
+#test = normalize_events_CountryCodes_UN(events_cleaned,UN_CountryCodes).sort_values("UN_CountryName")
+#test.rename(columns = {"id" : "UN_CodeID","text":"UN_CountryName"},inplace=True)
+#Match to UN Country Codes
+
+
+
+
+
+
+
+
+
+#DeAggUnionListUN = DeAgg_UnionList.merge(UN_CountryCodes,left_on = 'Country', right_on = 'text', how = 'left' )
+
+#DeAggUnionListUN = DeAggUnionListUN.sort_values("text")
+#No Nans in UN code. All Unions Match out.
 
 
 #JSON to Pandas Dataframe.
 #UN Country Data
 # Reporting Countries and Areas
-jsonurl = "https://comtrade.un.org/data/cache/reporterAreas.json"
-reportingCountryCodes = pd.read_json(jsonurl,orient='columns')
-reportingCountryCodes = pd.read_json( (reportingCountryCodes['results']).to_json(), orient='index')
-
-jsonurl = 'https://comtrade.un.org/data/cache/partnerAreas.json'
-partnerCountryCodes = pd.read_json(jsonurl,orient='columns')
-partnerCountryCodes = pd.read_json( (partnerCountryCodes['results']).to_json(), orient='index')
-
-#UN Dataframe combined
-UN_CountryCodes = pd.concat([reportingCountryCodes,partnerCountryCodes])
-
-UN_CountryCodes = UN_CountryCodes.drop_duplicates()
-
-#Added Kosovo, Gurensey,Jersey
-tmp = {"id":"XKX","text":"Kosovo"}
-UN_CountryCodes = UN_CountryCodes.append(tmp, ignore_index = True)
-tmp = {"id":"GGY","text":"Guernsey"}
-UN_CountryCodes = UN_CountryCodes.append(tmp, ignore_index = True)
-tmp = {"id":"832","text":"Jersey"}
-UN_CountryCodes = UN_CountryCodes.append(tmp, ignore_index = True)
-tmp = {"id":"833","text":"Isle of Man"}
-UN_CountryCodes = UN_CountryCodes.append(tmp, ignore_index = True)
+def get_UNCountryCodes(jsonurl = ["https://comtrade.un.org/data/cache/reporterAreas.json","https://comtrade.un.org/data/cache/partnerAreas.json"]):
 
 
+    print("Initializing Dataframe for UN_CountryCodes")
+    UN_CountryCodes = pd.DataFrame()
 
-UN_CountryCodes = UN_CountryCodes.drop_duplicates()
-UN_CountryCodes.reset_index()
+    if len(jsonurl) > 0:
+        for url in jsonurl:
+            print("Getting Json from: "+ url )
+            CountryCodes_tmp = pd.read_json(url,orient='columns')
+            print("Transforming JSON to Pandas Dataframe.")
+            CountryCodes_tmp = pd.read_json( (CountryCodes_tmp['results']).to_json(), orient='index')
 
+            print("Adding Rows to Initialized Dataframe.")
+            #UN Dataframe combined
+            UN_CountryCodes = pd.concat([UN_CountryCodes,CountryCodes_tmp])
 
-
-#Add to FIC Code File
-#test["FIC"][test["country"].str.contains("Kosovo")] = "XKX"
-#test["id"][test["country"].str.contains("Kosovo")] = "XKX"
-#test["text"][test["country"].str.contains("Kosovo")] = "Kosovo"
-
-UN_CountryCodes[UN_CountryCodes["text"].str.contains("China")]
-
-
-
-
-test = events_cleaned[["country","source"]]
-#test["cl_country"] = ""
-test["FIC"] = np.nan
+        print("Dropping Duplicates")
+        UN_CountryCodes = UN_CountryCodes.drop_duplicates()
 
 
-#Initial Merge
-test = test.merge(UN_CountryCodes,left_on = 'country', right_on = 'text', how = 'left' )
+        print("Manually Adding Countries that are Missing")
+        #Added Kosovo, Gurensey,Jersey
+
+        print("Adding Kosovo")
+        tmp = {"id":"XKX","text":"Kosovo"}
+        UN_CountryCodes = UN_CountryCodes.append(tmp, ignore_index = True)
+
+        print("Adding Guernsey")
+        tmp = {"id":"GGY","text":"Guernsey"}
+        UN_CountryCodes = UN_CountryCodes.append(tmp, ignore_index = True)
+
+        print("Adding Jersey")
+        tmp = {"id":"832","text":"Jersey"}
+        UN_CountryCodes = UN_CountryCodes.append(tmp, ignore_index = True)
+
+        print("Adding Isle of Man")
+        tmp = {"id":"833","text":"Isle of Man"}
+        UN_CountryCodes = UN_CountryCodes.append(tmp, ignore_index = True)
+
+        print("Dropping Duplicates after Manual Add")
+        UN_CountryCodes = UN_CountryCodes.drop_duplicates()
+
+        print("Resetting Index")
+        UN_CountryCodes = UN_CountryCodes.reset_index()
+
+        print("Returning UN_CountryCodes Dataframe.")
+        return(UN_CountryCodes)
 
 
-test = test.sort_values("text")
+#Can make this into a method?
+#Deaggregate the Events
+    #apply new countries
+    #and remove the events with Unions.
+    #Make new column to indicate country is part of a union.
 
-#Rule 1
-#Replace "Republic of"
-findstr = "Republic of "
-replacestr = "Rep. of "
+#Create Union column
+#Need to find way to pass multiple arguements, and lists for a iterable look to consolidate this logic.
+def DeAgg_Events_Union(events_cleaned,BankingUnionColumn = "BankingUnion"):
+    
+    print("Generating Known Banking Unions")
+    # Create a Data Frame, Join to UN and focus on unmatched.
+    # Deaggregation For
+    # Euro Area Policies
+    BankingUnionColumn = "BankingUnion"
 
-idxrows = test["country"][(pd.isnull(test["text"])) & (test["source"] == "IMF") & (test["country"].str.startswith(findstr))].index
+    Eurozone = ["Austria", "Belgium", "Cyprus", "Estonia", "Finland", "France", "Germany",
+                "Greece", "Ireland", "Italy", "Latvia", "Lithuania", "Luxembourg", "Malta"
+        , "Netherlands", "Portugal", "Slovakia", "Slovenia", "Spain"]
 
-test["country"][idxrows] = test["country"][idxrows].str.replace(findstr,replacestr)
+    # EBA Seems related to European Union.
+    # Members Consider the Voting Members 51 banks from 15 EEA areas.
+    EU = ["Austria", "Italy", "Belgium", "Latvia", "Bulgaria", "Lithuania", "Croatia",
+          "Luxembourg", "Cyprus", "Malta", "Czechia", "Netherlands", "Denmark", "Poland",
+          "Estonia", "Portugal", "Finland", "Romania", "France", "Slovakia", "Germany",
+          "Slovenia", "Greece", "Spain", "Hungary", "Sweden", "Ireland", "United Kingdom"]
 
-test = test[["country","source","FIC"]].merge(UN_CountryCodes,left_on = 'country', right_on = 'text', how = 'left' )
-
-#Remove Prefix
-findstr = "Rep. of "
-replacestr = ""
-idxrows = test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF")][test["country"].str.startswith(findstr)].index
-test["country"][idxrows]= test["country"][idxrows].str.replace(findstr,replacestr)
-
-test = test[["country","source","FIC"]].merge(UN_CountryCodes,left_on = 'country', right_on = 'text', how = 'left' )
-
-
-
-
-
-
-#Rule 2
-
-
-#Hong Kong
-test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Hong Kong"))] = "China, Hong Kong SAR"
-#China
-test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Republic of China"))] = "China"
-
-#United States
-test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("United States"))] = "USA"
-
-#Tanzania
-test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Tanzania"))] = "United Rep. of Tanzania"
-
-#Czech Republic
-test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Czech Republic"))] = "Czechia"
-
-#Slovak Republic
-test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Slovak"))] = "Slovakia"
-
-#The Republic of Latvia
-
-test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Latvia"))] = "Latvia"
+    # CEMAC 6 Members
+    CEMAC = ["Cameroon", "Central African Rep.", "Chad", "Equatorial Guinea", "Gabon", "Congo"]
 
 
-#The Republic of Kazakhstan
-
-test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Kazakhstan"))] = "Kazakhstan"
-
-
-#Central African Republic
-test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Central African Republic"))] = "Central African Rep."
+    # Eastern Caribbean Currency Union.
+    ECCU = ["Antigua and Barbuda", "Dominica", "Grenada", "Saint Kitts and Nevis", "Saint Lucia",
+            "Saint Vincent and the Grenadines"]
 
 
-#Kyrgyz Republic
-test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Kyrgyz"))] = "Kyrgyzstan"
+    print("Creating new column: Banking Union")
+    events_cleaned[BankingUnionColumn] = np.nan
+
+
+    #EBA - EU
+    #Set Banking Union
+    events_cleaned[BankingUnionColumn][(events_cleaned["source"] == "EBA")] = "European Union"
+
+    #Get Subset of Rows
+    EBA_tmp = events_cleaned[(events_cleaned["source"] == "EBA")]
+
+    #Repeat the rows in different object to match deaggregated countries
+    EBA_tmp2 = pd.concat([EBA_tmp] * EU.__len__())
+
+    #Apply the countries to the external object
+    EBA_tmp2["country"] = EU * EBA_tmp.shape[0]
+
+
+    #Euro Area Policies
+    #Set Banking Union
+    events_cleaned["BankingUnion"][(events_cleaned["country"].str.contains("Euro Area Policies"))] = "EuroZone"
+
+    #Get Subset of Rows
+    EuroZone_tmp = events_cleaned[(events_cleaned["country"].str.contains("Euro Area Policies"))]
+
+    #Repeat the rows in different object to match deaggregated countries
+    EuroZone_tmp2 = pd.concat([EuroZone_tmp] * Eurozone.__len__())
+
+    #Apply the countries to the external object
+    EuroZone_tmp2["country"] = Eurozone * EuroZone_tmp.shape[0]
+
+
+    #CEMAC
+
+    # Set Banking Union
+    events_cleaned["BankingUnion"][(events_cleaned["country"].str.contains("Central African Economic"))] = "CEMAC"
+
+    # Get Subset of Rows
+    CEMAC_tmp = events_cleaned[(events_cleaned["country"].str.contains("Central African Economic"))]
+
+    # Repeat the rows in different object to match deaggregated countries
+    CEMAC_tmp2 = pd.concat([CEMAC_tmp] * CEMAC.__len__())
+
+    # Apply the countries to the external object
+    CEMAC_tmp2["country"] = CEMAC * CEMAC_tmp.shape[0]
 
 
 
-#Netherlands
-test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Netherlands"))] = "Netherlands"
+    #ECCU
 
-#Turks and Caicos Islands
+    # Set Banking Union
+    events_cleaned["BankingUnion"][(events_cleaned["country"].str.contains("Eastern Caribbean Currency Union"))] = "ECCU"
 
-test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Turks and Caicos Islands"))] = "Turks and Caicos Isds"
+    # Get Subset of Rows
+    ECCU_tmp = events_cleaned[(events_cleaned["country"].str.contains("Central African Economic"))]
 
-#Bosnia and Herzegovina
-test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Bosnia and Herzegovina"))] = "Bosnia Herzegovina"
+    # Repeat the rows in different object to match deaggregated countries
+    ECCU_tmp2 = pd.concat([ECCU_tmp] * ECCU.__len__())
+
+    # Apply the countries to the external object
+    ECCU_tmp2["country"] = ECCU * ECCU_tmp.shape[0]
 
 
-#Democratic Republic of the Congo
-test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Democratic Republic of the Congo"))] = "Dem. Rep. of the Congo"
+    tmp_df = pd.concat([events_cleaned, EBA_tmp2,EuroZone_tmp2,CEMAC_tmp2,ECCU_tmp2], ignore_index= True)
+    tmp_df = tmp_df.reset_index()
+
+    return(tmp_df)
 
 
 
-#British Virgin Islands
-test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("British Virgin Islands"))] = "Br. Virgin Isds"
 
-#Kingdom of Bahrain
-test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Bahrain"))] = "Bahrain"
+#Then attach to FIC codes and UN Codes and Country Codes
+#https://www.nationsonline.org/oneworld/country_code_list.htm
+#Has Country name , Alpha 2 , Alpha 3, and UN CODE
 
-#Former Yugoslav Republic of Macedonia
-test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF") & (test["country"].str.contains("Former Yugoslav Republic of Macedonia"))] = "TFYR of Macedonia"
+
 
 #Join
 test = test[["country","source","FIC"]].merge(UN_CountryCodes,left_on = 'country', right_on = 'text', how = 'left' )
@@ -766,14 +970,11 @@ test = test[["country","source","FIC"]].merge(UN_CountryCodes,left_on = 'country
 test["country"][(pd.isnull(test['text'])) & (test["source"] == "IMF")].unique()
 
 
+
+
 UN_CountryCodes[UN_CountryCodes["text"].str.contains("Macedonia")]
 
 
-
-
-
-
-#test[test["source"] == "IMF"].sort_values("text")
 
 
 
@@ -788,6 +989,9 @@ def getWorldIndices():
 
 
 #Insertition Point
+#TODO: Review all methods and put into a Class Libary so a DataFrame can be called from the object.
+
+
 #events = []
 #Run WebScraper
 #events = getevents_data()
@@ -798,8 +1002,8 @@ def getWorldIndices():
 #Import events file
 events = pd.read_csv("events.csv")
 
-events_cleaned = events_normalize(events)
-#events_cleaned['country'].unique()
+events_cleaned = events_normalize_annctype(events)
+UN_CountryCodes = get_UNCountryCodes()
 
 
 
