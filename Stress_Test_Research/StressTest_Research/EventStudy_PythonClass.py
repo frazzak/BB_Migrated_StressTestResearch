@@ -684,7 +684,7 @@ def DeAgg_Events_Union(events_cleaned, BankingUnionColumn="BankingUnion", BankUn
 #JSON to Pandas Dataframe.
 #UN Country Data
 # Reporting Countries and Areas
-def get_CountryCodes(excelurl = "http://unstats.un.org/unsd/tradekb/Attachment440.aspx?AttachmentType=1"
+def get_CountryCodes(excelurl = ["http://unstats.un.org/unsd/tradekb/Attachment440.aspx?AttachmentType=1"]
                     ,jsonurl = ["https://comtrade.un.org/data/cache/reporterAreas.json","https://comtrade.un.org/data/cache/partnerAreas.json"]
                     ,weburl = ["https://www.nationsonline.org/oneworld/country_code_list.htm"]):
 
@@ -693,11 +693,12 @@ def get_CountryCodes(excelurl = "http://unstats.un.org/unsd/tradekb/Attachment44
 
     if len(excelurl) > 0:
         for url in excelurl:
-            print("Getting Excel File from: "+ url)
+            print("Getting Excel File from: " + url)
             CountryCodes_tmp = pd.read_excel(url)
-
-            CountryCodes_tmp = CountryCodes_tmp["Country Code", "Country Name, Abbreviation", "ISO2-digit Alpha", "ISO3-digit Alpha"]
-            CountryCodes_tmp.columns = ["UN_CountryCode", "CountryName", "ISO2", "ISO3"]
+            CountryCodes_tmp = CountryCodes_tmp[["Country Code", "Country Name, Abbreviation", "ISO2-digit Alpha", "ISO3-digit Alpha"]]
+            CountryCodes_tmp["code_source"] = "UN_Excel"
+            CountryCodes_tmp["orderpref"] = 1
+            CountryCodes_tmp.columns = ["UN_CountryCode", "country", "ISO2", "ISO3","code_source","orderpref"]
             print("Adding Rows to Initialized Dataframe.")
             CountryCodes = pd.concat([CountryCodes, CountryCodes_tmp], ignore_index= True)
 
@@ -719,7 +720,9 @@ def get_CountryCodes(excelurl = "http://unstats.un.org/unsd/tradekb/Attachment44
                            "UNCode_ID": tds[4].text.lstrip("0")}
                     CountryCodes_tmp = CountryCodes_tmp.append(tmp, ignore_index=True)
             CountryCodes_tmp = CountryCodes_tmp[["UNCode_ID","country","FIC_2","FIC_3"]]
-            CountryCodes_tmp.columns = ["UN_CountryCode", "CountryName", "ISO2", "ISO3"]
+            CountryCodes_tmp["code_source"] = "NationsOnline"
+            CountryCodes_tmp["orderpref"] = 2
+            CountryCodes_tmp.columns = ["UN_CountryCode", "country", "ISO2", "ISO3", "code_source", "orderpref"]
             print("Adding Rows to Initialized Dataframe.")
             CountryCodes = pd.concat([CountryCodes, CountryCodes_tmp])
 
@@ -731,32 +734,35 @@ def get_CountryCodes(excelurl = "http://unstats.un.org/unsd/tradekb/Attachment44
             CountryCodes_tmp = pd.read_json((CountryCodes_tmp['results']).to_json(), orient='index')
             CountryCodes_tmp["ISO2"] = np.nan
             CountryCodes_tmp["ISO3"] = np.nan
-            CountryCodes_tmp.columns = ["UN_CountryCode", "CountryName", "ISO2", "ISO3"]
+            CountryCodes_tmp["code_source"] = "UN_JSON"
+            CountryCodes_tmp["orderpref"] = 3
+            CountryCodes_tmp.columns = ["UN_CountryCode", "country", "ISO2", "ISO3", "code_source", "orderpref"]
             print("Adding Rows to Initialized Dataframe.")
             #UN Dataframe combined
             CountryCodes = pd.concat([CountryCodes,CountryCodes_tmp],ignore_index= True)
 
-        print("Dropping Duplicates")
-        CountryCodes = CountryCodes.drop_duplicates()
+
 
 
         print("Manually Adding Countries that are Missing")
         #Added Kosovo, Gurensey,Jersey
 
         print("Adding Kosovo")
-        tmp = {"id":"XKX","text":"Kosovo"}
-        CountryCodes = UN_CountryCodes.append(tmp, ignore_index = True)
+        tmp = {"UN_CountryCode":"XKX","country":"Kosovo","ISO2":"XK","ISO3":"XKX","code_source":"Manual","orderpref": 4}
+        CountryCodes = CountryCodes.append(tmp, ignore_index = True)
+
 
 
         print("Dropping Duplicates after Manual Add")
-        CountryCodes = UN_CountryCodes.drop_duplicates()
+        #More logic required to take UN excel and json as preference before nations online
+
+        CountryCodes = CountryCodes.sort_values(["country","orderpref"]).drop_duplicates(subset =["country"], keep="first")
 
         print("Resetting Index")
-        CountryCodes = UN_CountryCodes.reset_index()
+        CountryCodes = CountryCodes.reset_index()
 
         print("Returning UN_CountryCodes Dataframe.")
         return(CountryCodes)
-
 
 
 def normalize_events_CountryCodes_UN(events_cleaned,UN_CountryCodes,findstr_dict = { 'source': ["IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF","IMF"] ,
@@ -777,7 +783,7 @@ def normalize_events_CountryCodes_UN(events_cleaned,UN_CountryCodes,findstr_dict
 #    print("Sotring Original Columns")
 
     print("Initial Join to UN_CountryCodes")
-    events_cleaned = events_cleaned.merge(UN_CountryCodes,left_on = 'country', right_on = 'text', how = 'left' )
+    events_cleaned = events_cleaned.merge(UN_CountryCodes,left_on = 'country', right_on = 'country', how = 'left' )
 
     print("Applying Rules")
     for i in range(len(normalize_dict_pd)):
@@ -785,7 +791,7 @@ def normalize_events_CountryCodes_UN(events_cleaned,UN_CountryCodes,findstr_dict
             print("RuleOrder: " + str(normalize_dict_pd.loc[i]["ruleorder"])  + " Rule: " + str(normalize_dict_pd.loc[i]["rule"]) + " Source: " + normalize_dict_pd.loc[i]["source"])
             print(" Replace Country Title: " + normalize_dict_pd.loc[i]["findstr"] + " with: " + normalize_dict_pd.loc[i]["replacestr"])
             #Get Index Rows for matching Pattern
-            idxrows = events_cleaned["country"][(pd.isnull(events_cleaned["text"]))
+            idxrows = events_cleaned["country"][(pd.isnull(events_cleaned["ISO3"]))
                                                 & (events_cleaned["source"] == normalize_dict_pd.loc[i]["source"])
                                                 & (events_cleaned["country"].str.startswith(normalize_dict_pd.loc[i]["findstr"]))].index
 
@@ -794,27 +800,27 @@ def normalize_events_CountryCodes_UN(events_cleaned,UN_CountryCodes,findstr_dict
 
 
             #Merge to the UNcodes to see how many resolve for next iteration
-            events_cleaned = events_cleaned[columns_orig].merge(UN_CountryCodes, left_on='country', right_on='text',
+            events_cleaned = events_cleaned[columns_orig].merge(UN_CountryCodes, left_on='country', right_on='country',
                                                             how='left')
 
         if normalize_dict_pd.loc[i]["rule"] == 2:
             print("RuleOrder: " + str(normalize_dict_pd.loc[i]["ruleorder"]) + " Rule: " + str(normalize_dict_pd.loc[i]["rule"]) + " Source: " + normalize_dict_pd.loc[i]["source"])
             print(" Replace Country Title: " + normalize_dict_pd.loc[i]["findstr"] + " with: " + normalize_dict_pd.loc[i]["replacestr"])
 
-            events_cleaned["country"][(pd.isnull(events_cleaned['text'])) & (events_cleaned["source"] == normalize_dict_pd.loc[i]["source"]) & (
+            events_cleaned["country"][(pd.isnull(events_cleaned['ISO3'])) & (events_cleaned["source"] == normalize_dict_pd.loc[i]["source"]) & (
             events_cleaned["country"].str.contains(normalize_dict_pd.loc[i]["findstr"]))] = normalize_dict_pd.loc[i]["replacestr"]
 
     print("Final Merge with all Rules completed")
-    events_cleaned = events_cleaned[columns_orig].merge(UN_CountryCodes, left_on='country', right_on='text',
+    events_cleaned = events_cleaned[columns_orig].merge(UN_CountryCodes, left_on='country', right_on='country',
                                                         how='left')
-    print("Number of rows that did not match: ", events_cleaned["country"][pd.isnull(events_cleaned['text'])].__len__())
+    print("Number of rows that did not match: ", events_cleaned["country"][pd.isnull(events_cleaned['ISO3'])].__len__())
 
 
 
     print("Dropping Index Column")
     events_cleaned = events_cleaned.drop("index", axis =1)
     print('Renaming Columns')
-    events_cleaned = events_cleaned.rename(columns = {"id" : "UN_CodeID","text":"UN_CountryName"})
+    #events_cleaned = events_cleaned.rename(columns = {"id" : "UN_CodeID","text":"UN_CountryName"})
     #print(events_cleaned.columns)
     #columns_orig.extend(["UNCode_id","UNCountry_Name"])
     #print(columns_orig)
@@ -824,60 +830,15 @@ def normalize_events_CountryCodes_UN(events_cleaned,UN_CountryCodes,findstr_dict
 
 
 
-countrycodeurl = "https://www.nationsonline.org/oneworld/country_code_list.htm"
 
 
 
-test = FICUNCodes.merge(UN_CountryCodes, left_on='UNCode_ID', right_on='id',
-                                                        how='left').sort_values("id")
 
-
-
-test2 = events_cleaned.merge(FICUNCodes, left_on = "country", right_on = "country", how  = "left")
-
-test2 = test2.sort_values("UNCode_ID")
-
-test2["country"][(pd.isnull(test2["UNCode_ID"]))].unique()
-
-test2 = events_cleaned.merge(FICUNCodes, left_on = "country", right_on = "country", how  = "left")
-
-
-
-UN_CountryCodes[UN_CountryCodes["text"].str.contains("USA")]
-
-df[["Country Code","Country Name, Abbreviation","ISO2-digit Alpha","ISO3-digit Alpha"]]
 
 #First Join with UN Codes
 #Then run again for the Nans to join with the web scraped.
-url = "http://unstats.un.org/unsd/tradekb/Attachment440.aspx?AttachmentType=1"
-df = pd.read_excel(url)
 
 
-test2 = events_cleaned.merge(df, left_on = "country", right_on = "Country Name, Abbreviation", how  = "left")
-
-test2 = test2.sort_values("Country Name, Abbreviation")
-
-test3 = test2[(pd.isnull(test2["BankingUnion"])) & (pd.isnull(test2["Country Name, Abbreviation"]))]
-
-test4 = test3[["title","country"]].merge(FICUNCodes, left_on = "country", right_on = "country", how  = "left")
-
-
-test3
-
-#import requests
-#resp = requests.get(url)
-#output = open("test.xls",'wb')
-#output.write(resp.content)
-#output.close()
-
-
-
-
-
-#DeAggUnionListUN = DeAgg_UnionList.merge(UN_CountryCodes,left_on = 'Country', right_on = 'text', how = 'left' )
-
-#DeAggUnionListUN = DeAggUnionListUN.sort_values("text")
-#No Nans in UN code. All Unions Match out.
 
 
 
@@ -907,19 +868,22 @@ test3
 #Run WebScrapers
 
 #Get Events from websites
-#events = getevents_data()
-#Export the raw event file
-#events.to_csv("events.csv",sep = ",")
+    #events = getevents_data()
+    #Export the raw event file
+    #events.to_csv("events.csv",sep = ",")
 
 #Get UN Country Codes.
 #From UN Website
-UN_CountryCodes = get_UNCountryCodes()
+    #event_CountryCodes = get_CountryCodes()
+    #event_CountryCodes.to_csv("event_CountryCodes.csv",sep = ",")
 
-#Get from Nations Online
+
+
 
 
 #Import events file
 events = pd.read_csv("events.csv")
+event_CountryCodes = pd.read_csv("event_CountryCodes.csv")
 events_cleaned = events_normalize_annctype(events)
 events_cleaned = DeAgg_Events_Union(events_cleaned = events_cleaned, CombineFrame = True)
-events_cleaned = normalize_events_CountryCodes_UN(events_cleaned,UN_CountryCodes)
+events_cleaned = normalize_events_CountryCodes_UN(events_cleaned,event_CountryCodes)
