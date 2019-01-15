@@ -612,9 +612,6 @@ def events_normalize_annctype(events = None, source = ["eba","fsb","imf","frb"])
 
 
 
-#Make into function.
-#Takes tagged events with UN_CountryCodes
-#Runs Rules to fix country names to fit UN Code standard.
 
 
 
@@ -681,9 +678,6 @@ def DeAgg_Events_Union(events_cleaned, BankingUnionColumn="BankingUnion", BankUn
 
 
 
-#JSON to Pandas Dataframe.
-#UN Country Data
-# Reporting Countries and Areas
 def get_CountryCodes(excelurl = ["http://unstats.un.org/unsd/tradekb/Attachment440.aspx?AttachmentType=1"]
                     ,jsonurl = ["https://comtrade.un.org/data/cache/reporterAreas.json","https://comtrade.un.org/data/cache/partnerAreas.json"]
                     ,weburl = ["https://www.nationsonline.org/oneworld/country_code_list.htm"]):
@@ -831,32 +825,117 @@ def normalize_events_CountryCodes_UN(events_cleaned,UN_CountryCodes,findstr_dict
 
 
 
+def get_CountryIndices(country_indicies_file = "wrdsWorldIndiciesFIC_Indiicies.csv",gvkey_column = "GVKEY",
+                       wrds_username="fr497", password = "Fr056301",wrdstable = "comp_global_daily.g_idx_daily", RunWrdsAPI = True):
+    print("Initialize WRDS conneciton")
+    import wrds
+    db = wrds.Connection(wrds_username= wrds_username, password= password)
+
+    if country_indicies_file is not None:
+        print("Loading Country Indicies File: ",country_indicies_file )
+        countryFICgvkey = pd.read_csv(country_indicies_file)
+        print("Extracting GVKEYs for WRDS Pull")
+        countryFICgvkey[gvkey_column] = countryFICgvkey[gvkey_column].astype(str)
+        gvkeylist = countryFICgvkey[gvkey_column]
+        print("Stringifying for WRDS API request")
+        gvkeylist = "','".join(gvkeylist)
+
+    print("Creating WRDS API query string")
+    query_tmp = " select * from " + wrdstable + " where gvkeyx in ('" + gvkeylist + "')"
+    wrds_indices = pd.DataFrame()
+    if RunWrdsAPI:
+        print("Running WRDS API Query and retrieving data into Object")
+        wrds_query = db.raw_sql(query_tmp)
+        print("Merging Wrds Data with Input File")
+        wrds_indices = wrds_query.merge(countryFICgvkey, left_on= "gvkeyx", right_on= gvkey_column, how="left")
+    else:
+        print(query_tmp)
+
+
+
+    print("Returning DataFrame")
+    return(wrds_indices)
+
+#Workspace
+
+
+#Get Country Indicies.
 
 
 
 
-#First Join with UN Codes
-#Then run again for the Nans to join with the web scraped.
+
+
+
+#Use the mapping table from Wrds World Indicies Methodology Table
+#test2 = pd.read_csv("wrdsWorldIndiciesFIC_Indiicies.csv")
+#test3 = events_cleaned.merge(test2, left_on = "ISO3", right_on = "FIC")
+#test3["ISO3"].unique().__len__()
+
+#Get Country Indicies and Country Sector based Indicies from WRDS api.
+
+#import wrds
+db = wrds.Connection(wrds_username="fr497", password = "Fr056301")
+
+
+
+db.list_tables(library="compd")
+#Raw SQL Query
+
+db.raw_sql(''' select count(*) 
+              from crspa.ccm_lookup ''')
+
+
+wrdstest = db.raw_sql(''' select *
+              from crspa.ccm_lookup ''')
+
+wrdstest.shape
+
+
+wrdstest["conm"][wrdstest["conm"].str.contains("AUS")]
+
+db.describe_table(library = "crspa",table = "ccmxpf_lnkused")
+
+db.describe_table(library = "comp_global_daily",table = "g_idx_mth")
+#Via API
+
+#Use CCM Lookup
+#db.get_table(library = "crspa",table = "ccm_lookup",columns = ["conm","gvkey","sic","naics"],obs = 10)
+
+
+db.list_libraries().sort()
+db.list_tables(library="compa")
+wrds_indices = db.get_table(library = "compd",table = "idx_mth",columns = ["datadate","prccmusd","gvkeyx"])
+
+wrdstest = db.raw_sql('''
+                        select *
+                        from comp_global
+                        LIMIT 10
+                         ''')
+
+gvkeylist = test2["GVKEY"].astype(str)
+gvkeylist2 = "','".join(gvkeylist)
+
+wrdstest = db.raw_sql(" select count(*) " \
+                      " from comp_global_daily")
+                     # "  where gvkeyx in ('" + gvkeylist2 + "')")
+
+
+
+wrds_indices = wrdstest.merge(test2, left_on = "gvkeyx", right_on= "GVKEY", how = "left")
+
+test2["GVKEY"] = test2["GVKEY"].astype(str)
 
 
 
 
 
 
-#Can make this into a method?
-#Deaggregate the Events
-    #apply new countries
-    #and remove the events with Unions.
-    #Make new column to indicate country is part of a union.
-
-#Create Union column
-#Need to find way to pass multiple arguements, and lists for a iterable look to consolidate this logic.
-
-#Then attach to FIC codes and UN Codes and Country Codes
-#https://www.nationsonline.org/oneworld/country_code_list.htm
-#Has Country name , Alpha 2 , Alpha 3, and UN CODE
+#Sector Based
 
 
+#Use WRDS world Indicies Consituents.
+test = pd.read_csv("wrdsWorldIndicesConsituents.csv")
 
 
 
@@ -887,3 +966,21 @@ event_CountryCodes = pd.read_csv("event_CountryCodes.csv")
 events_cleaned = events_normalize_annctype(events)
 events_cleaned = DeAgg_Events_Union(events_cleaned = events_cleaned, CombineFrame = True)
 events_cleaned = normalize_events_CountryCodes_UN(events_cleaned,event_CountryCodes)
+
+events_c = events_cleaned[pd.isnull(events_cleaned["BankingUnion"]]
+
+
+world_indicies_data = get_CountryIndices()
+
+
+test = events_c.merge(wrds_indices, left_on = "ISO3",right_on = "FIC" , how = "left")
+
+test3 = test[["ISO3","country"]][pd.isnull(test["FIC"])].sort_values("country").drop_duplicates()
+
+
+[list(set(events_c["ISO3"].unique()) & set(wrds_indices["FIC"].unique()))]
+
+
+
+wrds_missing_indices = db.raw_sql("select * from comp_global.g_idx_index a " \
+                                  "where indexgeo in ('" + "','".join(test3["ISO3"]) + "')")
