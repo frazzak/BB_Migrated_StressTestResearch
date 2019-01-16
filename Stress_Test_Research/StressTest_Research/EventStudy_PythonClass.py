@@ -823,13 +823,19 @@ def normalize_events_CountryCodes_UN(events_cleaned,UN_CountryCodes,findstr_dict
 
 
 
+#Make dictionary of arguments.
 
 
-def get_CountryIndices(country_indicies_file = "wrdsWorldIndiciesFIC_Indiicies.csv",gvkey_column = "GVKEY",
-                       wrds_username="fr497", password = "Fr056301",wrdstable = "comp_global_daily.g_idx_daily", RunWrdsAPI = True):
-    print("Initialize WRDS conneciton")
-    import wrds
-    db = wrds.Connection(wrds_username= wrds_username, password= password)
+def get_CountryIndices(events_cleaned, country_indicies_file = "wrdsWorldIndiciesFIC_Indiicies.csv",gvkey_column = "GVKEY",
+                       wrds_username="fr497", password = "Fr056301", na_wrdstable = 'comp_na_daily_all.idx_index ',glb_wrdstable = "comp_global.g_idx_index", RunWrdsAPI = True):
+
+    print("Getting List of Countries from Events Data Frame")
+    FIC_List = events_cleaned['ISO3'][pd.notnull(events_cleaned["ISO3"])].unique()
+    print(FIC_List)
+
+    print("Getting List of Generalized Regions and Banking Unions for manual mapping")
+    MnlMap_List = events_cleaned["country"][(pd.notnull(events_cleaned["BankingUnion"])) & (pd.isnull(events_cleaned["ISO3"]))].drop_duplicates()
+
 
     if country_indicies_file is not None:
         print("Loading Country Indicies File: ",country_indicies_file )
@@ -840,16 +846,29 @@ def get_CountryIndices(country_indicies_file = "wrdsWorldIndiciesFIC_Indiicies.c
         print("Stringifying for WRDS API request")
         gvkeylist = "','".join(gvkeylist)
 
-    print("Creating WRDS API query string")
-    query_tmp = " select * from " + wrdstable + " where gvkeyx in ('" + gvkeylist + "')"
-    wrds_indices = pd.DataFrame()
+    print("Creating WRDS API query string for Global Indices based on Country Code")
+    query_tmp = "select conm, gvkeyx, idx13key, idxcstflg, idxstat, indexcat,indexgeo, indexid, indextype, indexval, tic, tici,'Global_IDX' as source  " \
+                "from " + glb_wrdstable + " " \
+                "where indexgeo in ('" + "','".join(FIC_List) + "')" \
+                "and indextype in ('COMPOSITE','REGIONAL') and indexid not in ('ISLAMIC') " \
+                "union" \
+                " select conm, gvkeyx, idx13key, idxcstflg, idxstat, indexcat,indexgeo, indexid, indextype, indexval, tic, tici,'NAM_IDX' as source  " \
+                "from " + na_wrdstable + " " \
+                "where indexgeo in ('" + "','".join(FIC_List) + "')" \
+                "and indextype in ('COMPOSITE','REGIONAL','LGCAP')"
     if RunWrdsAPI:
+        print("Initialize WRDS connection")
+        import wrds
+        db = wrds.Connection(wrds_username= wrds_username, password= password)
+        #glb_wrds_indices = pd.DataFrame()
         print("Running WRDS API Query and retrieving data into Object")
         wrds_query = db.raw_sql(query_tmp)
-        print("Merging Wrds Data with Input File")
-        wrds_indices = wrds_query.merge(countryFICgvkey, left_on= "gvkeyx", right_on= gvkey_column, how="left")
     else:
         print(query_tmp)
+
+    # print("Merging Wrds Data with Input File")
+     wrds_indices = wrds_query
+
 
 
 
@@ -872,70 +891,13 @@ def get_CountryIndices(country_indicies_file = "wrdsWorldIndiciesFIC_Indiicies.c
 #test3 = events_cleaned.merge(test2, left_on = "ISO3", right_on = "FIC")
 #test3["ISO3"].unique().__len__()
 
-#Get Country Indicies and Country Sector based Indicies from WRDS api.
-
-#import wrds
-db = wrds.Connection(wrds_username="fr497", password = "Fr056301")
-
-
-
-db.list_tables(library="compd")
-#Raw SQL Query
-
-db.raw_sql(''' select count(*) 
-              from crspa.ccm_lookup ''')
-
-
-wrdstest = db.raw_sql(''' select *
-              from crspa.ccm_lookup ''')
-
-wrdstest.shape
-
-
-wrdstest["conm"][wrdstest["conm"].str.contains("AUS")]
-
-db.describe_table(library = "crspa",table = "ccmxpf_lnkused")
-
-db.describe_table(library = "comp_global_daily",table = "g_idx_mth")
-#Via API
-
-#Use CCM Lookup
-#db.get_table(library = "crspa",table = "ccm_lookup",columns = ["conm","gvkey","sic","naics"],obs = 10)
-
-
-db.list_libraries().sort()
-db.list_tables(library="compa")
-wrds_indices = db.get_table(library = "compd",table = "idx_mth",columns = ["datadate","prccmusd","gvkeyx"])
-
-wrdstest = db.raw_sql('''
-                        select *
-                        from comp_global
-                        LIMIT 10
-                         ''')
-
-gvkeylist = test2["GVKEY"].astype(str)
-gvkeylist2 = "','".join(gvkeylist)
-
-wrdstest = db.raw_sql(" select count(*) " \
-                      " from comp_global_daily")
-                     # "  where gvkeyx in ('" + gvkeylist2 + "')")
-
-
-
-wrds_indices = wrdstest.merge(test2, left_on = "gvkeyx", right_on= "GVKEY", how = "left")
-
-test2["GVKEY"] = test2["GVKEY"].astype(str)
-
-
-
-
 
 
 #Sector Based
 
 
 #Use WRDS world Indicies Consituents.
-test = pd.read_csv("wrdsWorldIndicesConsituents.csv")
+#test = pd.read_csv("wrdsWorldIndicesConsituents.csv")
 
 
 
@@ -967,20 +929,33 @@ events_cleaned = events_normalize_annctype(events)
 events_cleaned = DeAgg_Events_Union(events_cleaned = events_cleaned, CombineFrame = True)
 events_cleaned = normalize_events_CountryCodes_UN(events_cleaned,event_CountryCodes)
 
-events_c = events_cleaned[pd.isnull(events_cleaned["BankingUnion"]]
+events_c = events_cleaned[pd.isnull(events_cleaned["BankingUnion"])]
+
+events_d = events_cleaned[(pd.notnull(events_cleaned["BankingUnion"])) & (pd.isnull(events_cleaned["ISO3"]))]
 
 
-world_indicies_data = get_CountryIndices()
+events_c["ISO3"].unique().__len__()
 
 
-test = events_c.merge(wrds_indices, left_on = "ISO3",right_on = "FIC" , how = "left")
-
-test3 = test[["ISO3","country"]][pd.isnull(test["FIC"])].sort_values("country").drop_duplicates()
+events_d[['source','country','BankingUnion']].drop_duplicates()
 
 
-[list(set(events_c["ISO3"].unique()) & set(wrds_indices["FIC"].unique()))]
+world_indicies_data = get_CountryIndices(events_cleaned, country_indicies_file = None)
+
+
+world_indicies_data = world_indicies_data.sort_values(["indexgeo","indextype","idxstat"], ascending = [1,1,0])
+
+world_indicies_data["indexgeo"].unique().__len__()
+
+#test = events_c.merge(wrds_indices, left_on = "ISO3",right_on = "FIC" , how = "left")
+
+#test3 = test[["ISO3","country"]][pd.isnull(test["FIC"])].sort_values("country").drop_duplicates()
+
+
+#[list(set(events_c["ISO3"].unique()) & set(wrds_indices["FIC"].unique()))]
 
 
 
-wrds_missing_indices = db.raw_sql("select * from comp_global.g_idx_index a " \
-                                  "where indexgeo in ('" + "','".join(test3["ISO3"]) + "')")
+#wrds_missing_indices = db.raw_sql("select * from comp_global.g_idx_index a " \
+#                                  "where indexgeo in ('" + "','".join(test3["ISO3"]) + "')")
+
