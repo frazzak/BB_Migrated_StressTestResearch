@@ -848,14 +848,33 @@ def get_CountryIndices(events_cleaned, country_indicies_file = "wrdsWorldIndicie
 
     print("Creating WRDS API query string for Global Indices based on Country Code")
     query_tmp = "select conm, gvkeyx, idx13key, idxcstflg, idxstat, indexcat,indexgeo, indexid, indextype, indexval, tic, tici,'Global_IDX' as source  " \
-                "from " + glb_wrdstable + " " \
+                " from " + glb_wrdstable + " " \
                 "where indexgeo in ('" + "','".join(FIC_List) + "')" \
                 "and indextype in ('COMPOSITE','REGIONAL') and indexid not in ('ISLAMIC') " \
                 "union" \
-                " select conm, gvkeyx, idx13key, idxcstflg, idxstat, indexcat,indexgeo, indexid, indextype, indexval, tic, tici,'NAM_IDX' as source  " \
-                "from " + na_wrdstable + " " \
-                "where indexgeo in ('" + "','".join(FIC_List) + "')" \
-                "and indextype in ('COMPOSITE','REGIONAL','LGCAP')"
+                    " select conm, gvkeyx, idx13key, idxcstflg, idxstat, indexcat,indexgeo, indexid, indextype, indexval, tic, tici,'NAM_IDX' as source  " \
+                    " from " + na_wrdstable + " " \
+                    "where indexgeo in ('" + "','".join(FIC_List) + "')" \
+                    "and indextype in ('COMPOSITE','REGIONAL','LGCAP')" \
+                    " union " \
+                        "( select conm, gvkeyx, idx13key, idxcstflg, idxstat, indexcat,indexgeo, indexid, indextype, indexval,tic, tici,'NAM_IDX' as " \
+                         "from " + na_wrdstable + " " \
+                        " WHERE indextype in ('COMPOSITE','REGIONAL','LGCAP')" \
+                        " and conm similar to '%(S&P|Nasdaq|NY Stock Exchange|Russell|NYSE)%')" \
+                        " union " \
+                            "( select conm, gvkeyx, idx13key, idxcstflg, idxstat, indexcat, 'GLOBAL' as indexgeo, indexid, indextype, indexval, tic, tici, 'Global_IDX' as source" \
+                           " from " + glb_wrdstable + " " \
+                            "where conm similar to '%(Global|World|All)%'" \
+                            " and indextype in ('COMPOSITE', 'REGIONAL') and indexgeo is null and indexval similar to '%(ALL)%' and indexid not in ('ISLAMIC')" \
+                                " union " \
+                                    "(select conm, gvkeyx, idx13key, idxcstflg, idxstat, indexcat, indexgeo, indexid, indextype, indexval, tic, tici, 'Global_IDX' as source "\
+                                    " from " + glb_wrdstable + " " \
+                                    " where indextype in ('COMPOSITE', 'REGIONAL') and indexgeo = 'EUR' and indexid not in ('ISLAMIC'))" \
+                                     " union " \
+                                        "( select conm, gvkeyx, idx13key, idxcstflg, idxstat, indexcat, indexgeo, indexid, indextype, indexval, tic, tici, 'Global_IDX' as source " \
+                                        " from " + glb_wrdstable + " " \
+                                        " where indextype in ('COMPOSITE', 'REGIONAL') and indexval = 'EURO' and indexid not in ('ISLAMIC') )"
+
     if RunWrdsAPI:
         print("Initialize WRDS connection")
         import wrds
@@ -866,14 +885,8 @@ def get_CountryIndices(events_cleaned, country_indicies_file = "wrdsWorldIndicie
     else:
         print(query_tmp)
 
-    # print("Merging Wrds Data with Input File")
-     wrds_indices = wrds_query
-
-
-
-
     print("Returning DataFrame")
-    return(wrds_indices)
+    return(wrds_query)
 
 #Workspace
 
