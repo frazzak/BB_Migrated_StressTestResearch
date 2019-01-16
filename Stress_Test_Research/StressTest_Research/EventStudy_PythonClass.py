@@ -947,15 +947,3 @@ world_indicies_data = world_indicies_data.sort_values(["indexgeo","indextype","i
 
 world_indicies_data["indexgeo"].unique().__len__()
 
-#test = events_c.merge(wrds_indices, left_on = "ISO3",right_on = "FIC" , how = "left")
-
-#test3 = test[["ISO3","country"]][pd.isnull(test["FIC"])].sort_values("country").drop_duplicates()
-
-
-#[list(set(events_c["ISO3"].unique()) & set(wrds_indices["FIC"].unique()))]
-
-
-
-#wrds_missing_indices = db.raw_sql("select * from comp_global.g_idx_index a " \
-#                                  "where indexgeo in ('" + "','".join(test3["ISO3"]) + "')")
-
