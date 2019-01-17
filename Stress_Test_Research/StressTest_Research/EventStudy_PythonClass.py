@@ -827,7 +827,9 @@ def normalize_events_CountryCodes_UN(events_cleaned,UN_CountryCodes,findstr_dict
 
 
 def get_CountryIndices(events_cleaned, country_indicies_file = "wrdsWorldIndiciesFIC_Indiicies.csv",gvkey_column = "GVKEY",
-                       wrds_username="fr497", password = "Fr056301", na_wrdstable = 'comp_na_daily_all.idx_index ',glb_wrdstable = "comp_global.g_idx_index", RunWrdsAPI = True):
+                       wrds_username="fr497", password = "Fr056301", na_wrdstable = 'comp_na_daily_all.idx_index',glb_wrdstable = "comp_global.g_idx_index",
+                        query_fields_tmp = ["conm", "gvkeyx", "idx13key", "idxcstflg", "idxstat", "indexcat", "indexgeo", "indexid","indextype", "indexval", "tic", "tici"],
+                        RunWrdsAPI = True):
 
     print("Getting List of Countries from Events Data Frame")
     FIC_List = events_cleaned['ISO3'][pd.notnull(events_cleaned["ISO3"])].unique()
@@ -836,6 +838,24 @@ def get_CountryIndices(events_cleaned, country_indicies_file = "wrdsWorldIndicie
     print("Getting List of Generalized Regions and Banking Unions for manual mapping")
     MnlMap_List = events_cleaned["country"][(pd.notnull(events_cleaned["BankingUnion"])) & (pd.isnull(events_cleaned["ISO3"]))].drop_duplicates()
 
+    print("Creating WRDS API query string for Global Indices based on Country Code")
+    query_dict = {'Cat': ['FIC', 'FIC_NAM', 'EUR', 'EURO', "Global", "NAM_Indices"],
+                  'select': [query_fields_tmp, query_fields_tmp, query_fields_tmp, query_fields_tmp, query_fields_tmp,
+                             query_fields_tmp],
+                  'from': [glb_wrdstable, na_wrdstable, glb_wrdstable, glb_wrdstable, glb_wrdstable, na_wrdstable],
+                  'where': [["indexgeo in ('" + "','".join(FIC_List) + "')", "indextype in ('COMPOSITE','REGIONAL')",
+                             "indexid not in ('ISLAMIC')"],
+                            ["indexgeo in ('" + "','".join(FIC_List) + "')",
+                             "indextype in ('COMPOSITE','REGIONAL','LGCAP')"],
+                            ["indextype in ('COMPOSITE', 'REGIONAL')", "indexgeo = 'EUR'",
+                             "indexid not in ('ISLAMIC') "],
+                            ["indextype in ('COMPOSITE', 'REGIONAL')", "indexval = 'EURO'",
+                             "indexid not in ('ISLAMIC') "],
+                            ["indexgeo is null", "indexid not in ('ISLAMIC')", "indexval similar to '%%(ALL)%%'",
+                             "conm similar to '%%(Global|World|All)%%'"],
+                            ["indextype in ('COMPOSITE','REGIONAL','LGCAP')",
+                             "conm similar to '%%(S&P|Nasdaq|NY Stock Exchange|Russell|NYSE)%%'"]]
+                  }
 
     if country_indicies_file is not None:
         print("Loading Country Indicies File: ",country_indicies_file )
@@ -845,35 +865,26 @@ def get_CountryIndices(events_cleaned, country_indicies_file = "wrdsWorldIndicie
         gvkeylist = countryFICgvkey[gvkey_column]
         print("Stringifying for WRDS API request")
         gvkeylist = "','".join(gvkeylist)
+        query_dict["Cat"].append('StaticCountryFile')
+        query_dict['select'].append(query_fields_tmp),
+        query_dict['from'].append(glb_wrdstable)
+        query_dict['where'].append(["gvkeyx in ('" + gvkeylist + "')"])
 
-    print("Creating WRDS API query string for Global Indices based on Country Code")
-    query_tmp = "select conm, gvkeyx, idx13key, idxcstflg, idxstat, indexcat,indexgeo, indexid, indextype, indexval, tic, tici,'Global_IDX' as source  " \
-                " from " + glb_wrdstable + " " \
-                "where indexgeo in ('" + "','".join(FIC_List) + "')" \
-                "and indextype in ('COMPOSITE','REGIONAL') and indexid not in ('ISLAMIC') " \
-                "union" \
-                    " select conm, gvkeyx, idx13key, idxcstflg, idxstat, indexcat,indexgeo, indexid, indextype, indexval, tic, tici,'NAM_IDX' as source  " \
-                    " from " + na_wrdstable + " " \
-                    "where indexgeo in ('" + "','".join(FIC_List) + "')" \
-                    "and indextype in ('COMPOSITE','REGIONAL','LGCAP')" \
-                    " union " \
-                        "( select conm, gvkeyx, idx13key, idxcstflg, idxstat, indexcat,indexgeo, indexid, indextype, indexval,tic, tici,'NAM_IDX' as " \
-                         "from " + na_wrdstable + " " \
-                        " WHERE indextype in ('COMPOSITE','REGIONAL','LGCAP')" \
-                        " and conm similar to '%(S&P|Nasdaq|NY Stock Exchange|Russell|NYSE)%')" \
-                        " union " \
-                            "( select conm, gvkeyx, idx13key, idxcstflg, idxstat, indexcat, 'GLOBAL' as indexgeo, indexid, indextype, indexval, tic, tici, 'Global_IDX' as source" \
-                           " from " + glb_wrdstable + " " \
-                            "where conm similar to '%(Global|World|All)%'" \
-                            " and indextype in ('COMPOSITE', 'REGIONAL') and indexgeo is null and indexval similar to '%(ALL)%' and indexid not in ('ISLAMIC')" \
-                                " union " \
-                                    "(select conm, gvkeyx, idx13key, idxcstflg, idxstat, indexcat, indexgeo, indexid, indextype, indexval, tic, tici, 'Global_IDX' as source "\
-                                    " from " + glb_wrdstable + " " \
-                                    " where indextype in ('COMPOSITE', 'REGIONAL') and indexgeo = 'EUR' and indexid not in ('ISLAMIC'))" \
-                                     " union " \
-                                        "( select conm, gvkeyx, idx13key, idxcstflg, idxstat, indexcat, indexgeo, indexid, indextype, indexval, tic, tici, 'Global_IDX' as source " \
-                                        " from " + glb_wrdstable + " " \
-                                        " where indextype in ('COMPOSITE', 'REGIONAL') and indexval = 'EURO' and indexid not in ('ISLAMIC') )"
+
+
+    wrds_query = []
+    for i in range(query_dict["Cat"].__len__()):
+        print(query_dict["Cat"][i])
+        query_tmp = "select " + ",".join(query_dict["select"][i]) + ", '" + query_dict["from"][i] + "'" + " as source"+ ", '" + query_dict["Cat"][i] + "'" + " as qryCat"
+        #print(query_tmp)
+        query_tmp = query_tmp + " from "+ query_dict["from"][i]
+        #print(query_tmp)
+        query_tmp = query_tmp + " where " + " and ".join(query_dict["where"][i])
+        #print(query_tmp)
+        wrds_query.append(query_tmp)
+
+    wrdsquery_final = " union ".join(wrds_query)
+
 
     if RunWrdsAPI:
         print("Initialize WRDS connection")
@@ -881,16 +892,29 @@ def get_CountryIndices(events_cleaned, country_indicies_file = "wrdsWorldIndicie
         db = wrds.Connection(wrds_username= wrds_username, password= password)
         #glb_wrds_indices = pd.DataFrame()
         print("Running WRDS API Query and retrieving data into Object")
-        wrds_query = db.raw_sql(query_tmp)
-    else:
-        print(query_tmp)
+        wrds_query_df = pd.DataFrame()
+        wrds_query_df = db.raw_sql(wrdsquery_final)
 
-    print("Returning DataFrame")
-    return(wrds_query)
+        print("Deduplicating based on GVKEYs")
+        wrds_query_df = wrds_query_df.ix[wrds_query_df[["gvkeyx","conm"]].drop_duplicates().index]
+        print("Resetting Index")
+        wrds_query_df = wrds_query_df.reset_index()
+        print("Sorting Data")
+        wrds_query_df = wrds_query_df.sort_values(["indexgeo","conm","idxstat","qrycat"], ascending = [1,1,1,1])
+
+
+
+    else:
+        wrds_query_df = wrdsquery_final
+        print(wrds_query_df)
+
+    print("Returning Object")
+    return(wrds_query_df)
+
 
 #Workspace
 
-
+world_indicies_data = get_CountryIndices(events_cleaned, RunWrdsAPI = True)
 #Get Country Indicies.
 
 
@@ -942,21 +966,9 @@ events_cleaned = events_normalize_annctype(events)
 events_cleaned = DeAgg_Events_Union(events_cleaned = events_cleaned, CombineFrame = True)
 events_cleaned = normalize_events_CountryCodes_UN(events_cleaned,event_CountryCodes)
 
-events_c = events_cleaned[pd.isnull(events_cleaned["BankingUnion"])]
-
-events_d = events_cleaned[(pd.notnull(events_cleaned["BankingUnion"])) & (pd.isnull(events_cleaned["ISO3"]))]
 
 
-events_c["ISO3"].unique().__len__()
+world_idx_names = get_CountryIndices(events_cleaned,RunWrdsAPI = True)
 
 
-events_d[['source','country','BankingUnion']].drop_duplicates()
-
-
-world_indicies_data = get_CountryIndices(events_cleaned, country_indicies_file = None)
-
-
-world_indicies_data = world_indicies_data.sort_values(["indexgeo","indextype","idxstat"], ascending = [1,1,0])
-
-world_indicies_data["indexgeo"].unique().__len__()
 
