@@ -50,6 +50,12 @@
 
 #import rpy2.rinterface
 #import wrds
+
+
+import os
+os.environ['R_HOME'] = '/anaconda3/lib/R'
+
+
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
 import pandas as pd
@@ -851,7 +857,7 @@ def get_CountryIndices(events_cleaned, country_indicies_file = "wrdsWorldIndicie
                   'where': [["indexgeo in ('" + "','".join(FIC_List) + "')", "indextype in ('COMPOSITE','REGIONAL')",
                              "indexid not in ('ISLAMIC')"],
                             ["indexgeo in ('" + "','".join(FIC_List) + "')",
-                             "indextype in ('COMPOSITE','REGIONAL','LGCAP')"],
+                             "indextype in ('COMPOSITE','REGIONAL','LGCAP')","conm similar to '%%(S&P|Nasdaq|NY Stock Exchange|Russell|NYSE)%%'"],
                             ["indextype in ('COMPOSITE', 'REGIONAL')", "indexgeo = 'EUR'",
                              "indexid not in ('ISLAMIC') "],
                             ["indextype in ('COMPOSITE', 'REGIONAL')", "indexval = 'EURO'",
@@ -923,9 +929,9 @@ def get_CountryIndices(events_cleaned, country_indicies_file = "wrdsWorldIndicie
 
 
 def get_idx_prices(world_idx_names,events_cleaned,interval_before_mindate = '2 year', interval_after_maxdate = '2 year',
-                   table_dict = {'source' : ['comp_global.g_idx_index', 'comp_na_daily_all.idx_index'],
-                                 'table' : ['comp_global_daily.g_idx_daily','comp_na_daily_all.idx_daily']
-                                 },wrds_username="fr497", password = "Fr056301",RunWrdsAPI = True):
+                   table_dict = {'comp_global.g_idx_index':'comp_global_daily.g_idx_daily',
+                                'comp_na_daily_all.idx_index':'comp_na_daily_all.idx_daily'}
+                                 ,wrds_username="fr497", password = "Fr056301",RunWrdsAPI = True):
 
     #Get date ranges for each COUNTRY in events file to get proper index data range..
 
@@ -967,12 +973,25 @@ def get_idx_prices(world_idx_names,events_cleaned,interval_before_mindate = '2 y
 
         gvkey_tmp = "','".join(world_idx_names['gvkeyx'][world_idx_names['indexgeo'] == gb['ISO3'][i]])
         source_tmp = world_idx_names['source'][world_idx_names['indexgeo'] == gb['ISO3'][i]].unique()
+        print(source_tmp)
 
-        from_tmp_ls = [table_dict['table'][table_dict["source"] == x] for x in source_tmp]
+        print("Getting Appropriate Tables to get prices from")
+        from_tmp_ls = []
+        for k, v in table_dict.items():
+            for j in source_tmp:
+                #print(j)
+                if k == j:
+                    tmp = j.replace(k,v)
+                    print(j,tmp)
+                    from_tmp_ls.append(tmp)
+        #print(newlist)
 
+
+        print(from_tmp_ls)
         for y in range(from_tmp_ls.__len__()):
+            print(from_tmp_ls[y])
             print("Creating Query String")
-            select_tmp = "select * , '" + gb['ISO3'][i] + "' as indexgeo_mnt"
+            select_tmp = "select * , '" + gb['ISO3'][i] + "' as indexgeo_mnt, '" + from_tmp_ls[y] + "' as table_src"
             from_tmp = "from " + from_tmp_ls[y]
             where_tmp = "where gvkeyx in ('"+ gvkey_tmp +"') " \
                         " and datadate between date '" + gb['date']['min'][i] + "' - INTERVAL '"+ interval_before_mindate +"'" \
@@ -982,6 +1001,8 @@ def get_idx_prices(world_idx_names,events_cleaned,interval_before_mindate = '2 y
             if RunWrdsAPI:
                 print("Querying Wrds")
                 qry_tmp_results = db.raw_sql(query_tmp)
+                if qry_tmp_results.empty:
+                    print(query_tmp)
                 print("Appending to Results Dataframe")
                 qry_results = pd.concat([qry_results,qry_tmp_results])
             else:
@@ -995,20 +1016,16 @@ def get_idx_prices(world_idx_names,events_cleaned,interval_before_mindate = '2 y
 
 
 #Workspace
+
+#TODO Fix US bank index query to exclude non relevant indicies.
+#TODO Fix prices pull to query both tables or other tables and append.  No USA indices got appended.
+
+
+
 world_idx_prices = get_idx_prices(world_idx_names,events_cleaned)
 
-world_idx_prices.
+world_idx_prices.shape
 
-test = events_cleaned.groupby(["country","ISO3"])
-test = test.agg({'date' : ['min','max','count']}).reset_index()
-test = test.ix[test['date']['count'].sort_values(ascending=False).index].reset_index(drop = True)
-
-
-
-world_idx_names[['indexgeo',"qrycat"]][(pd.isnull(world_idx_names['indexgeo']))].drop_duplicates()
-
-#Sec
-#test = pd.read_csv("wrdsWorldIndicesConsituents.csv")
 
 
 
@@ -1048,6 +1065,10 @@ world_idx_names = get_CountryIndices(events_cleaned,RunWrdsAPI = True)
 #Daily
 world_idx_prices = get_idx_prices(world_idx_names,events_cleaned)
 
+
+world_idx_prices = world_idx_prices.sort_values(["indexgeo_mnt","gvkeyx","datadate"])
+
+world_idx_prices['indexgeo_mnt'].unique().__len__()
 #Sector Level
 #May add another rule set to get the indice names to get_CountryIndices
 #Use WRDS world Indicies Consituents.
