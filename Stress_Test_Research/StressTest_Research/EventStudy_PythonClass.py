@@ -611,11 +611,6 @@ def events_normalize_annctype(events = None, source = ["eba","fsb","imf","frb"])
         return(events)
 
 
-
-
-
-
-
 def DeAgg_Events_Union(events_cleaned, BankingUnionColumn="BankingUnion", BankUnion_dict={'BankingUnion': ["European Union", "EuroZone", "CEMAC", "ECCU","European Union","Global"],
                                        'findstr_column': ["source", "country", "country", "country","country","country"],
                                        'findstr': ["EBA", "Euro Area Policies", "Central African Economic",
@@ -770,7 +765,10 @@ def normalize_events_CountryCodes_UN(events_cleaned,UN_CountryCodes,findstr_dict
                                                                                         ,"Central African Economic and Monetary Community"],
                                                                                 'rule':[1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
                                                                                 'ruleorder':[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]},
-                                                                                columns_orig = ["title","date","country","category","source","annctype","BankingUnion"]):
+                                     columns_orig = ["title","date","country","category","source","annctype","BankingUnion"],
+                                     iso3_ovr_dict = { 'country': ['Global','Europe','Euro Area Policies'],
+                                                       'ISO3': ['Global','EUR','EURO']}):
+
     print("Creating Rule Set")
     normalize_dict_pd = pd.DataFrame.from_dict(findstr_dict)
     normalize_dict_pd = normalize_dict_pd.sort_values("ruleorder")
@@ -819,16 +817,23 @@ def normalize_events_CountryCodes_UN(events_cleaned,UN_CountryCodes,findstr_dict
     #columns_orig.extend(["UNCode_id","UNCountry_Name"])
     #print(columns_orig)
     #events_cleaned.columns = columns_orig
+
+    print("Filling ISO3 with Overrides")
+    for i in range(iso3_ovr_dict["country"].__len__()):
+        events_cleaned['ISO3'][events_cleaned['country'] ==  iso3_ovr_dict["country"][i]] = iso3_ovr_dict["ISO3"][i]
+
+
     return(events_cleaned)
 
 
 
-#Make dictionary of arguments.
 
 
 def get_CountryIndices(events_cleaned, country_indicies_file = "wrdsWorldIndiciesFIC_Indiicies.csv",gvkey_column = "GVKEY",
                        wrds_username="fr497", password = "Fr056301", na_wrdstable = 'comp_na_daily_all.idx_index',glb_wrdstable = "comp_global.g_idx_index",
                         query_fields_tmp = ["conm", "gvkeyx", "idx13key", "idxcstflg", "idxstat", "indexcat", "indexgeo", "indexid","indextype", "indexval", "tic", "tici"],
+                        indexgeo_ovr_dict = { 'qrycat': ['Global','EURO'],
+                                                       'indexgeo': ['Global','EURO']},
                         RunWrdsAPI = True):
 
     print("Getting List of Countries from Events Data Frame")
@@ -902,6 +907,9 @@ def get_CountryIndices(events_cleaned, country_indicies_file = "wrdsWorldIndicie
         print("Sorting Data")
         wrds_query_df = wrds_query_df.sort_values(["indexgeo","conm","idxstat","qrycat"], ascending = [1,1,1,1])
 
+        print("Filling indexgeo with overrides")
+        for i in range(indexgeo_ovr_dict["qrycat"].__len__()):
+            wrds_query_df['indexgeo'][wrds_query_df['qrycat'] == indexgeo_ovr_dict["qrycat"][i]] = indexgeo_ovr_dict["indexgeo"][i]
 
 
     else:
@@ -912,28 +920,94 @@ def get_CountryIndices(events_cleaned, country_indicies_file = "wrdsWorldIndicie
     return(wrds_query_df)
 
 
+
+
+def get_idx_prices(world_idx_names,events_cleaned,interval_before_mindate = '2 year', interval_after_maxdate = '2 year',
+                   table_dict = {'source' : ['comp_global.g_idx_index', 'comp_na_daily_all.idx_index'],
+                                 'table' : ['comp_global_daily.g_idx_daily','comp_na_daily_all.idx_daily']
+                                 },wrds_username="fr497", password = "Fr056301",RunWrdsAPI = True):
+
+    #Get date ranges for each COUNTRY in events file to get proper index data range..
+
+    #Get data ranges for countries and ISO3 indices from the events
+    #fill the nan values
+    #events_cleaned['ISO3'][pd.isnull(events_cleaned["ISO3"])] = "N/A"
+    #Aggregate on country and ISO3
+    print("Getting Minimum and Maximum dates needed for each index from events object based on Country")
+    gb = events_cleaned.groupby(["country","ISO3"])
+    #Get min and max and count of the date and events
+    gb = gb.agg({'date' : ['min','max','count']}).reset_index()
+    #Sort the values by counts.
+    gb = gb.ix[gb['date']['count'].sort_values(ascending=False).index].reset_index(drop = True)
+
+
+    #Get the gvkeys and date ranges to pull.
+    #Join GB to the the events.
+    #Create a merged table that gives the min max dates for each country's index.
+    #Consider that some countries have multiple indicies.
+        #We can just join on all indicies as they already have indexgeos.
+    #May not be needed, we can subset based on country name.
+    #print("Merging country level date ranges from events to each respective index.")
+    #idx_query_params = world_idx_names.merge(gb, left_on = 'indexgeo', right_on = 'ISO3')
+
+    #Initialize the Wrds Connection
+    if RunWrdsAPI:
+        print("Initialize WRDS connection")
+        import wrds
+        db = wrds.Connection(wrds_username= wrds_username, password= password)
+
+
+    #prepare to query for each index based on source, gvkey, min/max date and append to a dataframe.
+    qry_results = pd.DataFrame()
+    qry_results_str = []
+    for i in range(gb.__len__()):
+        #temp
+        #i = 0
+        print("Getting Index Prices for Country: " + gb['country'][i] + " | " + gb['ISO3'][i])
+
+        gvkey_tmp = "','".join(world_idx_names['gvkeyx'][world_idx_names['indexgeo'] == gb['ISO3'][i]])
+        source_tmp = world_idx_names['source'][world_idx_names['indexgeo'] == gb['ISO3'][i]].unique()
+
+        from_tmp_ls = [table_dict['table'][table_dict["source"] == x] for x in source_tmp]
+
+        for y in range(from_tmp_ls.__len__()):
+            print("Creating Query String")
+            select_tmp = "select * , '" + gb['ISO3'][i] + "' as indexgeo_mnt"
+            from_tmp = "from " + from_tmp_ls[y]
+            where_tmp = "where gvkeyx in ('"+ gvkey_tmp +"') " \
+                        " and datadate between date '" + gb['date']['min'][i] + "' - INTERVAL '"+ interval_before_mindate +"'" \
+                        " and date '" + gb['date']['max'][i] + "' + INTERVAL '"+ interval_after_maxdate +"';"
+            query_tmp = " ".join([select_tmp, from_tmp, where_tmp])
+            #Run Query
+            if RunWrdsAPI:
+                print("Querying Wrds")
+                qry_tmp_results = db.raw_sql(query_tmp)
+                print("Appending to Results Dataframe")
+                qry_results = pd.concat([qry_results,qry_tmp_results])
+            else:
+                print("Appending query string to list")
+                qry_results_str.append(query_tmp)
+
+    if RunWrdsAPI:
+        return(qry_results)
+    else:
+        return(qry_results_str)
+
+
 #Workspace
+world_idx_prices = get_idx_prices(world_idx_names,events_cleaned)
 
-world_indicies_data = get_CountryIndices(events_cleaned, RunWrdsAPI = True)
-#Get Country Indicies.
+world_idx_prices.
 
-
-
-
-
-
-
-#Use the mapping table from Wrds World Indicies Methodology Table
-#test2 = pd.read_csv("wrdsWorldIndiciesFIC_Indiicies.csv")
-#test3 = events_cleaned.merge(test2, left_on = "ISO3", right_on = "FIC")
-#test3["ISO3"].unique().__len__()
+test = events_cleaned.groupby(["country","ISO3"])
+test = test.agg({'date' : ['min','max','count']}).reset_index()
+test = test.ix[test['date']['count'].sort_values(ascending=False).index].reset_index(drop = True)
 
 
 
-#Sector Based
+world_idx_names[['indexgeo',"qrycat"]][(pd.isnull(world_idx_names['indexgeo']))].drop_duplicates()
 
-
-#Use WRDS world Indicies Consituents.
+#Sec
 #test = pd.read_csv("wrdsWorldIndicesConsituents.csv")
 
 
@@ -966,9 +1040,20 @@ events_cleaned = events_normalize_annctype(events)
 events_cleaned = DeAgg_Events_Union(events_cleaned = events_cleaned, CombineFrame = True)
 events_cleaned = normalize_events_CountryCodes_UN(events_cleaned,event_CountryCodes)
 
-
-
+#Get Relevant Indices and Prices
+#Country Level
 world_idx_names = get_CountryIndices(events_cleaned,RunWrdsAPI = True)
 
+#Get index prices monthly and daily.
+#Daily
+world_idx_prices = get_idx_prices(world_idx_names,events_cleaned)
+
+#Sector Level
+#May add another rule set to get the indice names to get_CountryIndices
+#Use WRDS world Indicies Consituents.
+
+
+#Participant Level
+#Will need to make a list of banks in US, Euro, and Asia that are relevant and get their market data.
 
 
