@@ -1069,12 +1069,87 @@ world_idx_prices = get_idx_prices(world_idx_names,events_cleaned)
 world_idx_prices = world_idx_prices.sort_values(["indexgeo_mnt","gvkeyx","datadate"])
 
 world_idx_prices['indexgeo_mnt'].unique().__len__()
+
+
+
+#Regional Mappings of Indices for non matched countries.
+
+#get countries with no indicies.
+
+#126 countries
+
+
+events_countries_df = events_cleaned[["country","ISO3"]].drop_duplicates()
+
+world_idx_countries = world_idx_names["indexgeo"].unique()
+
+events_countries = ['None' if x is np.nan else x for x in events_countries_df["ISO3"]]
+
+
+
+missing_idx_countries = events_countries_df[events_countries_df["ISO3"].isin(missing_idx_countries)]
+
+#59 not matched
+missing_idx_countries.sort_values("country")
+
+missing_idx_countries.to_csv("missing_idx_countries.csv")
+
+#Maintain list.
+
+
+
 #Sector Level
 #May add another rule set to get the indice names to get_CountryIndices
 #Use WRDS world Indicies Consituents.
+
+
+
+
 
 
 #Participant Level
 #Will need to make a list of banks in US, Euro, and Asia that are relevant and get their market data.
 
 
+
+
+#Get country regions
+def get_country_regions(regionurl = 'https://unstats.un.org/unsd/methodology/m49/', table_element = {'id': 'GeoGroupsENG'}):
+    import urllib3
+    from bs4 import BeautifulSoup
+
+    print("Initialize Connection to Web Source")
+
+    http = urllib3.PoolManager()
+    response = http.request("GET", regionurl)
+    soup = BeautifulSoup(response.data)
+
+    print("Scrape table")
+    table = soup.find('table',table_element)
+
+    print("Creating Data Frame")
+    CountryRegion_tmp = pd.DataFrame()
+    for tr in table.find_all('tr')[1:]:
+        tds = tr.find_all('td')
+
+        #print(tds)
+    #    if len(tds) >= 3:
+        if 'data-tt-id' in tr.attrs:
+            datattid  = tr.attrs['data-tt-id']
+        else:
+            datatid = None
+        if 'data-tt-parent-id' in tr.attrs:
+            parent_id = tr.attrs['data-tt-parent-id']
+        else:
+            parent_id = None
+        tmp = {"country/region": tds[0].text.strip(), "M49Code": tds[1].text.strip(), "ISO3": tds[2].text.strip(),"ddattid": datattid,"parent_id": parent_id}
+        CountryRegion_tmp = CountryRegion_tmp.append(tmp, ignore_index=True)
+
+    return(CountryRegion_tmp)
+
+world_country_regions = get_country_regions()
+
+
+#merge with itself
+
+RegionCombined = world_country_regions.merge(world_country_regions[['country/region','M49Code']], left_on = "parent_id", right_on = "M49Code", how = "left")
