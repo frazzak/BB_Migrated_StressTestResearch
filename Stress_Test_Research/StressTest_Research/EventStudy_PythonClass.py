@@ -1114,42 +1114,115 @@ missing_idx_countries.to_csv("missing_idx_countries.csv")
 
 
 #Get country regions
-def get_country_regions(regionurl = 'https://unstats.un.org/unsd/methodology/m49/', table_element = {'id': 'GeoGroupsENG'}):
-    import urllib3
-    from bs4 import BeautifulSoup
+def get_country_regions(events_cleaned = None, regionurl = 'https://unstats.un.org/unsd/methodology/m49/', table_element = {'id': 'GeoGroupsENG'},
+                        region_event_ovr_dict={'Global': 'World',
+                                               'Europe': 'Western Europe',
+                                               'Euro Area Policies': 'Western Europe',
+                                               'Central African Economic and Monetary Community': 'Middle Africa',
+                                               'Kosovo': 'Southern Europe',
+                                               'Serbia and Montenegro': 'Southern Europe',
+                                               'Eastern Caribbean Currency Union': 'Caribbean'},
+                        webscrape = True, staticfile = 'world_country_regions_ref.csv'
+                        ):
 
-    print("Initialize Connection to Web Source")
+    if webscrape:
+        import urllib3
+        from bs4 import BeautifulSoup
 
-    http = urllib3.PoolManager()
-    response = http.request("GET", regionurl)
-    soup = BeautifulSoup(response.data)
+        print("Initialize Connection to Web Source")
 
-    print("Scrape table")
-    table = soup.find('table',table_element)
+        http = urllib3.PoolManager()
+        response = http.request("GET", regionurl)
+        soup = BeautifulSoup(response.data)
 
-    print("Creating Data Frame")
-    CountryRegion_tmp = pd.DataFrame()
-    for tr in table.find_all('tr')[1:]:
-        tds = tr.find_all('td')
+        print("Scrape table")
+        table = soup.find('table',table_element)
 
-        #print(tds)
-    #    if len(tds) >= 3:
-        if 'data-tt-id' in tr.attrs:
-            datattid  = tr.attrs['data-tt-id']
-        else:
-            datatid = None
-        if 'data-tt-parent-id' in tr.attrs:
-            parent_id = tr.attrs['data-tt-parent-id']
-        else:
-            parent_id = None
-        tmp = {"country/region": tds[0].text.strip(), "M49Code": tds[1].text.strip(), "ISO3": tds[2].text.strip(),"ddattid": datattid,"parent_id": parent_id}
-        CountryRegion_tmp = CountryRegion_tmp.append(tmp, ignore_index=True)
+        print("Creating Data Frame")
+        CountryRegion_tmp = pd.DataFrame()
+        for tr in table.find_all('tr')[1:]:
+            tds = tr.find_all('td')
 
-    return(CountryRegion_tmp)
+            #print(tds)
+        #    if len(tds) >= 3:
+            if 'data-tt-id' in tr.attrs:
+                datattid  = tr.attrs['data-tt-id']
+            else:
+                datatid = None
+            if 'data-tt-parent-id' in tr.attrs:
+                parent_id = tr.attrs['data-tt-parent-id']
+            else:
+                parent_id = None
+            tmp = {"country/region": tds[0].text.strip(), "M49Code": tds[1].text.strip(), "ISO3": tds[2].text.strip(),"ddattid": datattid,"parent_id": parent_id}
+            CountryRegion_tmp = CountryRegion_tmp.append(tmp, ignore_index=True)
+    elif staticfile is not None:
+        print("Static File Import :", staticfile)
+        CountryRegion_tmp = pd.read_csv(staticfile)
 
-world_country_regions = get_country_regions()
 
 
-#merge with itself
+    if events_cleaned is not None:
+        print('Match country/regions to event countries')
+        print('Match Ref Countries to self for parent regions')
+        CountryRegion_tmp = CountryRegion_tmp.merge(CountryRegion_tmp[['M49Code','country/region']], left_on = 'parent_id', right_on = 'M49Code', how = 'left')
+        events_countries_df = events_cleaned[["country", "ISO3"]].drop_duplicates()
+        region_events_taged = events_countries_df.merge(CountryRegion_tmp, left_on='ISO3', right_on="ISO3", how='left')
+        print("Merging object to self to get parent fields")
+        print('Apply Overrides for Country/Region pairs')
+        for k, v in region_event_ovr_dict.items():
+            print(k, ' : ', v)
+            region_events_taged['country/region_y'][region_events_taged['country'] == k] = v
+            #region_events_taged[pd.isnull(region_events_taged['country/region_y'])]
+        print("Count number of countries without regions : ",region_events_taged[pd.isnull(region_events_taged['country/region_y'])].__len__())
+        print('Merge Regions to events data frame')
+        events_cleaned_df_tmp = events_cleaned.merge(region_events_taged[['ISO3','country/region_y','M49Code_y','parent_id']], left_on = 'ISO3', right_on = 'ISO3', how = 'left')
+    else:
+        events_cleaned_df_tmp = region_events_taged
+    return(events_cleaned_df_tmp)
 
-RegionCombined = world_country_regions.merge(world_country_regions[['country/region','M49Code']], left_on = "parent_id", right_on = "M49Code", how = "left")
+
+
+
+events_cleaned_df_regions = get_country_regions(events_cleaned)
+
+
+
+
+#world_country_regions.to_csv('world_country_regions_ref.csv', index = False)
+
+events_countries_df.merge(RegionCombined, left_on = 'ISO3', right_on = "ISO3", how = 'left')
+
+#Merge all countries with Regions so they all have regional indicies
+#Make sure the countries that are missing country level indices have atleast region.
+
+#Use all countries in events to merge to regions.
+#Create indcies list for regions.
+
+region_events_taged = events_countries_df.merge(RegionCombined, left_on = 'ISO3', right_on = "ISO3", how = 'left')
+#Examine the nans
+region_events_taged[pd.isnull(region_events_taged['country/region_x'])]
+
+#Input Region Value for each country Key.
+region_event_ovr_dict = {'Global' : 'World',
+                         'Europe' : 'Western Europe',
+                         'Euro Area Policies':'Western Europe',
+                         'Central African Economic and Monetary Community':'Middle Africa',
+                         'Kosovo':'Southern Europe',
+                         'Serbia and Montenegro':'Southern Europe',
+                         'Eastern Caribbean Currency Union': 'Caribbean'}
+
+
+for k,v in region_event_ovr_dict.items():
+    print(k,' : ',v)
+    region_events_taged['country/region_y'][region_events_taged['country'] == k] = v
+    region_events_taged[pd.isnull(region_events_taged['country/region_x'])]
+    print(region_events_taged[pd.isnull(region_events_taged['country/region_y'])].__len__())
+
+
+region_events_taged['country/region_y'].unique()
+#Ensure the countries with no country indices have regional indicies.
+
+#Get sector level indices for all the countries.
+
+
+
