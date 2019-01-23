@@ -1057,6 +1057,51 @@ events_cleaned = events_normalize_annctype(events)
 events_cleaned = DeAgg_Events_Union(events_cleaned = events_cleaned, CombineFrame = True)
 events_cleaned = normalize_events_CountryCodes_UN(events_cleaned,event_CountryCodes)
 
+#Get World Regions and attach to the events.
+events_cleaned_df_regions = get_country_regions(events_cleaned)
+
+
+
+
+
+#Need to incorporate Indcies for the regions.
+
+region_list = list(events_cleaned_df_regions['country/region_y'].unique())
+
+events_cleaned_df_regions['ISO3'][events_cleaned_df_regions['country/region_y'] == 'Central Asia'].unique()
+
+
+sorted(region_list)
+
+
+region_idx_gvkeyx_dict= {   'World': ['from comp_global.g_idx_index a',"where indexid similar to '%%(WORLD|ALL)%%' and indexval like '%%ALL%%'"],
+                            'Australia and New Zealand' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Australia|New Zealand)%%'","and indexgeo similar to  '%(AUS|NZL)%'", "and indextype = 'REGIONAL'"],
+                            'Caribbean': ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype = 'REGIONAL'"],
+                            'Central America': ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype = 'REGIONAL'"],
+                            'Central Asia' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Asia)%%'"],
+                            'Channel Islands': ['from comp_global.g_idx_index a',"where conm similar to '%%(Europe)%%'","and conm not similar to '%(Emerging|Eastern|Ex |Excluding|Pacific|Australasia)%'","and indextype = 'REGIONAL'"],
+                            'Eastern Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
+                            'Eastern Asia' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Asia)%%'", "and not conm similar to '%%(Southeast)%%'", "and indextype = 'REGIONAL'","and indexid not in ('ISLAMIC')"],
+                            'Eastern Europe': ['comp_global.g_idx_index a',"where conm similar to '%%(Eastern Europe)%%'","and indexid not in ('ISLAMIC')"],
+                            'Melanesia': ['from comp_global.g_idx_index a', "where conm similar to '%%(sia)%%'", "and  conm not similar to '%%(Europe|Southeast)%%'","and indexid not in ('ISLAMIC')" ],
+                            'Middle Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
+                            'Northern Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
+                            'Northern America' : ['from comp_global.g_idx_index a',"where conm similar to '%%(North America)%%'","and conm not similar to '%%(Europe|Southeast)%%'","and indexid not in ('ISLAMIC')"]
+                            'Northern Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe)%%'","and conm not similar to '%%(Emerging|Eastern|Austral|Pacific|Excluding UK|Ex UK|Ex Eurozone)%%'","and indexid not in ('ISLAMIC')"],
+                            'South America' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype = 'REGIONAL'"],
+                            'South-eastern Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Southeast|Asia)%%'","and conm not similar to '%%(India Pakistan)%%'","and indexgeo = 'APA' and indexid in ('WORLD', 'ALL')"],
+                            'Southern Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Southeast|Asia)%%'","and conm not similar to '%%(India Pakistan)%%'","and indexgeo = 'APA' and indexid in ('WORLD', 'ALL')"],
+                            'Southern Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe |Ex UK| Excluding UK)%%'","and conm not similar to '%%(Eastern Europe|Austra|Pacific|Including UK)%%'","and indextype = 'REGIONAL'","and indexid not in ('ISLAMIC')"],
+                            'Western Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
+                            'Western Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Middle East)%%'"],
+                            'Western Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe)%%'","and conm not similar to '%%(Eastern Europe|Pacific|East|Excluding UK|Ex UK|Ex Eurozone|Emerging)%%'","and indextype = 'REGIONAL'","and indexid not in ('ISLAMIC')"]
+                            }
+
+
+
+
+
+
 #Get Relevant Indices and Prices
 #Country Level
 world_idx_names = get_CountryIndices(events_cleaned,RunWrdsAPI = True)
@@ -1065,34 +1110,6 @@ world_idx_names = get_CountryIndices(events_cleaned,RunWrdsAPI = True)
 #Daily
 world_idx_prices = get_idx_prices(world_idx_names,events_cleaned)
 
-
-world_idx_prices = world_idx_prices.sort_values(["indexgeo_mnt","gvkeyx","datadate"])
-
-world_idx_prices['indexgeo_mnt'].unique().__len__()
-
-
-
-#Regional Mappings of Indices for non matched countries.
-
-#get countries with no indicies.
-
-#126 countries
-
-
-events_countries_df = events_cleaned[["country","ISO3"]].drop_duplicates()
-
-world_idx_countries = world_idx_names["indexgeo"].unique()
-
-events_countries = ['None' if x is np.nan else x for x in events_countries_df["ISO3"]]
-
-
-
-missing_idx_countries = events_countries_df[events_countries_df["ISO3"].isin(missing_idx_countries)]
-
-#59 not matched
-missing_idx_countries.sort_values("country")
-
-missing_idx_countries.to_csv("missing_idx_countries.csv")
 
 #Maintain list.
 
@@ -1183,46 +1200,9 @@ def get_country_regions(events_cleaned = None, regionurl = 'https://unstats.un.o
 
 
 
-events_cleaned_df_regions = get_country_regions(events_cleaned)
 
 
 
-
-#world_country_regions.to_csv('world_country_regions_ref.csv', index = False)
-
-events_countries_df.merge(RegionCombined, left_on = 'ISO3', right_on = "ISO3", how = 'left')
-
-#Merge all countries with Regions so they all have regional indicies
-#Make sure the countries that are missing country level indices have atleast region.
-
-#Use all countries in events to merge to regions.
-#Create indcies list for regions.
-
-region_events_taged = events_countries_df.merge(RegionCombined, left_on = 'ISO3', right_on = "ISO3", how = 'left')
-#Examine the nans
-region_events_taged[pd.isnull(region_events_taged['country/region_x'])]
-
-#Input Region Value for each country Key.
-region_event_ovr_dict = {'Global' : 'World',
-                         'Europe' : 'Western Europe',
-                         'Euro Area Policies':'Western Europe',
-                         'Central African Economic and Monetary Community':'Middle Africa',
-                         'Kosovo':'Southern Europe',
-                         'Serbia and Montenegro':'Southern Europe',
-                         'Eastern Caribbean Currency Union': 'Caribbean'}
-
-
-for k,v in region_event_ovr_dict.items():
-    print(k,' : ',v)
-    region_events_taged['country/region_y'][region_events_taged['country'] == k] = v
-    region_events_taged[pd.isnull(region_events_taged['country/region_x'])]
-    print(region_events_taged[pd.isnull(region_events_taged['country/region_y'])].__len__())
-
-
-region_events_taged['country/region_y'].unique()
-#Ensure the countries with no country indices have regional indicies.
-
-#Get sector level indices for all the countries.
 
 
 
