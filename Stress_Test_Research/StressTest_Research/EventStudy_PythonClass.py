@@ -997,30 +997,6 @@ def get_country_regions(events_cleaned = None, regionurl = 'https://unstats.un.o
     return(events_cleaned_df_tmp)
 
 
-
-region_idx_gvkeyx_dict= {   'World': ['from comp_global.g_idx_index a',"where indexid similar to '%%(WORLD|ALL)%%' and indexval like '%%ALL%%'"],
-                            'Australia and New Zealand' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Australia|New Zealand)%%'","and indexgeo similar to  '%%(AUS|NZL)%%'", "and indextype = 'REGIONAL'"],
-                            'Caribbean': ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype = 'REGIONAL'"],
-                            'Central America': ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype = 'REGIONAL'"],
-                            'Central Asia' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Asia)%%'"],
-                            'Channel Islands': ['from comp_global.g_idx_index a',"where conm similar to '%%(Europe)%%'","and conm not similar to '%%(Emerging|Eastern|Ex |Excluding|Pacific|Australasia)%%'","and indextype = 'REGIONAL'"],
-                            'Eastern Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
-                            'Eastern Asia' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Asia)%%'", "and not conm similar to '%%(Southeast)%%'", "and indextype = 'REGIONAL'","and indexid not in ('ISLAMIC')"],
-                            'Eastern Europe': ['from comp_global.g_idx_index a',"where conm similar to '%%(Eastern Europe)%%'","and indexid not in ('ISLAMIC')"],
-                            'Melanesia': ['from comp_global.g_idx_index a', "where conm similar to '%%(sia)%%'", "and  conm not similar to '%%(Europe|Southeast)%%'","and indexid not in ('ISLAMIC')" ],
-                            'Middle Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
-                            'Northern Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
-                            'Northern America' : ['from comp_global.g_idx_index a',"where conm similar to '%%(North America)%%'","and conm not similar to '%%(Europe|Southeast)%%'","and indexid not in ('ISLAMIC')"],
-                            'Northern Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe)%%'","and conm not similar to '%%(Emerging|Eastern|Austral|Pacific|Excluding UK|Ex UK|Ex Eurozone)%%'","and indexid not in ('ISLAMIC')"],
-                            'South America' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype = 'REGIONAL'"],
-                            'South-eastern Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Southeast|Asia)%%'","and conm not similar to '%%(India Pakistan)%%'","and indexgeo = 'APA' and indexid in ('WORLD', 'ALL')"],
-                            'Southern Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Southeast|Asia)%%'","and conm not similar to '%%(India Pakistan)%%'","and indexgeo = 'APA' and indexid in ('WORLD', 'ALL')"],
-                            'Southern Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe |Ex UK| Excluding UK)%%'","and conm not similar to '%%(Eastern Europe|Austra|Pacific|Including UK)%%'","and indextype = 'REGIONAL'","and indexid not in ('ISLAMIC')"],
-                            'Western Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
-                            'Western Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Middle East)%%'"],
-                            'Western Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe)%%'","and conm not similar to '%%(Eastern Europe|Pacific|East|Excluding UK|Ex UK|Ex Eurozone|Emerging)%%'","and indextype = 'REGIONAL'","and indexid not in ('ISLAMIC')"]
-                            }
-
 def get_regions_idx(region_idx_gvkeyx_dict= {   'World': ['from comp_global.g_idx_index a',"where indexid similar to '%%(WORLD|ALL)%%' and indexval like '%%ALL%%'"],
                             'Australia and New Zealand' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Australia|New Zealand)%%'","and indexgeo similar to  '%%(AUS|NZL)%%'", "and indextype in ('REGIONAL','REGSEC')"],
                             'Caribbean': ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype in ('REGIONAL','REGSEC')"],
@@ -1126,6 +1102,189 @@ def get_idx_names(events_cleaned, Region = True, Country = True, Sector = True, 
     return(idx_names_df)
 
 
+def get_idx_prices(world_idx_names, events_cleaned, RunWrdsAPI=True, region=True, country=True, sector=True,
+                   interval_before_mindate='2 year', interval_after_maxdate='2 year',
+                   table_dict={'comp_global.g_idx_index': 'comp_global_daily.g_idx_daily',
+                               'comp_na_daily_all.idx_index': 'comp_na_daily_all.idx_daily',
+                               'UN_M49Codes': 'comp_global_daily.g_idx_daily'}
+                   , wrds_username="fr497", password="Fr056301"):
+    qry_results = pd.DataFrame()
+    qry_results_str = []
+    if RunWrdsAPI:
+        print("Initialize WRDS connection")
+        import wrds
+        db = wrds.Connection(wrds_username=wrds_username, password=password)
+    if sector:
+        # Initialize the Wrds Connection
+
+        print("Get date ranges for each Country in Sector File and Events file to get proper index data range")
+        gb = events_cleaned[events_cleaned['ISO3'].isin(
+            world_idx_names['indexgeo'][world_idx_names['qrycat'] == 'SectorLevel'].unique())]
+        print("Getting Minimum and Maximum dates needed for each index from events object based on Country")
+        gb = events_cleaned.groupby(["country", "ISO3"])
+        # Get min and max and count of the date and events
+        gb = gb.agg({'date': ['min', 'max', 'count']}).reset_index()
+        # Sort the values by counts.
+        gb = gb.ix[gb['date']['count'].sort_values(ascending=False).index].reset_index(drop=True)
+
+        # prepare to query for each index based on source, gvkey, min/max date and append to a dataframe.
+
+        qry_results_str = []
+        for i in range(gb.__len__()):
+            # temp
+            # i = 0
+            print("Getting Index Prices for Country Sector: " + gb['country'][i] + " | " + gb['ISO3'][i])
+
+            gvkey_tmp = "','".join(world_idx_names['gvkeyx'][world_idx_names['indexgeo'] == gb['ISO3'][i]])
+            source_tmp = world_idx_names['source'][world_idx_names['indexgeo'] == gb['ISO3'][i]].unique()
+            print(source_tmp)
+
+            print("Getting Appropriate Tables to get prices from")
+            from_tmp_ls = []
+            for k, v in table_dict.items():
+                for j in source_tmp:
+                    # print(j)
+                    if k == j:
+                        tmp = j.replace(k, v)
+                        print(j, tmp)
+                        from_tmp_ls.append(tmp)
+            # print(newlist)
+
+            print(from_tmp_ls)
+            for y in range(from_tmp_ls.__len__()):
+                print(from_tmp_ls[y])
+                print("Creating Query String")
+                select_tmp = "select * , '" + gb['ISO3'][i] + "' as indexgeo_mnt, '" + from_tmp_ls[y] + "' as table_src"
+                from_tmp = "from " + from_tmp_ls[y]
+                where_tmp = "where gvkeyx in ('" + gvkey_tmp + "') " \
+                                                               " and datadate between date '" + gb['date']['min'][
+                                i] + "' - INTERVAL '" + interval_before_mindate + "'" \
+                                                                                  " and date '" + gb['date']['max'][
+                                i] + "' + INTERVAL '" + interval_after_maxdate + "';"
+                query_tmp = " ".join([select_tmp, from_tmp, where_tmp])
+                # Run Query
+                if RunWrdsAPI:
+                    print("Querying Wrds")
+                    qry_tmp_results = db.raw_sql(query_tmp)
+                    if qry_tmp_results.empty:
+                        print(query_tmp)
+                    print("Appending to Results Dataframe")
+                    qry_results = pd.concat([qry_results, qry_tmp_results])
+                    print(qry_results.shape)
+
+                else:
+                    print("Appending query string to list")
+                    qry_results_str.append(query_tmp)
+
+    if country:
+
+        print("Get date ranges for each COUNTRY in events file to get proper index data range")
+
+        # Get data ranges for countries and ISO3 indices from the events
+        # fill the nan values
+        # events_cleaned['ISO3'][pd.isnull(events_cleaned["ISO3"])] = "N/A"
+        # Aggregate on country and ISO3
+        print("Getting Minimum and Maximum dates needed for each index from events object based on Country")
+        gb = events_cleaned.groupby(["country", "ISO3"])
+        # Get min and max and count of the date and events
+        gb = gb.agg({'date': ['min', 'max', 'count']}).reset_index()
+        # Sort the values by counts.
+        gb = gb.ix[gb['date']['count'].sort_values(ascending=False).index].reset_index(drop=True)
+
+        # prepare to query for each index based on source, gvkey, min/max date and append to a dataframe.
+
+        qry_results_str = []
+        for i in range(gb.__len__()):
+            # temp
+            # i = 0
+            print("Getting Index Prices for Country: " + gb['country'][i] + " | " + gb['ISO3'][i])
+
+            gvkey_tmp = "','".join(world_idx_names['gvkeyx'][world_idx_names['indexgeo'] == gb['ISO3'][i]])
+            source_tmp = world_idx_names['source'][world_idx_names['indexgeo'] == gb['ISO3'][i]].unique()
+            print(source_tmp)
+
+            print("Getting Appropriate Tables to get prices from")
+            from_tmp_ls = []
+            for k, v in table_dict.items():
+                for j in source_tmp:
+                    # print(j)
+                    if k == j:
+                        tmp = j.replace(k, v)
+                        print(j, tmp)
+                        from_tmp_ls.append(tmp)
+            # print(newlist)
+
+            print(from_tmp_ls)
+            for y in range(from_tmp_ls.__len__()):
+                print(from_tmp_ls[y])
+                print("Creating Query String")
+                select_tmp = "select * , '" + gb['ISO3'][i] + "' as indexgeo_mnt, '" + from_tmp_ls[y] + "' as table_src"
+                from_tmp = "from " + from_tmp_ls[y]
+                where_tmp = "where gvkeyx in ('" + gvkey_tmp + "') " \
+                                                               " and datadate between date '" + gb['date']['min'][
+                                i] + "' - INTERVAL '" + interval_before_mindate + "'" \
+                                                                                  " and date '" + gb['date']['max'][
+                                i] + "' + INTERVAL '" + interval_after_maxdate + "';"
+                query_tmp = " ".join([select_tmp, from_tmp, where_tmp])
+                # Run Query
+                if RunWrdsAPI:
+                    print("Querying Wrds")
+                    qry_tmp_results = db.raw_sql(query_tmp)
+                    if qry_tmp_results.empty:
+                        print(query_tmp)
+                    print("Appending to Results Dataframe")
+                    qry_results = pd.concat([qry_results, qry_tmp_results])
+                    print(qry_results.shape)
+
+                else:
+                    print("Appending query string to list")
+                    qry_results_str.append(query_tmp)
+
+    if region:
+        print("Get date ranges for all Events to get Regions Min-Max")
+        print("Getting Minimum and Maximum dates needed for all events")
+        tmp_date_max = events_cleaned['date'].max()
+        tmp_date_min = events_cleaned['date'].min()
+        tmp_gvkeyx = list(world_idx_names['gvkeyx'][world_idx_names['qrycat'] == 'RegionLevel'].unique())
+        tmp_source = world_idx_names['source'][world_idx_names['qrycat'] == 'RegionLevel'].unique()
+        print(tmp_source)
+        tmp_source = "".join(tmp_source)
+        print(table_dict[tmp_source])
+
+        qry_results_str = []
+        print("Getting Index Prices for Regions")
+        gvkey_tmp = "','".join(tmp_gvkeyx)
+        source_tmp = table_dict[tmp_source]
+        print(source_tmp)
+        print("Creating Query String")
+        select_tmp = "select * , 'RegionalLevel' as indexgeo_mnt, '" + source_tmp + "' as table_src"
+        from_tmp = "from " + source_tmp
+        where_tmp = "where gvkeyx in ('" + gvkey_tmp + "') " \
+                                                       " and datadate between date '" + tmp_date_min + "' - INTERVAL '" + interval_before_mindate + "'" \
+                                                                                                                                                    " and date '" + tmp_date_max + "' + INTERVAL '" + interval_after_maxdate + "';"
+        query_tmp = " ".join([select_tmp, from_tmp, where_tmp])
+        # Run Query
+        if RunWrdsAPI:
+            print("Querying Wrds")
+            qry_tmp_results = db.raw_sql(query_tmp)
+            if qry_tmp_results.empty:
+                print(query_tmp)
+            print("Appending to Results Dataframe")
+            qry_results = pd.concat([qry_results, qry_tmp_results])
+            print(qry_results.shape)
+        else:
+            print("Appending query string to list")
+            qry_results_str.append(query_tmp)
+
+    if RunWrdsAPI:
+        print("Drop Duplicates")
+        qry_results = qry_results.drop_duplicates(subset=['gvkeyx', 'conm', 'datadate'])
+        print(qry_results.shape)
+        return (qry_results)
+    else:
+        return (qry_results_str)
+
+
 #Workspace
 
 
@@ -1174,103 +1333,30 @@ events_cleaned_df_regions = get_country_regions(events_cleaned)
 event_index_names_df = get_idx_names(events_cleaned_df_regions)
 
 
-
-
 #Get index prices monthly and daily.
 #Daily
-world_idx_prices = get_idx_prices(world_idx_names,events_cleaned)
+event_idx_prices = get_idx_prices(event_index_names_df,events_cleaned_df_regions)
+
+
+
+event_idx_prices.shape
+
+event_idx_prices.gvkeyx.unique().__len__()
+
+
+#Event Study
+
+#Region
+
+#Country
+
+#Sector
 
 
 
 
 
-def get_idx_prices(world_idx_names,events_cleaned,interval_before_mindate = '2 year', interval_after_maxdate = '2 year',
-                   table_dict = {'comp_global.g_idx_index':'comp_global_daily.g_idx_daily',
-                                'comp_na_daily_all.idx_index':'comp_na_daily_all.idx_daily'}
-                                 ,wrds_username="fr497", password = "Fr056301",RunWrdsAPI = True):
-
-    #Get date ranges for each COUNTRY in events file to get proper index data range..
-
-    #Get data ranges for countries and ISO3 indices from the events
-    #fill the nan values
-    #events_cleaned['ISO3'][pd.isnull(events_cleaned["ISO3"])] = "N/A"
-    #Aggregate on country and ISO3
-    print("Getting Minimum and Maximum dates needed for each index from events object based on Country")
-    gb = events_cleaned.groupby(["country","ISO3"])
-    #Get min and max and count of the date and events
-    gb = gb.agg({'date' : ['min','max','count']}).reset_index()
-    #Sort the values by counts.
-    gb = gb.ix[gb['date']['count'].sort_values(ascending=False).index].reset_index(drop = True)
-
-
-    #Get the gvkeys and date ranges to pull.
-    #Join GB to the the events.
-    #Create a merged table that gives the min max dates for each country's index.
-    #Consider that some countries have multiple indicies.
-        #We can just join on all indicies as they already have indexgeos.
-    #May not be needed, we can subset based on country name.
-    #print("Merging country level date ranges from events to each respective index.")
-    #idx_query_params = world_idx_names.merge(gb, left_on = 'indexgeo', right_on = 'ISO3')
-
-    #Initialize the Wrds Connection
-    if RunWrdsAPI:
-        print("Initialize WRDS connection")
-        import wrds
-        db = wrds.Connection(wrds_username= wrds_username, password= password)
-
-
-    #prepare to query for each index based on source, gvkey, min/max date and append to a dataframe.
-    qry_results = pd.DataFrame()
-    qry_results_str = []
-    for i in range(gb.__len__()):
-        #temp
-        #i = 0
-        print("Getting Index Prices for Country: " + gb['country'][i] + " | " + gb['ISO3'][i])
-
-        gvkey_tmp = "','".join(world_idx_names['gvkeyx'][world_idx_names['indexgeo'] == gb['ISO3'][i]])
-        source_tmp = world_idx_names['source'][world_idx_names['indexgeo'] == gb['ISO3'][i]].unique()
-        print(source_tmp)
-
-        print("Getting Appropriate Tables to get prices from")
-        from_tmp_ls = []
-        for k, v in table_dict.items():
-            for j in source_tmp:
-                #print(j)
-                if k == j:
-                    tmp = j.replace(k,v)
-                    print(j,tmp)
-                    from_tmp_ls.append(tmp)
-        #print(newlist)
-
-
-        print(from_tmp_ls)
-        for y in range(from_tmp_ls.__len__()):
-            print(from_tmp_ls[y])
-            print("Creating Query String")
-            select_tmp = "select * , '" + gb['ISO3'][i] + "' as indexgeo_mnt, '" + from_tmp_ls[y] + "' as table_src"
-            from_tmp = "from " + from_tmp_ls[y]
-            where_tmp = "where gvkeyx in ('"+ gvkey_tmp +"') " \
-                        " and datadate between date '" + gb['date']['min'][i] + "' - INTERVAL '"+ interval_before_mindate +"'" \
-                        " and date '" + gb['date']['max'][i] + "' + INTERVAL '"+ interval_after_maxdate +"';"
-            query_tmp = " ".join([select_tmp, from_tmp, where_tmp])
-            #Run Query
-            if RunWrdsAPI:
-                print("Querying Wrds")
-                qry_tmp_results = db.raw_sql(query_tmp)
-                if qry_tmp_results.empty:
-                    print(query_tmp)
-                print("Appending to Results Dataframe")
-                qry_results = pd.concat([qry_results,qry_tmp_results])
-            else:
-                print("Appending query string to list")
-                qry_results_str.append(query_tmp)
-
-    if RunWrdsAPI:
-        return(qry_results)
-    else:
-        return(qry_results_str)
-
-
+#Cluster Analysis of Returns around Events.
 
 
 
