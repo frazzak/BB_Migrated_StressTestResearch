@@ -928,93 +928,6 @@ def get_CountryIndices(events_cleaned, country_indicies_file = "wrdsWorldIndicie
 
 
 
-def get_idx_prices(world_idx_names,events_cleaned,interval_before_mindate = '2 year', interval_after_maxdate = '2 year',
-                   table_dict = {'comp_global.g_idx_index':'comp_global_daily.g_idx_daily',
-                                'comp_na_daily_all.idx_index':'comp_na_daily_all.idx_daily'}
-                                 ,wrds_username="fr497", password = "Fr056301",RunWrdsAPI = True):
-
-    #Get date ranges for each COUNTRY in events file to get proper index data range..
-
-    #Get data ranges for countries and ISO3 indices from the events
-    #fill the nan values
-    #events_cleaned['ISO3'][pd.isnull(events_cleaned["ISO3"])] = "N/A"
-    #Aggregate on country and ISO3
-    print("Getting Minimum and Maximum dates needed for each index from events object based on Country")
-    gb = events_cleaned.groupby(["country","ISO3"])
-    #Get min and max and count of the date and events
-    gb = gb.agg({'date' : ['min','max','count']}).reset_index()
-    #Sort the values by counts.
-    gb = gb.ix[gb['date']['count'].sort_values(ascending=False).index].reset_index(drop = True)
-
-
-    #Get the gvkeys and date ranges to pull.
-    #Join GB to the the events.
-    #Create a merged table that gives the min max dates for each country's index.
-    #Consider that some countries have multiple indicies.
-        #We can just join on all indicies as they already have indexgeos.
-    #May not be needed, we can subset based on country name.
-    #print("Merging country level date ranges from events to each respective index.")
-    #idx_query_params = world_idx_names.merge(gb, left_on = 'indexgeo', right_on = 'ISO3')
-
-    #Initialize the Wrds Connection
-    if RunWrdsAPI:
-        print("Initialize WRDS connection")
-        import wrds
-        db = wrds.Connection(wrds_username= wrds_username, password= password)
-
-
-    #prepare to query for each index based on source, gvkey, min/max date and append to a dataframe.
-    qry_results = pd.DataFrame()
-    qry_results_str = []
-    for i in range(gb.__len__()):
-        #temp
-        #i = 0
-        print("Getting Index Prices for Country: " + gb['country'][i] + " | " + gb['ISO3'][i])
-
-        gvkey_tmp = "','".join(world_idx_names['gvkeyx'][world_idx_names['indexgeo'] == gb['ISO3'][i]])
-        source_tmp = world_idx_names['source'][world_idx_names['indexgeo'] == gb['ISO3'][i]].unique()
-        print(source_tmp)
-
-        print("Getting Appropriate Tables to get prices from")
-        from_tmp_ls = []
-        for k, v in table_dict.items():
-            for j in source_tmp:
-                #print(j)
-                if k == j:
-                    tmp = j.replace(k,v)
-                    print(j,tmp)
-                    from_tmp_ls.append(tmp)
-        #print(newlist)
-
-
-        print(from_tmp_ls)
-        for y in range(from_tmp_ls.__len__()):
-            print(from_tmp_ls[y])
-            print("Creating Query String")
-            select_tmp = "select * , '" + gb['ISO3'][i] + "' as indexgeo_mnt, '" + from_tmp_ls[y] + "' as table_src"
-            from_tmp = "from " + from_tmp_ls[y]
-            where_tmp = "where gvkeyx in ('"+ gvkey_tmp +"') " \
-                        " and datadate between date '" + gb['date']['min'][i] + "' - INTERVAL '"+ interval_before_mindate +"'" \
-                        " and date '" + gb['date']['max'][i] + "' + INTERVAL '"+ interval_after_maxdate +"';"
-            query_tmp = " ".join([select_tmp, from_tmp, where_tmp])
-            #Run Query
-            if RunWrdsAPI:
-                print("Querying Wrds")
-                qry_tmp_results = db.raw_sql(query_tmp)
-                if qry_tmp_results.empty:
-                    print(query_tmp)
-                print("Appending to Results Dataframe")
-                qry_results = pd.concat([qry_results,qry_tmp_results])
-            else:
-                print("Appending query string to list")
-                qry_results_str.append(query_tmp)
-
-    if RunWrdsAPI:
-        return(qry_results)
-    else:
-        return(qry_results_str)
-
-
 
 #Get country regions
 def get_country_regions(events_cleaned = None, regionurl = 'https://unstats.un.org/unsd/methodology/m49/', table_element = {'id': 'GeoGroupsENG'},
@@ -1184,13 +1097,37 @@ def get_sector_idx( sector_idx_dict = { 'comp_global.g_idx_index':"where indexva
         return(qry_results)
 
 
+
+#Use a Wrapper function to combine all the indices tagged with the appropriate types. Region/Country/Sector
+
+def get_idx_names(events_cleaned, Region = True, Country = True, Sector = True, RunWrdsAPI  =True):
+    print("Getting Index names from WRDS COMPUSTAT Database")
+    print("Initializing Dataframe")
+    idx_names_df = pd.DataFrame()
+    if Region:
+        print("Getting Region-Level Index Names.")
+        region_idx_names_tmp = get_regions_idx(RunWrdsAPI = RunWrdsAPI)
+        region_idx_names_tmp['qrycat'] = "RegionLevel"
+        region_idx_names_tmp['source'] = 'UN_M49Codes'
+        idx_names_df = pd.concat([idx_names_df,region_idx_names_tmp])
+    if Country:
+        print("Getting Country-Level Index Names")
+        country_idx_names_tmp = get_CountryIndices(events_cleaned,RunWrdsAPI = RunWrdsAPI)
+        idx_names_df = pd.concat([idx_names_df,country_idx_names_tmp])
+    if Sector:
+        print("Getting Sector-Level Index Names")
+        sector_idx_names_tmp = get_sector_idx(events_cleaned_df = events_cleaned_df_regions,RunWrdsAPI = RunWrdsAPI)
+        sector_idx_names_tmp['qrycat'] = "SectorLevel"
+        idx_names_df = pd.concat([idx_names_df,sector_idx_names_tmp], ignore_index= True)
+
+    #Cleanup of objects required.
+    #qrycat, source, etc. Should we join the region codes?
+    idx_names_df = idx_names_df.reset_index(drop = True)
+    return(idx_names_df)
+
+
 #Workspace
 
-
-test = set(sector_idx_names.indexgeo.unique())
-test2 = set(events_cleaned_df_regions.ISO3.unique())
-
-test.intersection(test2).__len__()
 
 
 # Webs ETF Index incorporate Webs Index
@@ -1233,17 +1170,11 @@ events_cleaned = normalize_events_CountryCodes_UN(events_cleaned,event_CountryCo
 events_cleaned_df_regions = get_country_regions(events_cleaned)
 
 
-#Use a Wrapper function to combine all the indices tagged with the appropriate types. Region/Country/Sector
-#Get Region Indicies
-
-idx_regions_mappings = get_regions_idx()
-
-#Country Level
-world_idx_names = get_CountryIndices(events_cleaned,RunWrdsAPI = True)
+#Get all the indices names
+event_index_names_df = get_idx_names(events_cleaned_df_regions)
 
 
-#Get Country/Region Sectors.
-sector_idx_names = get_sector_idx(events_cleaned_df = events_cleaned_df_regions)
+
 
 #Get index prices monthly and daily.
 #Daily
@@ -1251,6 +1182,93 @@ world_idx_prices = get_idx_prices(world_idx_names,events_cleaned)
 
 
 
+
+
+def get_idx_prices(world_idx_names,events_cleaned,interval_before_mindate = '2 year', interval_after_maxdate = '2 year',
+                   table_dict = {'comp_global.g_idx_index':'comp_global_daily.g_idx_daily',
+                                'comp_na_daily_all.idx_index':'comp_na_daily_all.idx_daily'}
+                                 ,wrds_username="fr497", password = "Fr056301",RunWrdsAPI = True):
+
+    #Get date ranges for each COUNTRY in events file to get proper index data range..
+
+    #Get data ranges for countries and ISO3 indices from the events
+    #fill the nan values
+    #events_cleaned['ISO3'][pd.isnull(events_cleaned["ISO3"])] = "N/A"
+    #Aggregate on country and ISO3
+    print("Getting Minimum and Maximum dates needed for each index from events object based on Country")
+    gb = events_cleaned.groupby(["country","ISO3"])
+    #Get min and max and count of the date and events
+    gb = gb.agg({'date' : ['min','max','count']}).reset_index()
+    #Sort the values by counts.
+    gb = gb.ix[gb['date']['count'].sort_values(ascending=False).index].reset_index(drop = True)
+
+
+    #Get the gvkeys and date ranges to pull.
+    #Join GB to the the events.
+    #Create a merged table that gives the min max dates for each country's index.
+    #Consider that some countries have multiple indicies.
+        #We can just join on all indicies as they already have indexgeos.
+    #May not be needed, we can subset based on country name.
+    #print("Merging country level date ranges from events to each respective index.")
+    #idx_query_params = world_idx_names.merge(gb, left_on = 'indexgeo', right_on = 'ISO3')
+
+    #Initialize the Wrds Connection
+    if RunWrdsAPI:
+        print("Initialize WRDS connection")
+        import wrds
+        db = wrds.Connection(wrds_username= wrds_username, password= password)
+
+
+    #prepare to query for each index based on source, gvkey, min/max date and append to a dataframe.
+    qry_results = pd.DataFrame()
+    qry_results_str = []
+    for i in range(gb.__len__()):
+        #temp
+        #i = 0
+        print("Getting Index Prices for Country: " + gb['country'][i] + " | " + gb['ISO3'][i])
+
+        gvkey_tmp = "','".join(world_idx_names['gvkeyx'][world_idx_names['indexgeo'] == gb['ISO3'][i]])
+        source_tmp = world_idx_names['source'][world_idx_names['indexgeo'] == gb['ISO3'][i]].unique()
+        print(source_tmp)
+
+        print("Getting Appropriate Tables to get prices from")
+        from_tmp_ls = []
+        for k, v in table_dict.items():
+            for j in source_tmp:
+                #print(j)
+                if k == j:
+                    tmp = j.replace(k,v)
+                    print(j,tmp)
+                    from_tmp_ls.append(tmp)
+        #print(newlist)
+
+
+        print(from_tmp_ls)
+        for y in range(from_tmp_ls.__len__()):
+            print(from_tmp_ls[y])
+            print("Creating Query String")
+            select_tmp = "select * , '" + gb['ISO3'][i] + "' as indexgeo_mnt, '" + from_tmp_ls[y] + "' as table_src"
+            from_tmp = "from " + from_tmp_ls[y]
+            where_tmp = "where gvkeyx in ('"+ gvkey_tmp +"') " \
+                        " and datadate between date '" + gb['date']['min'][i] + "' - INTERVAL '"+ interval_before_mindate +"'" \
+                        " and date '" + gb['date']['max'][i] + "' + INTERVAL '"+ interval_after_maxdate +"';"
+            query_tmp = " ".join([select_tmp, from_tmp, where_tmp])
+            #Run Query
+            if RunWrdsAPI:
+                print("Querying Wrds")
+                qry_tmp_results = db.raw_sql(query_tmp)
+                if qry_tmp_results.empty:
+                    print(query_tmp)
+                print("Appending to Results Dataframe")
+                qry_results = pd.concat([qry_results,qry_tmp_results])
+            else:
+                print("Appending query string to list")
+                qry_results_str.append(query_tmp)
+
+    if RunWrdsAPI:
+        return(qry_results)
+    else:
+        return(qry_results_str)
 
 
 
