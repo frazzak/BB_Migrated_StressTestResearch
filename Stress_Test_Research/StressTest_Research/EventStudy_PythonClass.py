@@ -1015,160 +1015,6 @@ def get_idx_prices(world_idx_names,events_cleaned,interval_before_mindate = '2 y
         return(qry_results_str)
 
 
-#Workspace
-
-#TODO Fix US bank index query to exclude non relevant indicies.
-#TODO Fix prices pull to query both tables or other tables and append.  No USA indices got appended.
-
-
-
-world_idx_prices = get_idx_prices(world_idx_names,events_cleaned)
-
-world_idx_prices.shape
-
-
-
-
-#Insertition Point
-#TODO: Review all methods and put into a Class Libary so a DataFrame can be called from the object.
-
-
-#events = []
-#Run WebScrapers
-
-#Get Events from websites
-    #events = getevents_data()
-    #Export the raw event file
-    #events.to_csv("events.csv",sep = ",")
-
-#Get UN Country Codes.
-#From UN Website
-    #event_CountryCodes = get_CountryCodes()
-    #event_CountryCodes.to_csv("event_CountryCodes.csv",sep = ",")
-
-
-
-
-
-#Import events file
-events = pd.read_csv("events.csv")
-event_CountryCodes = pd.read_csv("event_CountryCodes.csv")
-events_cleaned = events_normalize_annctype(events)
-events_cleaned = DeAgg_Events_Union(events_cleaned = events_cleaned, CombineFrame = True)
-events_cleaned = normalize_events_CountryCodes_UN(events_cleaned,event_CountryCodes)
-
-#Get World Regions and attach to the events.
-events_cleaned_df_regions = get_country_regions(events_cleaned)
-
-
-
-
-
-#Need to incorporate Indcies for the regions.
-
-region_list = list(events_cleaned_df_regions['country/region_y'].unique())
-
-events_cleaned_df_regions['ISO3'][events_cleaned_df_regions['country/region_y'] == 'Central Asia'].unique()
-
-
-sorted(region_list)
-
-
-region_idx_gvkeyx_dict= {   'World': ['from comp_global.g_idx_index a',"where indexid similar to '%%(WORLD|ALL)%%' and indexval like '%%ALL%%'"],
-                            'Australia and New Zealand' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Australia|New Zealand)%%'","and indexgeo similar to  '%%(AUS|NZL)%%'", "and indextype = 'REGIONAL'"],
-                            'Caribbean': ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype = 'REGIONAL'"],
-                            'Central America': ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype = 'REGIONAL'"],
-                            'Central Asia' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Asia)%%'"],
-                            'Channel Islands': ['from comp_global.g_idx_index a',"where conm similar to '%%(Europe)%%'","and conm not similar to '%%(Emerging|Eastern|Ex |Excluding|Pacific|Australasia)%%'","and indextype = 'REGIONAL'"],
-                            'Eastern Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
-                            'Eastern Asia' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Asia)%%'", "and not conm similar to '%%(Southeast)%%'", "and indextype = 'REGIONAL'","and indexid not in ('ISLAMIC')"],
-                            'Eastern Europe': ['from comp_global.g_idx_index a',"where conm similar to '%%(Eastern Europe)%%'","and indexid not in ('ISLAMIC')"],
-                            'Melanesia': ['from comp_global.g_idx_index a', "where conm similar to '%%(sia)%%'", "and  conm not similar to '%%(Europe|Southeast)%%'","and indexid not in ('ISLAMIC')" ],
-                            'Middle Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
-                            'Northern Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
-                            'Northern America' : ['from comp_global.g_idx_index a',"where conm similar to '%%(North America)%%'","and conm not similar to '%%(Europe|Southeast)%%'","and indexid not in ('ISLAMIC')"],
-                            'Northern Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe)%%'","and conm not similar to '%%(Emerging|Eastern|Austral|Pacific|Excluding UK|Ex UK|Ex Eurozone)%%'","and indexid not in ('ISLAMIC')"],
-                            'South America' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype = 'REGIONAL'"],
-                            'South-eastern Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Southeast|Asia)%%'","and conm not similar to '%%(India Pakistan)%%'","and indexgeo = 'APA' and indexid in ('WORLD', 'ALL')"],
-                            'Southern Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Southeast|Asia)%%'","and conm not similar to '%%(India Pakistan)%%'","and indexgeo = 'APA' and indexid in ('WORLD', 'ALL')"],
-                            'Southern Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe |Ex UK| Excluding UK)%%'","and conm not similar to '%%(Eastern Europe|Austra|Pacific|Including UK)%%'","and indextype = 'REGIONAL'","and indexid not in ('ISLAMIC')"],
-                            'Western Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
-                            'Western Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Middle East)%%'"],
-                            'Western Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe)%%'","and conm not similar to '%%(Eastern Europe|Pacific|East|Excluding UK|Ex UK|Ex Eurozone|Emerging)%%'","and indextype = 'REGIONAL'","and indexid not in ('ISLAMIC')"]
-                            }
-
-def get_regions_idx(region_idx_gvkeyx_dict= {   'World': ['from comp_global.g_idx_index a',"where indexid similar to '%%(WORLD|ALL)%%' and indexval like '%%ALL%%'"],
-                            'Australia and New Zealand' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Australia|New Zealand)%%'","and indexgeo similar to  '%%(AUS|NZL)%%'", "and indextype = 'REGIONAL'"],
-                            'Caribbean': ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype = 'REGIONAL'"],
-                            'Central America': ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype = 'REGIONAL'"],
-                            'Central Asia' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Asia)%%'"],
-                            'Channel Islands': ['from comp_global.g_idx_index a',"where conm similar to '%%(Europe)%%'","and conm not similar to '%%(Emerging|Eastern|Ex |Excluding|Pacific|Australasia)%%'","and indextype = 'REGIONAL'"],
-                            'Eastern Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
-                            'Eastern Asia' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Asia)%%'", "and not conm similar to '%%(Southeast)%%'", "and indextype = 'REGIONAL'","and indexid not in ('ISLAMIC')"],
-                            'Eastern Europe': ['from comp_global.g_idx_index a',"where conm similar to '%%(Eastern Europe)%%'","and indexid not in ('ISLAMIC')"],
-                            'Melanesia': ['from comp_global.g_idx_index a', "where conm similar to '%%(sia)%%'", "and  conm not similar to '%%(Europe|Southeast)%%'","and indexid not in ('ISLAMIC')" ],
-                            'Middle Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
-                            'Northern Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
-                            'Northern America' : ['from comp_global.g_idx_index a',"where conm similar to '%%(North America)%%'","and conm not similar to '%%(Europe|Southeast)%%'","and indexid not in ('ISLAMIC')"],
-                            'Northern Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe)%%'","and conm not similar to '%%(Emerging|Eastern|Austral|Pacific|Excluding UK|Ex UK|Ex Eurozone)%%'","and indexid not in ('ISLAMIC')"],
-                            'South America' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype = 'REGIONAL'"],
-                            'South-eastern Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Southeast|Asia)%%'","and conm not similar to '%%(India Pakistan)%%'","and indexgeo = 'APA' and indexid in ('WORLD', 'ALL')"],
-                            'Southern Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Southeast|Asia)%%'","and conm not similar to '%%(India Pakistan)%%'","and indexgeo = 'APA' and indexid in ('WORLD', 'ALL')"],
-                            'Southern Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe |Ex UK| Excluding UK)%%'","and conm not similar to '%%(Eastern Europe|Austra|Pacific|Including UK)%%'","and indextype = 'REGIONAL'","and indexid not in ('ISLAMIC')"],
-                            'Western Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
-                            'Western Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Middle East)%%'"],
-                            'Western Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe)%%'","and conm not similar to '%%(Eastern Europe|Pacific|East|Excluding UK|Ex UK|Ex Eurozone|Emerging)%%'","and indextype = 'REGIONAL'","and indexid not in ('ISLAMIC')"]
-                            }, RunWrdsAPI = True, wrds_username = 'fr497', password = 'Fr056301'):
-    qry_results = pd.DataFrame()
-    if RunWrdsAPI:
-        print("Initialize WRDS connection")
-        import wrds
-        db = wrds.Connection(wrds_username= wrds_username, password= password)
-        #glb_wrds_indices = pd.DataFrame()
-        print("Running WRDS API Query and retrieving data into Object")
-        wrds_query_df = pd.DataFrame()
-        print("Running Queries from Dictionary")
-        for k,v in region_idx_gvkeyx_dict.items():
-            print(k)
-            query_tmp = "select '"+ k +"' as RegionCode, * " + " ".join(v)
-            wrds_query_df = db.raw_sql(query_tmp)
-            print(wrds_query_df.shape)
-            print("Appending to Data Frame")
-            qry_results = pd.concat([qry_results,wrds_query_df], ignore_index=True)
-        print("Returning Dataframe")
-        return(qry_results)
-
-
-idx_regions_mappings = get_regions_idx()
-
-
-#Get Relevant Indices and Prices
-#Country Level
-world_idx_names = get_CountryIndices(events_cleaned,RunWrdsAPI = True)
-
-#Get index prices monthly and daily.
-#Daily
-world_idx_prices = get_idx_prices(world_idx_names,events_cleaned)
-
-
-#Maintain list.
-
-
-
-#Sector Level
-#May add another rule set to get the indice names to get_CountryIndices
-#Use WRDS world Indicies Consituents.
-
-
-
-
-
-
-#Participant Level
-#Will need to make a list of banks in US, Euro, and Asia that are relevant and get their market data.
-
-
-
 
 #Get country regions
 def get_country_regions(events_cleaned = None, regionurl = 'https://unstats.un.org/unsd/methodology/m49/', table_element = {'id': 'GeoGroupsENG'},
@@ -1236,6 +1082,186 @@ def get_country_regions(events_cleaned = None, regionurl = 'https://unstats.un.o
     else:
         events_cleaned_df_tmp = region_events_taged
     return(events_cleaned_df_tmp)
+
+
+
+region_idx_gvkeyx_dict= {   'World': ['from comp_global.g_idx_index a',"where indexid similar to '%%(WORLD|ALL)%%' and indexval like '%%ALL%%'"],
+                            'Australia and New Zealand' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Australia|New Zealand)%%'","and indexgeo similar to  '%%(AUS|NZL)%%'", "and indextype = 'REGIONAL'"],
+                            'Caribbean': ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype = 'REGIONAL'"],
+                            'Central America': ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype = 'REGIONAL'"],
+                            'Central Asia' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Asia)%%'"],
+                            'Channel Islands': ['from comp_global.g_idx_index a',"where conm similar to '%%(Europe)%%'","and conm not similar to '%%(Emerging|Eastern|Ex |Excluding|Pacific|Australasia)%%'","and indextype = 'REGIONAL'"],
+                            'Eastern Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
+                            'Eastern Asia' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Asia)%%'", "and not conm similar to '%%(Southeast)%%'", "and indextype = 'REGIONAL'","and indexid not in ('ISLAMIC')"],
+                            'Eastern Europe': ['from comp_global.g_idx_index a',"where conm similar to '%%(Eastern Europe)%%'","and indexid not in ('ISLAMIC')"],
+                            'Melanesia': ['from comp_global.g_idx_index a', "where conm similar to '%%(sia)%%'", "and  conm not similar to '%%(Europe|Southeast)%%'","and indexid not in ('ISLAMIC')" ],
+                            'Middle Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
+                            'Northern Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
+                            'Northern America' : ['from comp_global.g_idx_index a',"where conm similar to '%%(North America)%%'","and conm not similar to '%%(Europe|Southeast)%%'","and indexid not in ('ISLAMIC')"],
+                            'Northern Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe)%%'","and conm not similar to '%%(Emerging|Eastern|Austral|Pacific|Excluding UK|Ex UK|Ex Eurozone)%%'","and indexid not in ('ISLAMIC')"],
+                            'South America' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype = 'REGIONAL'"],
+                            'South-eastern Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Southeast|Asia)%%'","and conm not similar to '%%(India Pakistan)%%'","and indexgeo = 'APA' and indexid in ('WORLD', 'ALL')"],
+                            'Southern Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Southeast|Asia)%%'","and conm not similar to '%%(India Pakistan)%%'","and indexgeo = 'APA' and indexid in ('WORLD', 'ALL')"],
+                            'Southern Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe |Ex UK| Excluding UK)%%'","and conm not similar to '%%(Eastern Europe|Austra|Pacific|Including UK)%%'","and indextype = 'REGIONAL'","and indexid not in ('ISLAMIC')"],
+                            'Western Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype = 'REGIONAL'"],
+                            'Western Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Middle East)%%'"],
+                            'Western Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe)%%'","and conm not similar to '%%(Eastern Europe|Pacific|East|Excluding UK|Ex UK|Ex Eurozone|Emerging)%%'","and indextype = 'REGIONAL'","and indexid not in ('ISLAMIC')"]
+                            }
+
+def get_regions_idx(region_idx_gvkeyx_dict= {   'World': ['from comp_global.g_idx_index a',"where indexid similar to '%%(WORLD|ALL)%%' and indexval like '%%ALL%%'"],
+                            'Australia and New Zealand' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Australia|New Zealand)%%'","and indexgeo similar to  '%%(AUS|NZL)%%'", "and indextype in ('REGIONAL','REGSEC')"],
+                            'Caribbean': ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype in ('REGIONAL','REGSEC')"],
+                            'Central America': ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype in ('REGIONAL','REGSEC')"],
+                            'Central Asia' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Asia)%%'"],
+                            'Channel Islands': ['from comp_global.g_idx_index a',"where conm similar to '%%(Europe)%%'","and conm not similar to '%%(Emerging|Eastern|Ex |Excluding|Pacific|Australasia)%%'","and indextype in ('REGIONAL','REGSEC')"],
+                            'Eastern Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype in ('REGIONAL','REGSEC')"],
+                            'Eastern Asia' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Asia)%%'", "and not conm similar to '%%(Southeast)%%'", "and indextype in ('REGIONAL','REGSEC')","and indexid not in ('ISLAMIC')"],
+                            'Eastern Europe': ['from comp_global.g_idx_index a',"where conm similar to '%%(Eastern Europe)%%'","and indexid not in ('ISLAMIC')"],
+                            'Melanesia': ['from comp_global.g_idx_index a', "where conm similar to '%%(sia)%%'", "and  conm not similar to '%%(Europe|Southeast)%%'","and indexid not in ('ISLAMIC')"],
+                            'Middle Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype in ('REGIONAL','REGSEC')"],
+                            'Northern Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype in ('REGIONAL','REGSEC')"],
+                            'Northern America' : ['from comp_global.g_idx_index a',"where conm similar to '%%(North America)%%'","and conm not similar to '%%(Europe|Southeast)%%'","and indexid not in ('ISLAMIC')"],
+                            'Northern Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe)%%'","and conm not similar to '%%(Emerging|Eastern|Austral|Pacific|Excluding UK|Ex UK|Ex Eurozone)%%'","and indexid not in ('ISLAMIC')"],
+                            'South America' : ['from comp_global.g_idx_index a',"where conm similar to '%%(Latin America)%%'","and indextype in ('REGIONAL','REGSEC')"],
+                            'South-eastern Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Southeast|Asia)%%'","and conm not similar to '%%(India Pakistan)%%'","and indexgeo = 'APA' and indexid in ('WORLD', 'ALL')"],
+                            'Southern Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Southeast|Asia)%%'","and conm not similar to '%%(India Pakistan)%%'","and indexgeo = 'APA' and indexid in ('WORLD', 'ALL')"],
+                            'Southern Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe |Ex UK| Excluding UK)%%'","and conm not similar to '%%(Eastern Europe|Austra|Pacific|Including UK)%%'","and indextype in ('REGIONAL','REGSEC')","and indexid not in ('ISLAMIC')"],
+                            'Western Africa' : ['from comp_global.g_idx_index a', "where conm similar to '%%(Africa)%%'","and indextype in ('REGIONAL','REGSEC')"],
+                            'Western Asia' : ['from comp_global.g_idx_index a', "where  conm similar to '%%(Middle East)%%'"],
+                            'Western Europe' : ['from comp_global.g_idx_index a',"where  conm similar to '%%(Europe)%%'","and conm not similar to '%%(Eastern Europe|Pacific|East|Excluding UK|Ex UK|Ex Eurozone|Emerging)%%'","and indextype in ('REGIONAL','REGSEC')","and indexid not in ('ISLAMIC')"]
+                            }, RunWrdsAPI = True, wrds_username = 'fr497', password = 'Fr056301'):
+    qry_results = pd.DataFrame()
+    if RunWrdsAPI:
+        print("Initialize WRDS connection")
+        import wrds
+        db = wrds.Connection(wrds_username= wrds_username, password= password)
+        #glb_wrds_indices = pd.DataFrame()
+        print("Running WRDS API Query and retrieving data into Object")
+        wrds_query_df = pd.DataFrame()
+        print("Running Queries from Dictionary")
+        for k,v in region_idx_gvkeyx_dict.items():
+            print(k)
+            query_tmp = "select '"+ k +"' as RegionCode, * " + " ".join(v)
+            wrds_query_df = db.raw_sql(query_tmp)
+            print(wrds_query_df.shape)
+            print("Appending to Data Frame")
+            qry_results = pd.concat([qry_results,wrds_query_df], ignore_index=True)
+        print("Returning Dataframe")
+        return(qry_results)
+
+
+
+
+
+
+def get_sector_idx( sector_idx_dict = { 'comp_global.g_idx_index':"where indexval in ('BANK','FINANCEOTH','FINANCIAL','FINSRV','FINSVCS','GENFIN','INVEST','MFINSVCS','PORTFOLIO','PRIME','SPECFIN','OTRFIN')"
+                    ,'comp_na_daily_all.idx_index': "where conm similar to '%%(Financial|Financl|Banks|Diversfd Financial|Financials|FINAL EXCH & DATA|Specializd Finc|Asst Mgmt&Cus Bk|nvt Bkg & Brkg|Captl Mkts|Finance|FINANCIALS)%%'"
+                    } ,RunWrdsAPI = True, events_cleaned_df = None , wrds_username='fr497',password = 'Fr056301' ):
+    qry_results = pd.DataFrame()
+    if RunWrdsAPI:
+        print("Initialize WRDS connection")
+        import wrds
+        db = wrds.Connection(wrds_username=wrds_username, password=password)
+        # glb_wrds_indices = pd.DataFrame()
+        print("Running WRDS API Query and retrieving data into Object")
+        wrds_query_df = pd.DataFrame()
+        print("Running Queries from Dictionary")
+        for k, v in sector_idx_dict.items():
+            print(k)
+            query_tmp = "select *, '" + k + "' as source from " + k + " " + v
+            wrds_query_df = db.raw_sql(query_tmp)
+            print(wrds_query_df.shape)
+            print("Appending to Data Frame")
+            qry_results = pd.concat([qry_results, wrds_query_df], ignore_index=True)
+
+        if events_cleaned_df is not None:
+            tmp1 = set(qry_results.indexgeo.unique())
+            tmp2 = set(events_cleaned_df_regions.ISO3.unique())
+            print("Sector Indices collected match the following Country Codes:", tmp1.intersection(tmp2).__len__())
+            print(tmp1.intersection(tmp2))
+        else:
+            print(qry_results.indexgeo.unique())
+        return(qry_results)
+
+
+#Workspace
+
+
+test = set(sector_idx_names.indexgeo.unique())
+test2 = set(events_cleaned_df_regions.ISO3.unique())
+
+test.intersection(test2).__len__()
+
+
+# Webs ETF Index incorporate Webs Index
+# Fd 17 Countries for Equirty Benchmark
+# iShares
+
+
+
+
+
+#Insertition Point
+#TODO: Review all methods and put into a Class Libary so a DataFrame can be called from the object.
+
+
+#events = []
+#Run WebScrapers
+
+#Get Events from websites
+    #events = getevents_data()
+    #Export the raw event file
+    #events.to_csv("events.csv",sep = ",")
+
+#Get UN Country Codes.
+#From UN Website
+    #event_CountryCodes = get_CountryCodes()
+    #event_CountryCodes.to_csv("event_CountryCodes.csv",sep = ",")
+
+
+
+
+
+#Import events file
+events = pd.read_csv("events.csv")
+event_CountryCodes = pd.read_csv("event_CountryCodes.csv")
+events_cleaned = events_normalize_annctype(events)
+events_cleaned = DeAgg_Events_Union(events_cleaned = events_cleaned, CombineFrame = True)
+events_cleaned = normalize_events_CountryCodes_UN(events_cleaned,event_CountryCodes)
+
+#Get World Regions and attach to the events.
+events_cleaned_df_regions = get_country_regions(events_cleaned)
+
+
+#Use a Wrapper function to combine all the indices tagged with the appropriate types. Region/Country/Sector
+#Get Region Indicies
+
+idx_regions_mappings = get_regions_idx()
+
+#Country Level
+world_idx_names = get_CountryIndices(events_cleaned,RunWrdsAPI = True)
+
+
+#Get Country/Region Sectors.
+sector_idx_names = get_sector_idx(events_cleaned_df = events_cleaned_df_regions)
+
+#Get index prices monthly and daily.
+#Daily
+world_idx_prices = get_idx_prices(world_idx_names,events_cleaned)
+
+
+
+
+
+
+
+
+
+#Participant Level
+#Will need to make a list of banks in US, Euro, and Asia that are relevant and get their market data.
+
+
+
 
 
 
