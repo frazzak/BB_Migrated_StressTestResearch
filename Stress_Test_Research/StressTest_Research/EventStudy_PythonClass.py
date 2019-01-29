@@ -480,7 +480,7 @@ def getevents_data(eventscolumnlist = ['title','date','country','category','sour
     return(events_combined)
 
 
-#TODO: Can improve this function using Python Dictionary to tag based on source, announcement type, title, keywords
+#Improve by using python dict
 def events_normalize_annctype(events = None, source = ["eba","fsb","imf","frb"]):
 
     print("Check for Column annctype")
@@ -1319,38 +1319,168 @@ def get_idx_prices(world_idx_names, events_cleaned, RunWrdsAPI=True, region=True
 
 
 #Import events file
-events = pd.read_csv("events.csv")
-event_CountryCodes = pd.read_csv("event_CountryCodes.csv")
-events_cleaned = events_normalize_annctype(events)
-events_cleaned = DeAgg_Events_Union(events_cleaned = events_cleaned, CombineFrame = True)
-events_cleaned = normalize_events_CountryCodes_UN(events_cleaned,event_CountryCodes)
+#events = pd.read_csv("events.csv")
+#event_CountryCodes = pd.read_csv("event_CountryCodes.csv")
+#events_cleaned = events_normalize_annctype(events)
+#events_cleaned = DeAgg_Events_Union(events_cleaned = events_cleaned, CombineFrame = True)
+#events_cleaned = normalize_events_CountryCodes_UN(events_cleaned,event_CountryCodes)
 
 #Get World Regions and attach to the events.
-events_cleaned_df_regions = get_country_regions(events_cleaned)
+#events_cleaned_df_regions = get_country_regions(events_cleaned)
+#events_cleaned_df_regions.to_csv("events_regions_df.csv", sep = ",")
 
+events_cleaned_df_regions = pd.read_csv("events_regions_df.csv")
 
 #Get all the indices names
-event_index_names_df = get_idx_names(events_cleaned_df_regions)
+#event_index_names_df = get_idx_names(events_cleaned_df_regions)
+#event_index_names_df.to_csv("event_index_names_df.csv", sep = ",")
+event_index_names_df = pd.read_csv("event_index_names_df.csv")
 
 
 #Get index prices monthly and daily.
 #Daily
-event_idx_prices = get_idx_prices(event_index_names_df,events_cleaned_df_regions)
+#event_idx_prices = get_idx_prices(event_index_names_df,events_cleaned_df_regions)
+#event_idx_prices.to_csv("regional_country_sector_idx_prices.csv", sep = ",")
+event_idx_prices = pd.read_csv("regional_country_sector_idx_prices.csv")
 
-
-
-event_idx_prices.shape
-
-event_idx_prices.gvkeyx.unique().__len__()
 
 
 #Event Study
 
+#event_index_names_df['gvkeyx'][event_index_names_df['qrycat'] == "RegionLevel"].unique()
+
+
+
+
 #Region
 
-#Country
+#get region index gvkeyx
+#region_gvkeyx_tmp = event_index_names_df['gvkeyx'][event_index_names_df['qrycat'] == "RegionLevel"].unique()
 
-#Sector
+#get region index prices only
+#region_idx_prices = event_idx_prices[event_idx_prices['gvkeyx'].isin(region_gvkeyx_tmp)]
+#Apply region code to each index price
+#region_idx_prices = region_idx_prices.merge(event_index_names_df[['gvkeyx','regioncode']][event_index_names_df['qrycat'] == "RegionLevel"], left_on = 'gvkeyx', right_on = 'gvkeyx', how = 'left')
+
+
+
+
+
+#Using Eventstudy tools API structure.
+
+
+#Generate EventIDs
+
+events_cleaned_df_regions["Event ID"] = events_cleaned_df_regions.index
+
+
+#Request File, Firm Data and Market Data needed.
+#Seperator is semi-colon
+
+#Region level
+#Request File
+#Event IDs, Firm ID, Market ID, Event Date, Grouping Variable, start event window, end event window, end esitmation window, estimation window length
+#Do for USA only first.
+
+Request_File_CountryRegion = pd.DataFrame()
+
+
+#Announcement events Country Level, per country (USA)
+Anncouncement_df = events_cleaned_df_regions[(events_cleaned_df_regions['annctype'] == "Announcement") & (events_cleaned_df_regions['ISO3'] == "USA")]
+
+Request_File_CountryRegion["Event ID"] = Anncouncement_df["Event ID"]
+Request_File_CountryRegion["Firm ID"] = Anncouncement_df["country"]
+
+#Need to be more dynamic
+Request_File_CountryRegion["Market ID"] = list(event_index_names_df["tic"][(event_index_names_df["regioncode"] == "Northern America")])[0]
+Request_File_CountryRegion["Market gvkeyx"] = list(event_index_names_df["gvkeyx"][(event_index_names_df["regioncode"] == "Northern America")])[0]
+
+Request_File_CountryRegion["Event Date"] = pd.to_datetime(Anncouncement_df["date"]).dt.date
+Request_File_CountryRegion["Grouping Variable"] = "Announcement"
+Request_File_CountryRegion["Start Event Window"] = -3
+Request_File_CountryRegion["End Event Window"] = 3
+Request_File_CountryRegion["End of Estimation Window"] = -11
+Request_File_CountryRegion["Estimation Window Length"] = 120
+
+
+
+
+#Firm Data
+
+#Get all USA indexgeo from non Regional Level or Sector level
+
+idx_name_df_US = event_index_names_df[(event_index_names_df["indexgeo"] == "USA") & (~event_index_names_df["qrycat"].isin(["RegionLevel","SectorLevel"]))]
+
+#Prices available for indices
+matched_idx_tmp = event_idx_prices["gvkeyx"][event_idx_prices["gvkeyx"].isin(idx_name_df_US["gvkeyx"].unique())].unique()
+matched_idx_tmp = list(matched_idx_tmp)
+
+idx_name_df_US = idx_name_df_US[idx_name_df_US['gvkeyx'].astype(int).isin(matched_idx_tmp)]
+
+
+
+#Set Firm ID to index
+
+Request_File_CountryRegion["Firm ID"] = idx_name_df_US['tic'].iloc[0]
+Request_File_CountryRegion["Firm gvkeyx"] = idx_name_df_US['gvkeyx'].iloc[0]
+
+
+#Firm Data
+FirmData_CountryRegion = event_idx_prices[["gvkeyx","prccd","datadate"]][event_idx_prices["gvkeyx"].isin(Request_File_CountryRegion["Firm gvkeyx"].unique())]
+idx_name_df_US["gvkeyx"] = idx_name_df_US["gvkeyx"].astype(int)
+FirmData_CountryRegion = FirmData_CountryRegion.merge(idx_name_df_US[["conm","gvkeyx","tic"]], left_on = "gvkeyx", right_on = "gvkeyx" )
+FirmData_CountryRegion["Firm identifier"] = FirmData_CountryRegion["tic"]
+
+FirmData_CountryRegion = FirmData_CountryRegion[["Firm identifier", "datadate","prccd"]]
+FirmData_CountryRegion.columns = ["Firm identifier", "Date","Closing price"]
+
+
+
+
+#Market Data
+
+#Request_File_CountryRegion = Request_File_CountryRegion.merge(event_index_names_df[["conm", "gvkeyx","tic"]], left_on = "Market ID", right_on = "tic")
+#Request_File_CountryRegion = Request_File_CountryRegion.rename({"gvkeyx":'Market gvkeyx'}, axis = 'columns')
+#Request_File_CountryRegion = Request_File_CountryRegion.drop(["conm"], axis = 1)
+
+MarketData_CountryRegion = event_idx_prices[["gvkeyx","prccd","datadate"]][event_idx_prices["gvkeyx"].isin(Request_File_CountryRegion["Market gvkeyx"].unique())]
+MarketData_CountryRegion = MarketData_CountryRegion.merge(event_index_names_df[["conm","gvkeyx","tic"]], left_on = "gvkeyx", right_on = "gvkeyx")
+MarketData_CountryRegion = MarketData_CountryRegion.drop(["conm","gvkeyx"], axis = 1)
+MarketData_CountryRegion = MarketData_CountryRegion.rename({"tic":"Market identifier", 'datadate':'Date','prccd':'Closing price'}, axis = 'columns')
+MarketData_CountryRegion = MarketData_CountryRegion[["Market identifier","Date","Closing price"]]
+
+
+
+# Final Objects
+Request_File_CountryRegion = Request_File_CountryRegion[["Event ID","Firm ID","Market ID","Event Date","Grouping Variable","Start Event Window","End Event Window","End of Estimation Window","Estimation Window Length"]]
+
+
+
+Request_File_CountryRegion["Event ID"] = Request_File_CountryRegion["Event ID"].astype(int)
+#Date Conversion to Excel Format
+
+Request_File_CountryRegion = Request_File_CountryRegion.drop_duplicates(subset = ["Event ID", "Event Date"])
+Request_File_CountryRegion = Request_File_CountryRegion.sort_values(["Event Date", "Firm ID"]).reset_index(drop = True)
+Request_File_CountryRegion["Event Date"] = pd.to_datetime(pd.to_datetime(Request_File_CountryRegion["Event Date"]).dt.date).dt.strftime("%d.%m.%Y")
+
+
+FirmData_CountryRegion = FirmData_CountryRegion.drop_duplicates()
+FirmData_CountryRegion = FirmData_CountryRegion.sort_values(["Date", "Firm identifier"]).reset_index(drop = True)
+FirmData_CountryRegion["Date"] = pd.to_datetime(pd.to_datetime(FirmData_CountryRegion["Date"]).dt.date).dt.strftime("%d.%m.%Y")
+
+
+MarketData_CountryRegion = MarketData_CountryRegion.drop_duplicates()
+MarketData_CountryRegion = MarketData_CountryRegion.sort_values(["Date", "Market identifier"]).reset_index(drop = True)
+MarketData_CountryRegion["Date"] = pd.to_datetime(pd.to_datetime(MarketData_CountryRegion["Date"]).dt.date).dt.strftime("%d.%m.%Y")
+
+
+
+
+
+Request_File_CountryRegion.to_csv("01_RequestFile_test.csv", sep = ';', header = False, index = False, line_terminator = "\n")
+FirmData_CountryRegion.to_csv("02_FirmData_test.csv", sep = ';', header = False, index = False, line_terminator = "\n")
+MarketData_CountryRegion.to_csv("03_MarketData_test.csv", sep = ';', header = False, index = False, line_terminator = "\n")
+
 
 
 
