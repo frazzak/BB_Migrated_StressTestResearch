@@ -1347,6 +1347,84 @@ event_idx_prices = pd.read_csv("regional_country_sector_idx_prices.csv")
 
 #Event Study
 
+
+
+
+
+
+#Filter event_index _names to those that exist in event_idx_prices
+
+
+event_index_names_inprices_df = event_index_names_df[(event_index_names_df["gvkeyx"].isin(event_idx_prices["gvkeyx"].astype(int).unique())) & (event_index_names_df["indexid"] != "ISLAMIC")]
+
+
+
+
+#Generate Request File Regional Events  Map to World Indices
+
+def EST_Event_Generator(events_cleaned_df_regions,event_index_names_inprices_df):
+    events_cleaned_df_regions["Event ID"]  = events_cleaned_df_regions.index
+
+    print("Merging to get Regional Market Indices")
+    Request_File = events_cleaned_df_regions[["Event ID","date","annctype","category","ISO3","country","country/region_y","source"]].merge(event_index_names_inprices_df[["conm", "tic","regioncode", "gvkeyx"]][event_index_names_inprices_df['qrycat'] == "RegionLevel"], left_on = "country/region_y", right_on = "regioncode" , how = "left")
+    print("Dropping Columns")
+    Request_File = Request_File.drop(["country/region_y"], axis=1)
+    print("Renaming Columns")
+    Request_File = Request_File.rename({"conm": "regional_idx", "tic": "regional_idx_tic", "gvkeyx": "regional_idx_gvkeyx"}, axis=1)
+    print(Request_File.shape)
+
+
+    print("Merging to get Global Market Indices")
+    Request_File["Global_match"] = "World"
+    Request_File = Request_File.merge(event_index_names_inprices_df[["conm", "tic", "regioncode", "gvkeyx"]][event_index_names_inprices_df['qrycat'] == "RegionLevel"],left_on="Global_match", right_on="regioncode", how="left")
+    print("Dropping Columns")
+    Request_File = Request_File.drop(["Global_match", "regioncode_y"], axis=1)
+    print("Renaming Columns")
+    Request_File = Request_File.rename({"conm": "global_idx", "tic": "global_idx_tic", "gvkeyx": "global_idx_gvkeyx"},axis=1)
+    print(Request_File.shape)
+
+    print("Merging Country Level Indicies")
+    Request_File = Request_File.merge(event_index_names_inprices_df[["conm", "tic", "indexgeo", "gvkeyx"]][~event_index_names_inprices_df["qrycat"].isin(["SectorLevel", "RegionLevel"])], left_on="ISO3", right_on="indexgeo",how="left")
+    print("Dropping Columns")
+    Request_File = Request_File.drop(["indexgeo"], axis=1)
+    print("Renaming Columns")
+    Request_File = Request_File.rename({"conm": "country_idx", "tic": "country_idx_tic", "gvkeyx": "country_idx_gvkeyx"}, axis=1)
+    print(Request_File.shape)
+
+    print("Merging Sector Level Indicies")
+    Request_File = Request_File.merge(event_index_names_inprices_df[["conm", "tic", "indexgeo", "gvkeyx"]][event_index_names_inprices_df["qrycat"].isin(["SectorLevel"])],left_on="ISO3", right_on="indexgeo", how="left")
+    print("Dropping Columns")
+    Request_File = Request_File.drop(["indexgeo"], axis=1)
+    print("Renaming Columns")
+    Request_File = Request_File.rename({"conm": "sector_idx", "tic": "sector_idx_tic", "gvkeyx": "sector_idx_gvkeyx"},axis=1)
+
+
+    print(Request_File.shape)
+    return(Request_File)
+
+
+#instead of loops, maybe merges are more appropirate.
+
+test = EST_Event_Generator(events_cleaned_df_regions,event_index_names_inprices_df)
+
+test[pd.notnull(test["sector_idx"])].shape
+
+#Attach regional indexes
+#Reshape to fit the request file format
+
+#Generate Firm Data File
+
+#Generate Market Data File
+
+
+
+
+
+
+
+
+
+
 #event_index_names_df['gvkeyx'][event_index_names_df['qrycat'] == "RegionLevel"].unique()
 
 
@@ -1476,7 +1554,7 @@ MarketData_CountryRegion["Date"] = pd.to_datetime(pd.to_datetime(MarketData_Coun
 
 
 
-
+#Output the files or objects.
 Request_File_CountryRegion.to_csv("01_RequestFile_test.csv", sep = ';', header = False, index = False, line_terminator = "\n")
 FirmData_CountryRegion.to_csv("02_FirmData_test.csv", sep = ';', header = False, index = False, line_terminator = "\n")
 MarketData_CountryRegion.to_csv("03_MarketData_test.csv", sep = ';', header = False, index = False, line_terminator = "\n")
