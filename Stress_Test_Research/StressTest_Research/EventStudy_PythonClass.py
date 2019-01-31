@@ -55,7 +55,8 @@
 import os
 os.environ['R_HOME'] = '/anaconda3/lib/R'
 
-
+import gc
+gc.enable()
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
 import pandas as pd
@@ -1353,8 +1354,6 @@ event_idx_prices = pd.read_csv("regional_country_sector_idx_prices.csv")
 
 
 #Filter event_index _names to those that exist in event_idx_prices
-
-
 event_index_names_inprices_df = event_index_names_df[(event_index_names_df["gvkeyx"].isin(event_idx_prices["gvkeyx"].astype(int).unique())) & (event_index_names_df["indexid"] != "ISLAMIC")]
 
 
@@ -1405,11 +1404,70 @@ def EST_Event_Generator(events_cleaned_df_regions,event_index_names_inprices_df)
 
 #instead of loops, maybe merges are more appropirate.
 
-test = EST_Event_Generator(events_cleaned_df_regions,event_index_names_inprices_df)
+#EST_Events_Raw = EST_Event_Generator(events_cleaned_df_regions,event_index_names_inprices_df)
 
-test[pd.notnull(test["sector_idx"])].shape
+#EST_Events_Raw.to_csv("EST_Events_Raw.csv", sep = ",")
 
-#Attach regional indexes
+EST_Events_Raw = pd.read_csv("EST_Events_Raw.csv")
+
+#Correct Data Structures
+
+
+
+#Make Function that can subset properly by iterating over object until all conditions are applied
+
+def Event_Obj_Subsetter(EST_Events_Raw, cols = ["source","annctype","regioncode_x","global_idx_tic","regional_idx_tic","ISO3","country_idx_tic","sector_idx_tic"] ):
+    final_df = pd.DataFrame()
+
+    print("Convert NANs to String nan")
+    EST_Events_Raw = EST_Events_Raw.replace(np.nan, "nan", regex=True)
+
+    if "Unnamed: 0" in  EST_Events_Raw.columns:
+        print("Drop Index Column")
+        EST_Events_Raw = EST_Events_Raw.drop("Unnamed: 0", axis = 1)
+
+    print("Getting Unique Value combinations for each Column")
+    cols_vals_df = EST_Events_Raw[cols].drop_duplicates()
+
+
+
+    print("Iterate to apply all matching criteria for each")
+    for row_num_idx in range(cols_vals_df.shape[0]):
+        tmp_df_obj = pd.DataFrame()
+        tmp_df_match = EST_Events_Raw
+        print(list(cols_vals_df.iloc[row_num_idx,]))
+        for colname_idx in range(cols_vals_df.shape[1]):
+            tmp_colname = cols_vals_df.columns[colname_idx]
+            tmp_match = cols_vals_df.iloc[row_num_idx,colname_idx]
+            #print(tmp_colname,tmp_match)
+            print("Iterating Through Matching Rules to Subset Tmp Object")
+            tmp_df_match = tmp_df_match[tmp_df_match[tmp_colname].str.endswith(tmp_match)]
+
+        print("Applying GroupingVar:", "_".join(list(cols_vals_df.iloc[row_num_idx],)))
+        tmp_df_match["GroupingVar"] = "_".join(list(cols_vals_df.iloc[row_num_idx],))
+
+
+        if tmp_df_match.shape[0] > 0 :
+            print("Appending Subsetted DataFame to Final Frame")
+            print(tmp_df_match.shape)
+            final_df = pd.concat([final_df,tmp_df_match])
+        print("Garbage Collection")
+        gc.collect()
+     return(final_df)
+
+
+
+test = Event_Obj_Subsetter(EST_Events_Raw)
+
+EST_Events_Raw.columns
+
+
+test.shape
+
+
+
+
+
 #Reshape to fit the request file format
 
 #Generate Firm Data File
@@ -1418,6 +1476,7 @@ test[pd.notnull(test["sector_idx"])].shape
 
 
 
+#Create Function to feed into API
 
 
 
