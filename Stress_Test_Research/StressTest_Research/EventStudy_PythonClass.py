@@ -1353,9 +1353,6 @@ event_idx_prices = pd.read_csv("regional_country_sector_idx_prices.csv")
 
 
 
-#Filter event_index _names to those that exist in event_idx_prices
-event_index_names_inprices_df = event_index_names_df[(event_index_names_df["gvkeyx"].isin(event_idx_prices["gvkeyx"].astype(int).unique())) & (event_index_names_df["indexid"] != "ISLAMIC")]
-
 
 
 
@@ -1456,13 +1453,91 @@ def Event_Obj_Subsetter(EST_Events_Raw, cols = ["source","annctype","regioncode_
      return(final_df)
 
 
-
-test = Event_Obj_Subsetter(EST_Events_Raw)
-
 EST_Events_Raw.columns
 
+if "Unnamed: 0" in EST_Events_Raw.columns:
+    print("Drop Index Column")
+    EST_Events_Raw = EST_Events_Raw.drop("Unnamed: 0", axis=1)
 
-test.shape
+
+EST_Events_Raw = EST_Events_Raw.sort_values(["source","annctype","regioncode_x","global_idx_tic","regional_idx_tic","ISO3","country_idx_tic","sector_idx_tic"])
+
+
+#Region to Global
+
+EST_Region_to_Global = EST_Events_Raw.sort_values(["annctype", "regioncode_x","global_idx","regional_idx"]).drop_duplicates(subset = ["Event ID", "annctype", "regioncode_x","global_idx","regional_idx"])
+
+EST_Region_to_Global.shape
+
+print("Convert NANs to String nan")
+EST_Region_to_Global = EST_Region_to_Global.replace(np.nan, "nan", regex=True)
+
+GroupingVar = EST_Events_Raw['annctype'] + '_' + EST_Events_Raw['global_idx'] + "_" + EST_Events_Raw['regioncode_x'] + "_" + EST_Events_Raw['regional_idx']
+EST_Region_to_Global["GroupingVar"] = GroupingVar
+
+#Filter to USA and EUR
+
+EUR_USA_test = EST_Region_to_Global[EST_Region_to_Global["ISO3"].isin(["USA","EUR"])]
+
+
+
+
+
+#Estimation_Params
+EUR_USA_test["Start Event Window"] = -10
+EUR_USA_test["End Event Window"] = 5
+EUR_USA_test["End of Estimation Window"] = -11
+EUR_USA_test["Estimation Window Length"] = 120
+
+#Event IDs, Firm ID, Market ID, Event Date, Grouping Variable,
+
+
+
+
+#Filter event_index _names to those that exist in event_idx_prices
+event_index_names_inprices_df = event_index_names_df[(event_index_names_df["gvkeyx"].isin(event_idx_prices["gvkeyx"].astype(int).unique())) & (event_index_names_df["indexid"] != "ISLAMIC")]
+event_idx_prices_in_idx = event_idx_prices.merge(event_index_names_inprices_df, on = "gvkeyx", how = 'left')
+
+#Filter out events list to those that are in the idx prices.
+
+
+
+#Request File
+
+RequestFile_headers = ["Event ID","regional_idx","global_idx","date","GroupingVar","Start Event Window","End Event Window","End of Estimation Window","Estimation Window Length"]
+RequestFile_Raw = EUR_USA_test[RequestFile_headers].sort_values(["date","Event ID", "regional_idx","global_idx"]).drop_duplicates(subset = ["Event ID"]).reset_index(drop = True)
+RequestFile_Raw['date'] = pd.to_datetime(pd.to_datetime(RequestFile_Raw['date'] ).dt.date).dt.strftime("%d.%m.%Y")
+
+
+#Firm File
+FirmData_Raw = event_idx_prices_in_idx[["conm","datadate","prccd"]][event_idx_prices_in_idx["conm"].isin(RequestFile_Raw["regional_idx"].unique())].sort_values(["datadate", "conm"]).drop_duplicates().reset_index(drop = True)
+FirmData_Raw['datadate'] = pd.to_datetime(pd.to_datetime(FirmData_Raw['datadate']).dt.date).dt.strftime("%d.%m.%Y")
+
+#Market Data
+MarketData_Raw = event_idx_prices_in_idx[["conm","datadate","prccd"]][event_idx_prices_in_idx["conm"].isin(RequestFile_Raw["global_idx"].unique())].sort_values(["datadate", "conm"]).drop_duplicates().reset_index(drop = True)
+MarketData_Raw['datadate'] = pd.to_datetime(pd.to_datetime(MarketData_Raw['datadate']).dt.date).dt.strftime("%d.%m.%Y")
+
+
+#Output the files or objects.
+RequestFile_Raw.to_csv("01_RequestFile_test.csv", sep = ';', header = False, index = False, line_terminator = "\n")
+FirmData_Raw.to_csv("02_FirmData_test.csv", sep = ';', header = False, index = False, line_terminator = "\n")
+MarketData_Raw.to_csv("03_MarketData_test.csv", sep = ';', header = False, index = False, line_terminator = "\n")
+
+
+
+
+
+
+
+
+
+
+
+#Country to Region
+#Sector to Country
+
+#test = Event_Obj_Subsetter(EST_Events_Raw)
+
 
 
 
@@ -1508,7 +1583,7 @@ test.shape
 
 #Generate EventIDs
 
-events_cleaned_df_regions["Event ID"] = events_cleaned_df_regions.index
+#events_cleaned_df_regions["Event ID"] = events_cleaned_df_regions.index
 
 
 #Request File, Firm Data and Market Data needed.
