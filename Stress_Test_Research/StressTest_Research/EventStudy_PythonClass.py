@@ -1356,6 +1356,49 @@ event_idx_prices = pd.read_csv("regional_country_sector_idx_prices.csv")
 
 
 
+#Make Function that can subset properly by iterating over object until all conditions are applied
+
+def Event_Obj_Subsetter(EST_Events_Raw, cols = ["source","annctype","regioncode_x","global_idx_tic","regional_idx_tic","ISO3","country_idx_tic","sector_idx_tic"] ):
+    final_df = pd.DataFrame()
+
+    print("Convert NANs to String nan")
+    EST_Events_Raw = EST_Events_Raw.replace(np.nan, "nan", regex=True)
+
+    if "Unnamed: 0" in  EST_Events_Raw.columns:
+        print("Drop Index Column")
+        EST_Events_Raw = EST_Events_Raw.drop("Unnamed: 0", axis = 1)
+
+    print("Getting Unique Value combinations for each Column")
+    cols_vals_df = EST_Events_Raw[cols].drop_duplicates()
+
+
+
+    print("Iterate to apply all matching criteria for each")
+    for row_num_idx in range(cols_vals_df.shape[0]):
+        tmp_df_obj = pd.DataFrame()
+        tmp_df_match = EST_Events_Raw
+        print(list(cols_vals_df.iloc[row_num_idx,]))
+        for colname_idx in range(cols_vals_df.shape[1]):
+            tmp_colname = cols_vals_df.columns[colname_idx]
+            tmp_match = cols_vals_df.iloc[row_num_idx,colname_idx]
+            #print(tmp_colname,tmp_match)
+            print("Iterating Through Matching Rules to Subset Tmp Object")
+            tmp_df_match = tmp_df_match[tmp_df_match[tmp_colname].str.endswith(tmp_match)]
+
+        print("Applying GroupingVar:", "_".join(list(cols_vals_df.iloc[row_num_idx],)))
+        tmp_df_match["GroupingVar"] = "_".join(list(cols_vals_df.iloc[row_num_idx],))
+
+
+        if tmp_df_match.shape[0] > 0 :
+            print("Appending Subsetted DataFame to Final Frame")
+            print(tmp_df_match.shape)
+            final_df = pd.concat([final_df,tmp_df_match])
+        print("Garbage Collection")
+        gc.collect()
+     return(final_df)
+
+
+
 #Generate Request File Regional Events  Map to World Indices
 
 def EST_Event_Generator(events_cleaned_df_regions,event_index_names_inprices_df):
@@ -1411,111 +1454,124 @@ EST_Events_Raw = pd.read_csv("EST_Events_Raw.csv")
 
 
 
-#Make Function that can subset properly by iterating over object until all conditions are applied
 
-def Event_Obj_Subsetter(EST_Events_Raw, cols = ["source","annctype","regioncode_x","global_idx_tic","regional_idx_tic","ISO3","country_idx_tic","sector_idx_tic"] ):
-    final_df = pd.DataFrame()
+
+
+def EST_File_Generator(EST_Events_Raw, event_idx_prices, event_index_names_df,
+                        EstSubset = { "subset_columns" : [["annctype","global_idx","regional_idx","regioncode_x"]],
+                                        "firmID": "regional_idx",
+                                      "marketID":"global_idx"
+                                    },
+                        EstParams = {"start_ev_win": [-10],
+                                     "end_ev_win" : [5],
+                                     "end_est_win" : [-11],
+                                     "est_win_len" : [120]} ):
+
 
     print("Convert NANs to String nan")
     EST_Events_Raw = EST_Events_Raw.replace(np.nan, "nan", regex=True)
 
-    if "Unnamed: 0" in  EST_Events_Raw.columns:
-        print("Drop Index Column")
-        EST_Events_Raw = EST_Events_Raw.drop("Unnamed: 0", axis = 1)
+    print("Setting Param Vector dataframe")
+    tmp_param_df = pd.DataFrame.from_dict(EstParams)[list(EstParams.keys())]
+    print("Setting Event Subset Rule")
+    tmp_subset_df = pd.DataFrame.from_dict(EstSubset)
 
-    print("Getting Unique Value combinations for each Column")
-    cols_vals_df = EST_Events_Raw[cols].drop_duplicates()
+    tmp_rules = pd.concat([tmp_param_df,tmp_subset_df], axis = 1)
 
+    print("Initializng Request File")
+    Request_File_df = pd.DataFrame()
+    print("Subsetting and creating Request File based on Rules")
+    for row in range(tmp_rules.shape[0]):
 
-
-    print("Iterate to apply all matching criteria for each")
-    for row_num_idx in range(cols_vals_df.shape[0]):
-        tmp_df_obj = pd.DataFrame()
-        tmp_df_match = EST_Events_Raw
-        print(list(cols_vals_df.iloc[row_num_idx,]))
-        for colname_idx in range(cols_vals_df.shape[1]):
-            tmp_colname = cols_vals_df.columns[colname_idx]
-            tmp_match = cols_vals_df.iloc[row_num_idx,colname_idx]
-            #print(tmp_colname,tmp_match)
-            print("Iterating Through Matching Rules to Subset Tmp Object")
-            tmp_df_match = tmp_df_match[tmp_df_match[tmp_colname].str.endswith(tmp_match)]
-
-        print("Applying GroupingVar:", "_".join(list(cols_vals_df.iloc[row_num_idx],)))
-        tmp_df_match["GroupingVar"] = "_".join(list(cols_vals_df.iloc[row_num_idx],))
+        print("Getting Unique Value combinations for each Column")
+        tmp_evt_subset_obj = EST_Events_Raw.drop_duplicates(subset = tmp_rules.iloc[row,tmp_rules.columns.get_loc("subset_columns")])
 
 
-        if tmp_df_match.shape[0] > 0 :
-            print("Appending Subsetted DataFame to Final Frame")
-            print(tmp_df_match.shape)
-            final_df = pd.concat([final_df,tmp_df_match])
-        print("Garbage Collection")
-        gc.collect()
-     return(final_df)
+        print("Generating Grouping Variable and attached Params")
+        tmp_evt_subset_obj["GroupingVar"] = tmp_evt_subset_obj[tmp_rules.iloc[row,tmp_rules.columns.get_loc("subset_columns")]].apply(lambda x : "_".join(x), axis = 1)
+        tmp_evt_subset_obj["GroupingType"] = "_+_".join(tmp_rules.iloc[row,tmp_rules.columns.get_loc("subset_columns")])
+
+        print("Dimensions of Object")
+        print(tmp_evt_subset_obj.shape)
 
 
-EST_Events_Raw.columns
+        print("Applying Params")
+        for param in list(EstParams.keys()):
+            tmp_evt_subset_obj[param]= tmp_rules.loc[row,param]
 
-if "Unnamed: 0" in EST_Events_Raw.columns:
-    print("Drop Index Column")
-    EST_Events_Raw = EST_Events_Raw.drop("Unnamed: 0", axis=1)
+        print("Applying EST Request File formatting")
 
-
-EST_Events_Raw = EST_Events_Raw.sort_values(["source","annctype","regioncode_x","global_idx_tic","regional_idx_tic","ISO3","country_idx_tic","sector_idx_tic"])
-
-
-#Region to Global
-
-EST_Region_to_Global = EST_Events_Raw.sort_values(["annctype", "regioncode_x","global_idx","regional_idx"]).drop_duplicates(subset = ["Event ID", "annctype", "regioncode_x","global_idx","regional_idx"])
-
-EST_Region_to_Global.shape
-
-print("Convert NANs to String nan")
-EST_Region_to_Global = EST_Region_to_Global.replace(np.nan, "nan", regex=True)
-
-GroupingVar = EST_Events_Raw['annctype'] + '_' + EST_Events_Raw['global_idx'] + "_" + EST_Events_Raw['regioncode_x'] + "_" + EST_Events_Raw['regional_idx']
-EST_Region_to_Global["GroupingVar"] = GroupingVar
-
-#Filter to USA and EUR
-
-EUR_USA_test = EST_Region_to_Global[EST_Region_to_Global["ISO3"].isin(["USA","EUR"])]
+        request_headers = ["Event ID", EstSubset["firmID"],EstSubset["marketID"],"date","GroupingVar","GroupingType"] + (list(EstParams.keys()))
 
 
 
+        tmp_evt_subset_obj = tmp_evt_subset_obj[request_headers]
+
+        tmp_evt_subset_obj['date'] = pd.to_datetime(pd.to_datetime(tmp_evt_subset_obj['date']).dt.date).dt.strftime(
+            "%d.%m.%Y")
+        print("Sorting Results")
+        tmp_evt_subset_obj = tmp_evt_subset_obj.sort_values(["date", "Event ID","GroupingVar", EstSubset["firmID"], EstSubset["marketID"]])
+
+        print("Renaming Columns")
+        tmp_evt_subset_obj = tmp_evt_subset_obj.rename({ EstSubset["firmID"] : 'firmID', EstSubset["marketID"] : "marketID"}, axis = 1)
+
+        print("Removing Exact Matches with Firm and Market IDs or Nans in Firm ID")
+        tmp_evt_subset_obj = tmp_evt_subset_obj[tmp_evt_subset_obj["firmID"] != tmp_evt_subset_obj["marketID"]]
+
+        tmp_evt_subset_obj = tmp_evt_subset_obj[tmp_evt_subset_obj["firmID"] != "nan"]
 
 
-#Estimation_Params
-EUR_USA_test["Start Event Window"] = -10
-EUR_USA_test["End Event Window"] = 5
-EUR_USA_test["End of Estimation Window"] = -11
-EUR_USA_test["Estimation Window Length"] = 120
-
-#Event IDs, Firm ID, Market ID, Event Date, Grouping Variable,
+        print("Appending Subset to Request DataFrame")
+        Request_File_df = pd.concat([Request_File_df,tmp_evt_subset_obj])
 
 
+    print("Applying Sequential Numbering for Event ID duplicate but different Firm and Market Streams")
+    Request_File_df["dup_stream_num"] = Request_File_df.sort_values(['Event ID','firmID','marketID']).groupby(['Event ID']).cumcount() + 1
+
+    Request_File_df = Request_File_df.sort_values(["Event ID", "firmID","dup_stream_num"]).reset_index(drop=True)
+    print("Completed Request_File")
+
+    print("Filter event_index _names to those that exist in event_idx_prices")
+    event_index_names_inprices_df = event_index_names_df[(event_index_names_df["gvkeyx"].isin(event_idx_prices["gvkeyx"].astype(int).unique())) & (event_index_names_df["indexid"] != "ISLAMIC")]
+    event_idx_prices_in_idx = event_idx_prices.merge(event_index_names_inprices_df, on="gvkeyx", how='left')
 
 
-#Filter event_index _names to those that exist in event_idx_prices
-event_index_names_inprices_df = event_index_names_df[(event_index_names_df["gvkeyx"].isin(event_idx_prices["gvkeyx"].astype(int).unique())) & (event_index_names_df["indexid"] != "ISLAMIC")]
-event_idx_prices_in_idx = event_idx_prices.merge(event_index_names_inprices_df, on = "gvkeyx", how = 'left')
+    print("Generating Firm Price Data File from Wrds Prices File")
+    FirmData_File_df = event_idx_prices_in_idx[["conm", "datadate", "prccd"]][event_idx_prices_in_idx["conm"].isin(Request_File_df["firmID"].unique())].sort_values(["datadate", "conm"]).drop_duplicates().reset_index(drop=True)
+    FirmData_File_df['datadate'] = pd.to_datetime(pd.to_datetime(FirmData_Raw['datadate']).dt.date).dt.strftime("%d.%m.%Y")
+    FirmData_File_df = FirmData_File_df.rename({'conm' : "firmID",'datadate':'date','prccd':'price'})
 
-#Filter out events list to those that are in the idx prices.
-
-
-
-#Request File
-
-RequestFile_headers = ["Event ID","regional_idx","global_idx","date","GroupingVar","Start Event Window","End Event Window","End of Estimation Window","Estimation Window Length"]
-RequestFile_Raw = EUR_USA_test[RequestFile_headers].sort_values(["date","Event ID", "regional_idx","global_idx"]).drop_duplicates(subset = ["Event ID"]).reset_index(drop = True)
-RequestFile_Raw['date'] = pd.to_datetime(pd.to_datetime(RequestFile_Raw['date'] ).dt.date).dt.strftime("%d.%m.%Y")
+    print("Generating Market Price Data File from Wrds Prices File")
+    MarketData_df = event_idx_prices_in_idx[["conm", "datadate", "prccd"]][event_idx_prices_in_idx["conm"].isin(Request_File_df["marketID"].unique())].sort_values(["datadate", "conm"]).drop_duplicates().reset_index(drop=True)
+    MarketData_df['datadate'] = pd.to_datetime(pd.to_datetime(MarketData_df['datadate']).dt.date).dt.strftime("%d.%m.%Y")
+    MarketData_df = MarketData_df.rename({'conm': "firmID", 'datadate': 'date', 'prccd': 'price'})
 
 
-#Firm File
-FirmData_Raw = event_idx_prices_in_idx[["conm","datadate","prccd"]][event_idx_prices_in_idx["conm"].isin(RequestFile_Raw["regional_idx"].unique())].sort_values(["datadate", "conm"]).drop_duplicates().reset_index(drop = True)
-FirmData_Raw['datadate'] = pd.to_datetime(pd.to_datetime(FirmData_Raw['datadate']).dt.date).dt.strftime("%d.%m.%Y")
 
-#Market Data
-MarketData_Raw = event_idx_prices_in_idx[["conm","datadate","prccd"]][event_idx_prices_in_idx["conm"].isin(RequestFile_Raw["global_idx"].unique())].sort_values(["datadate", "conm"]).drop_duplicates().reset_index(drop = True)
-MarketData_Raw['datadate'] = pd.to_datetime(pd.to_datetime(MarketData_Raw['datadate']).dt.date).dt.strftime("%d.%m.%Y")
+    return{'RequestData': Request_File_df, 'FirmData': FirmData_File_df,'MarketData': MarketData_df}
+
+
+#Need to number the Duplicated Event IDs ******DONE
+#Need to add the data for subsetting **********DONE
+#Drop where FirmID and Market ID are the same **************DONE
+#may have to consider the Nan value variations *********** DONE
+#Generate the Firm Data and Market Data files as well as Request File.************** DONE
+
+
+#Pass through to API in R
+#Retrieve Results and combine into Dataset for analysis
+
+PreProcess_EST_Data   = EST_File_Generator(EST_Events_Raw,event_idx_prices,event_index_names_df)
+
+
+
+
+
+PreProcess_EST_Data["RequestData"]
+PreProcess_EST_Data["FirmData"]
+PreProcess_EST_Data["MarketData"]
+
+
 
 
 #Output the files or objects.
