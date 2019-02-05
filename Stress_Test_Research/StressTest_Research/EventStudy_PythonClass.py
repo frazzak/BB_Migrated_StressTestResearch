@@ -1563,6 +1563,7 @@ def EST_File_Generator(EST_Events_Raw, event_idx_prices, event_index_names_df,
 
 
 
+
 PreProcess_EST_Data_Dict   = EST_File_Generator(EST_Events_Raw,event_idx_prices,event_index_names_df)
 
 
@@ -1617,7 +1618,7 @@ def EST_R_API_Wrapper(PreProcess_EST_Data_Dict,
         PreProcess_EST_Data_Dict['MarketData'][PreProcess_EST_Data_Dict['MarketData']['conm'].isin(list(PreProcess_EST_Data_Dict['RequestData']['marketID'].unique()))].to_csv(params_dict["marketDataFile"], sep=';', header=False, index=False, line_terminator="\n")
 
 
-
+        print("Running R Event Study Tools API")
         est_api_wrapper = ro.r('''
             
        
