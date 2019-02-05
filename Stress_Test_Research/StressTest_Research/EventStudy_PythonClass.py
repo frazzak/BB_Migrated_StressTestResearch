@@ -15,10 +15,10 @@
     #A. World Returns, Daily, Monthly, Consituents. - Inprogress
         ## Fic Codes, Country Level,  - Inprogress
 
-    #B. Region Level Index Returns
-        #Ticker, GVKEY, PERMCO, PERMNO
-    #C. Sector Level Index Returns
-     #Ticker, GVKEY, PERMCO, PERMNO
+    #B. Region Level Index Returns - Inprogress
+        #Ticker, GVKEY, PERMCO, PERMNO - Inprogress
+    #C. Sector Level Index Returns - Inprogress
+     #Ticker, GVKEY, PERMCO, PERMNO - Inprogress
     #D. Bank Level Returns
         #Get info for bank participants in Euro, Asia, US, etc.
         #Ticker, GVKEY, PERMCO, PERMNO
@@ -1538,7 +1538,7 @@ def EST_File_Generator(EST_Events_Raw, event_idx_prices, event_index_names_df,
 
     print("Generating Firm Price Data File from Wrds Prices File")
     FirmData_File_df = event_idx_prices_in_idx[["conm", "datadate", "prccd"]][event_idx_prices_in_idx["conm"].isin(Request_File_df["firmID"].unique())].sort_values(["datadate", "conm"]).drop_duplicates().reset_index(drop=True)
-    FirmData_File_df['datadate'] = pd.to_datetime(pd.to_datetime(FirmData_Raw['datadate']).dt.date).dt.strftime("%d.%m.%Y")
+    FirmData_File_df['datadate'] = pd.to_datetime(pd.to_datetime(FirmData_File_df['datadate']).dt.date).dt.strftime("%d.%m.%Y")
     FirmData_File_df = FirmData_File_df.rename({'conm' : "firmID",'datadate':'date','prccd':'price'})
 
     print("Generating Market Price Data File from Wrds Prices File")
@@ -1561,193 +1561,129 @@ def EST_File_Generator(EST_Events_Raw, event_idx_prices, event_index_names_df,
 #Pass through to API in R
 #Retrieve Results and combine into Dataset for analysis
 
-PreProcess_EST_Data   = EST_File_Generator(EST_Events_Raw,event_idx_prices,event_index_names_df)
 
 
+PreProcess_EST_Data_Dict   = EST_File_Generator(EST_Events_Raw,event_idx_prices,event_index_names_df)
+
+
+
+test = EST_R_API_Wrapper(PreProcess_EST_Data_Dict)
+
+def EST_R_API_Wrapper(PreProcess_EST_Data_Dict,
+                      params_dict = {
+                         'workingdir' : '.',
+                         'apiKey' : '573e58c665fcc08cc6e5a660beaad0cb',
+                          'apiUrl' :  "http://api.eventstudytools.com",
+                          'ResultFileType':'csv',
+                          'ReturnType':'log',
+                          'NonTradingDays':'earlier',
+                          'BenchmarkModel':'mm',
+                          'resultPath' : './results/',
+                          'requestFile': '01_RequestFile_df.csv',
+                          'firmDataFile': '02_FirmData_df.csv',
+                          'marketDataFile': '03_MarketData_df.csv' }):
+
+    print("Starting EST API Steps")
+
+    print("Setting Working Directory")
+    workdir = os.chdir(params_dict['workingdir'])
+    print(os.getcwd())
+
+
+    print("Generating CSV Files for R API EST")
+
+    #May have to loop through he duplicates.
+    #PreProcess_EST_Data_Dict_bk = PreProcess_EST_Data_Dict
+    # PreProcess_EST_Data_Dict = PreProcess_EST_Data_Dict_bk
+
+
+
+    print("Initializing Results Objects")
+    estAnalysisReport  = pd.DataFrame()
+    estARresults = pd.DataFrame()
+    estAARresults = pd.DataFrame()
+    estCARresults = pd.DataFrame()
+    estCAARresults = pd.DataFrame()
+
+    for dup_num in range(1,PreProcess_EST_Data_Dict["RequestData"]["dup_stream_num"].max()):
+        print("dup_num_stream:", dup_num )
+        PreProcess_EST_Data_Dict["RequestData"] =  PreProcess_EST_Data_Dict["RequestData"][PreProcess_EST_Data_Dict["RequestData"]["dup_stream_num"] == dup_num][["Event ID", "firmID","marketID", "date","GroupingVar","start_ev_win","end_ev_win","end_est_win","est_win_len"]]
+        PreProcess_EST_Data_Dict["RequestData"]["GroupingVar"] = PreProcess_EST_Data_Dict["RequestData"]["GroupingVar"].apply(lambda x : x + "_" + str(dup_num))
+
+
+        print("Creating CSV files to pass to R API")
+        PreProcess_EST_Data_Dict['RequestData'].to_csv(params_dict["requestFile"], sep=';', header=False, index=False, line_terminator="\n")
+        PreProcess_EST_Data_Dict['FirmData'][PreProcess_EST_Data_Dict['FirmData']['conm'].isin(list(PreProcess_EST_Data_Dict['RequestData']['firmID'].unique()))].to_csv(params_dict["firmDataFile"], sep=';', header=False, index=False, line_terminator="\n")
+        PreProcess_EST_Data_Dict['MarketData'][PreProcess_EST_Data_Dict['MarketData']['conm'].isin(list(PreProcess_EST_Data_Dict['RequestData']['marketID'].unique()))].to_csv(params_dict["marketDataFile"], sep=';', header=False, index=False, line_terminator="\n")
+
+
+
+        est_api_wrapper = ro.r('''
+            
+       
+            
+            if (!require("EventStudy")) {
+              if (!require("devtools")) {
+              install.packages("devtools")
+                }
+                devtools::install_github("EventStudyTools/api-wrapper.r")
+            }
+            
+            library(EventStudy)
+            
+            setwd("'''+ os.getcwd() +'''")
+            
+            apiUrl <- "'''+ params_dict["apiUrl"] +'''"
+            
+            apiKey <- "'''+ params_dict["apiKey"] + '''"
+            
+            
+            estAPIKey(apiKey)
+            estSetup <- EventStudyAPI$new(apiUrl)
+            
+            arcParams <- ARCApplicationInput$new()
+            arcParams$setResultFileType("'''+ params_dict["ResultFileType"] + '''")
+            arcParams$setReturnType("'''+ params_dict["ReturnType"] + '''")
+            arcParams$setNonTradingDays("'''+ params_dict["NonTradingDays"] + '''")
+            arcParams$setBenchmarkModel("'''+ params_dict["BenchmarkModel"] + '''")    
+            
+            #mm (default): Market Model
+            #mm-sw: Scholes/Williams Model
+            #cpmam: Comparison Period Mean Adjusted
+            #ff3fm: Fama-French 3 Factor Model
+            #ffm4fm: Fama-French-Momentum 4 Factor Model
+            #garch: GARCH (1, 1) Model
+            #egarch: EGARCH (1, 1) Model
+    
+            estSetup$authentication(apiKey)
+            estSetup$performEventStudy(estParams = arcParams,
+                               dataFiles = c("request_file" = "'''+ params_dict["requestFile"] + '''",
+                                             "firm_data" = "'''+ params_dict["firmDataFile"] + '''",
+                                             "market_data" = "'''+ params_dict["marketDataFile"] + '''"),
+                               downloadFiles = T)
+                        
+    ''')
+        print("Reading in Results from API to PY DataFrame")
+        estAnalysisReport_tmp = pd.read_csv("./results/analysis_report.csv", sep = ';')
+        estARresults_tmp = pd.read_csv("./results/ar_results.csv", sep=';')
+        estAARresults_tmp = pd.read_csv("./results/aar_results.csv", sep = ';')
+        estCARresults_tmp = pd.read_csv("./results/car_results.csv", sep = ';')
+        estCAARresults_tmp = pd.read_csv("./results/caar_results.csv", sep = ';')
 
+        print("Appending to Results Object")
+        estAnalysisReport =  pd.concat([estAnalysisReport, estAnalysisReport_tmp])
+        estARresults = pd.concat([estARresults, estARresults_tmp])
+        estAARresults = pd.concat([estAARresults, estAARresults_tmp])
+        estCARresults = pd.concat([estCARresults, estCARresults_tmp])
+        estCAARresults = pd.concat([estCAARresults,estCAARresults_tmp])
 
 
-PreProcess_EST_Data["RequestData"]
-PreProcess_EST_Data["FirmData"]
-PreProcess_EST_Data["MarketData"]
 
 
 
 
-#Output the files or objects.
-RequestFile_Raw.to_csv("01_RequestFile_test.csv", sep = ';', header = False, index = False, line_terminator = "\n")
-FirmData_Raw.to_csv("02_FirmData_test.csv", sep = ';', header = False, index = False, line_terminator = "\n")
-MarketData_Raw.to_csv("03_MarketData_test.csv", sep = ';', header = False, index = False, line_terminator = "\n")
+    return{'AnalysisReport':estAnalysisReport, 'AR_Results': estARresults, 'AAR_Results': estAARresults, 'CAR_Results': estCARresults, "CAAR_Results": estCAARresults}
 
-
-
-
-
-
-
-
-
-
-
-#Country to Region
-#Sector to Country
-
-#test = Event_Obj_Subsetter(EST_Events_Raw)
-
-
-
-
-
-
-#Reshape to fit the request file format
-
-#Generate Firm Data File
-
-#Generate Market Data File
-
-
-
-#Create Function to feed into API
-
-
-
-
-
-
-
-#event_index_names_df['gvkeyx'][event_index_names_df['qrycat'] == "RegionLevel"].unique()
-
-
-
-
-#Region
-
-#get region index gvkeyx
-#region_gvkeyx_tmp = event_index_names_df['gvkeyx'][event_index_names_df['qrycat'] == "RegionLevel"].unique()
-
-#get region index prices only
-#region_idx_prices = event_idx_prices[event_idx_prices['gvkeyx'].isin(region_gvkeyx_tmp)]
-#Apply region code to each index price
-#region_idx_prices = region_idx_prices.merge(event_index_names_df[['gvkeyx','regioncode']][event_index_names_df['qrycat'] == "RegionLevel"], left_on = 'gvkeyx', right_on = 'gvkeyx', how = 'left')
-
-
-
-
-
-#Using Eventstudy tools API structure.
-
-
-#Generate EventIDs
-
-#events_cleaned_df_regions["Event ID"] = events_cleaned_df_regions.index
-
-
-#Request File, Firm Data and Market Data needed.
-#Seperator is semi-colon
-
-#Region level
-#Request File
-#Event IDs, Firm ID, Market ID, Event Date, Grouping Variable, start event window, end event window, end esitmation window, estimation window length
-#Do for USA only first.
-
-Request_File_CountryRegion = pd.DataFrame()
-
-
-#Announcement events Country Level, per country (USA)
-Anncouncement_df = events_cleaned_df_regions[(events_cleaned_df_regions['annctype'] == "Announcement") & (events_cleaned_df_regions['ISO3'] == "USA")]
-
-Request_File_CountryRegion["Event ID"] = Anncouncement_df["Event ID"]
-Request_File_CountryRegion["Firm ID"] = Anncouncement_df["country"]
-
-#Need to be more dynamic
-Request_File_CountryRegion["Market ID"] = list(event_index_names_df["tic"][(event_index_names_df["regioncode"] == "Northern America")])[0]
-Request_File_CountryRegion["Market gvkeyx"] = list(event_index_names_df["gvkeyx"][(event_index_names_df["regioncode"] == "Northern America")])[0]
-
-Request_File_CountryRegion["Event Date"] = pd.to_datetime(Anncouncement_df["date"]).dt.date
-Request_File_CountryRegion["Grouping Variable"] = "Announcement"
-Request_File_CountryRegion["Start Event Window"] = -3
-Request_File_CountryRegion["End Event Window"] = 3
-Request_File_CountryRegion["End of Estimation Window"] = -11
-Request_File_CountryRegion["Estimation Window Length"] = 120
-
-
-
-
-#Firm Data
-
-#Get all USA indexgeo from non Regional Level or Sector level
-
-idx_name_df_US = event_index_names_df[(event_index_names_df["indexgeo"] == "USA") & (~event_index_names_df["qrycat"].isin(["RegionLevel","SectorLevel"]))]
-
-#Prices available for indices
-matched_idx_tmp = event_idx_prices["gvkeyx"][event_idx_prices["gvkeyx"].isin(idx_name_df_US["gvkeyx"].unique())].unique()
-matched_idx_tmp = list(matched_idx_tmp)
-
-idx_name_df_US = idx_name_df_US[idx_name_df_US['gvkeyx'].astype(int).isin(matched_idx_tmp)]
-
-
-
-#Set Firm ID to index
-
-Request_File_CountryRegion["Firm ID"] = idx_name_df_US['tic'].iloc[0]
-Request_File_CountryRegion["Firm gvkeyx"] = idx_name_df_US['gvkeyx'].iloc[0]
-
-
-#Firm Data
-FirmData_CountryRegion = event_idx_prices[["gvkeyx","prccd","datadate"]][event_idx_prices["gvkeyx"].isin(Request_File_CountryRegion["Firm gvkeyx"].unique())]
-idx_name_df_US["gvkeyx"] = idx_name_df_US["gvkeyx"].astype(int)
-FirmData_CountryRegion = FirmData_CountryRegion.merge(idx_name_df_US[["conm","gvkeyx","tic"]], left_on = "gvkeyx", right_on = "gvkeyx" )
-FirmData_CountryRegion["Firm identifier"] = FirmData_CountryRegion["tic"]
-
-FirmData_CountryRegion = FirmData_CountryRegion[["Firm identifier", "datadate","prccd"]]
-FirmData_CountryRegion.columns = ["Firm identifier", "Date","Closing price"]
-
-
-
-
-#Market Data
-
-#Request_File_CountryRegion = Request_File_CountryRegion.merge(event_index_names_df[["conm", "gvkeyx","tic"]], left_on = "Market ID", right_on = "tic")
-#Request_File_CountryRegion = Request_File_CountryRegion.rename({"gvkeyx":'Market gvkeyx'}, axis = 'columns')
-#Request_File_CountryRegion = Request_File_CountryRegion.drop(["conm"], axis = 1)
-
-MarketData_CountryRegion = event_idx_prices[["gvkeyx","prccd","datadate"]][event_idx_prices["gvkeyx"].isin(Request_File_CountryRegion["Market gvkeyx"].unique())]
-MarketData_CountryRegion = MarketData_CountryRegion.merge(event_index_names_df[["conm","gvkeyx","tic"]], left_on = "gvkeyx", right_on = "gvkeyx")
-MarketData_CountryRegion = MarketData_CountryRegion.drop(["conm","gvkeyx"], axis = 1)
-MarketData_CountryRegion = MarketData_CountryRegion.rename({"tic":"Market identifier", 'datadate':'Date','prccd':'Closing price'}, axis = 'columns')
-MarketData_CountryRegion = MarketData_CountryRegion[["Market identifier","Date","Closing price"]]
-
-
-
-# Final Objects
-Request_File_CountryRegion = Request_File_CountryRegion[["Event ID","Firm ID","Market ID","Event Date","Grouping Variable","Start Event Window","End Event Window","End of Estimation Window","Estimation Window Length"]]
-
-
-
-Request_File_CountryRegion["Event ID"] = Request_File_CountryRegion["Event ID"].astype(int)
-#Date Conversion to Excel Format
-
-Request_File_CountryRegion = Request_File_CountryRegion.drop_duplicates(subset = ["Event ID", "Event Date"])
-Request_File_CountryRegion = Request_File_CountryRegion.sort_values(["Event Date", "Firm ID"]).reset_index(drop = True)
-Request_File_CountryRegion["Event Date"] = pd.to_datetime(pd.to_datetime(Request_File_CountryRegion["Event Date"]).dt.date).dt.strftime("%d.%m.%Y")
-
-
-FirmData_CountryRegion = FirmData_CountryRegion.drop_duplicates()
-FirmData_CountryRegion = FirmData_CountryRegion.sort_values(["Date", "Firm identifier"]).reset_index(drop = True)
-FirmData_CountryRegion["Date"] = pd.to_datetime(pd.to_datetime(FirmData_CountryRegion["Date"]).dt.date).dt.strftime("%d.%m.%Y")
-
-
-MarketData_CountryRegion = MarketData_CountryRegion.drop_duplicates()
-MarketData_CountryRegion = MarketData_CountryRegion.sort_values(["Date", "Market identifier"]).reset_index(drop = True)
-MarketData_CountryRegion["Date"] = pd.to_datetime(pd.to_datetime(MarketData_CountryRegion["Date"]).dt.date).dt.strftime("%d.%m.%Y")
-
-
-
-
-#Output the files or objects.
-Request_File_CountryRegion.to_csv("01_RequestFile_test.csv", sep = ';', header = False, index = False, line_terminator = "\n")
-FirmData_CountryRegion.to_csv("02_FirmData_test.csv", sep = ';', header = False, index = False, line_terminator = "\n")
-MarketData_CountryRegion.to_csv("03_MarketData_test.csv", sep = ';', header = False, index = False, line_terminator = "\n")
 
 
 
