@@ -1373,6 +1373,7 @@ def Event_Obj_Subsetter(EST_Events_Raw, cols = ["source","annctype","regioncode_
 
 
 
+
     print("Iterate to apply all matching criteria for each")
     for row_num_idx in range(cols_vals_df.shape[0]):
         tmp_df_obj = pd.DataFrame()
@@ -1402,7 +1403,7 @@ def Event_Obj_Subsetter(EST_Events_Raw, cols = ["source","annctype","regioncode_
 #Generate Request File Regional Events  Map to World Indices
 
 def EST_Event_Generator(events_cleaned_df_regions,event_index_names_inprices_df):
-    events_cleaned_df_regions["Event ID"]  = events_cleaned_df_regions.index
+    events_cleaned_df_regions["Event ID"]  = events_cleaned_df_regions.index + 1
 
     print("Merging to get Regional Market Indices")
     Request_File = events_cleaned_df_regions[["Event ID","date","annctype","category","ISO3","country","country/region_y","source"]].merge(event_index_names_inprices_df[["conm", "tic","regioncode", "gvkeyx"]][event_index_names_inprices_df['qrycat'] == "RegionLevel"], left_on = "country/region_y", right_on = "regioncode" , how = "left")
@@ -1450,6 +1451,9 @@ def EST_Event_Generator(events_cleaned_df_regions,event_index_names_inprices_df)
 
 EST_Events_Raw = pd.read_csv("EST_Events_Raw.csv")
 
+
+
+
 #Correct Data Structures
 
 
@@ -1470,6 +1474,10 @@ def EST_File_Generator(EST_Events_Raw, event_idx_prices, event_index_names_df,
 
     print("Convert NANs to String nan")
     EST_Events_Raw = EST_Events_Raw.replace(np.nan, "nan", regex=True)
+
+    print("Fixing Zero Event ID issue")
+    if 0 in EST_Events_Raw['Event ID']:
+        EST_Events_Raw['Event ID'] = EST_Events_Raw['Event ID'] + 1
 
     print("Setting Param Vector dataframe")
     tmp_param_df = pd.DataFrame.from_dict(EstParams)[list(EstParams.keys())]
@@ -1566,11 +1574,11 @@ def EST_File_Generator(EST_Events_Raw, event_idx_prices, event_index_names_df,
 
 PreProcess_EST_Data_Dict   = EST_File_Generator(EST_Events_Raw,event_idx_prices,event_index_names_df)
 
+PreProcess_EST_Data_Dict['RequestData'].head()
 
+test2 = EST_R_API_Wrapper(PreProcess_EST_Data_Dict, run_R = True)
 
-test = EST_R_API_Wrapper(PreProcess_EST_Data_Dict)
-
-def EST_R_API_Wrapper(PreProcess_EST_Data_Dict,
+def EST_R_API_Wrapper(PreProcess_EST_obj,
                       params_dict = {
                          'workingdir' : '.',
                          'apiKey' : '573e58c665fcc08cc6e5a660beaad0cb',
@@ -1582,7 +1590,8 @@ def EST_R_API_Wrapper(PreProcess_EST_Data_Dict,
                           'resultPath' : './results/',
                           'requestFile': '01_RequestFile_df.csv',
                           'firmDataFile': '02_FirmData_df.csv',
-                          'marketDataFile': '03_MarketData_df.csv' }):
+                          'marketDataFile': '03_MarketData_df.csv' },
+                      run_R = True):
 
     print("Starting EST API Steps")
 
@@ -1594,8 +1603,8 @@ def EST_R_API_Wrapper(PreProcess_EST_Data_Dict,
     print("Generating CSV Files for R API EST")
 
     #May have to loop through he duplicates.
-    #PreProcess_EST_Data_Dict_bk = PreProcess_EST_Data_Dict
-    # PreProcess_EST_Data_Dict = PreProcess_EST_Data_Dict_bk
+    #PreProcess_EST_obj_bk = PreProcess_EST_obj
+    # PreProcess_EST_obj = PreProcess_EST_obj_bk
 
 
 
@@ -1606,82 +1615,97 @@ def EST_R_API_Wrapper(PreProcess_EST_Data_Dict,
     estCARresults = pd.DataFrame()
     estCAARresults = pd.DataFrame()
 
-    for dup_num in range(1,PreProcess_EST_Data_Dict["RequestData"]["dup_stream_num"].max()):
+#    PreProcess_EST_obj = PreProcess_EST_Data_Dict
+#    dup_num = 1
+    for dup_num in range(1,PreProcess_EST_obj["RequestData"]["dup_stream_num"].max()):
         print("dup_num_stream:", dup_num )
-        PreProcess_EST_Data_Dict["RequestData"] =  PreProcess_EST_Data_Dict["RequestData"][PreProcess_EST_Data_Dict["RequestData"]["dup_stream_num"] == dup_num][["Event ID", "firmID","marketID", "date","GroupingVar","start_ev_win","end_ev_win","end_est_win","est_win_len"]]
-        PreProcess_EST_Data_Dict["RequestData"]["GroupingVar"] = PreProcess_EST_Data_Dict["RequestData"]["GroupingVar"].apply(lambda x : x + "_" + str(dup_num))
-
+        PreProcess_EST_obj_rq_tmp =  PreProcess_EST_obj["RequestData"][PreProcess_EST_obj["RequestData"]["dup_stream_num"] == dup_num][["Event ID", "firmID","marketID", "date","GroupingVar","start_ev_win","end_ev_win","end_est_win","est_win_len"]]
+        print("Firm IDs:",PreProcess_EST_obj_rq_tmp.firmID.unique())
+        print("Market IDs:", PreProcess_EST_obj_rq_tmp.marketID.unique())
+# Add Dup Stream tag to results
+#        PreProcess_EST_obj_rq_tmp["GroupingVar"] = PreProcess_EST_obj["RequestData"]["GroupingVar"].apply(lambda x : x + "_" + str(dup_num))
+        PreProcess_EST_obj_rq_tmp["GroupingVar"] = PreProcess_EST_obj_rq_tmp["GroupingVar"].apply(lambda x:  "_".join(str.split(x,'_')[0:1] + [str.split(x,'_')[3]]))
+        #PreProcess_EST_obj_rq_tmp["GroupingVar"] = "test"
+        #PreProcess_EST_obj["RequestData"]["Event ID"] = PreProcess_EST_obj["RequestData"]["Event ID"] + 1
 
         print("Creating CSV files to pass to R API")
-        PreProcess_EST_Data_Dict['RequestData'].to_csv(params_dict["requestFile"], sep=';', header=False, index=False, line_terminator="\n")
-        PreProcess_EST_Data_Dict['FirmData'][PreProcess_EST_Data_Dict['FirmData']['conm'].isin(list(PreProcess_EST_Data_Dict['RequestData']['firmID'].unique()))].to_csv(params_dict["firmDataFile"], sep=';', header=False, index=False, line_terminator="\n")
-        PreProcess_EST_Data_Dict['MarketData'][PreProcess_EST_Data_Dict['MarketData']['conm'].isin(list(PreProcess_EST_Data_Dict['RequestData']['marketID'].unique()))].to_csv(params_dict["marketDataFile"], sep=';', header=False, index=False, line_terminator="\n")
+        firmID_match_tmp = list(PreProcess_EST_obj['FirmData']['conm'][PreProcess_EST_obj['FirmData']['conm'].isin(list(PreProcess_EST_obj_rq_tmp['firmID'].unique()))].unique())
+        marketID_match_tmp = list(PreProcess_EST_obj['MarketData']['conm'][PreProcess_EST_obj['MarketData']['conm'].isin(list(PreProcess_EST_obj_rq_tmp['marketID'].unique()))].unique())
+
+        PreProcess_EST_obj['FirmData'][PreProcess_EST_obj['FirmData']['conm'].isin(firmID_match_tmp)].to_csv(params_dict["firmDataFile"], sep=';', header=False, index=False, line_terminator="\n")
+        PreProcess_EST_obj['MarketData'][PreProcess_EST_obj['MarketData']['conm'].isin(marketID_match_tmp)].to_csv(params_dict["marketDataFile"], sep=';', header=False, index=False, line_terminator="\n")
 
 
-        print("Running R Event Study Tools API")
-        est_api_wrapper = ro.r('''
-            
-       
-            
-            if (!require("EventStudy")) {
-              if (!require("devtools")) {
-              install.packages("devtools")
+        #nmake request file that we have firm data for
+        PreProcess_EST_obj_rq_tmp[(PreProcess_EST_obj_rq_tmp["firmID"].isin(firmID_match_tmp)) & (PreProcess_EST_obj_rq_tmp["marketID"].isin(marketID_match_tmp)) ].to_csv(params_dict["requestFile"], sep=';', header=False, index=False,line_terminator="\n")
+
+        if run_R:
+            print("Running R Event Study Tools API")
+            est_api_wrapper = ro.r('''
+                
+           
+                
+                if (!require("EventStudy")) {
+                  if (!require("devtools")) {
+                  install.packages("devtools")
+                    }
+                    devtools::install_github("EventStudyTools/api-wrapper.r")
                 }
-                devtools::install_github("EventStudyTools/api-wrapper.r")
-            }
-            
-            library(EventStudy)
-            
-            setwd("'''+ os.getcwd() +'''")
-            
-            apiUrl <- "'''+ params_dict["apiUrl"] +'''"
-            
-            apiKey <- "'''+ params_dict["apiKey"] + '''"
-            
-            
-            estAPIKey(apiKey)
-            estSetup <- EventStudyAPI$new(apiUrl)
-            
-            arcParams <- ARCApplicationInput$new()
-            arcParams$setResultFileType("'''+ params_dict["ResultFileType"] + '''")
-            arcParams$setReturnType("'''+ params_dict["ReturnType"] + '''")
-            arcParams$setNonTradingDays("'''+ params_dict["NonTradingDays"] + '''")
-            arcParams$setBenchmarkModel("'''+ params_dict["BenchmarkModel"] + '''")    
-            
-            #mm (default): Market Model
-            #mm-sw: Scholes/Williams Model
-            #cpmam: Comparison Period Mean Adjusted
-            #ff3fm: Fama-French 3 Factor Model
-            #ffm4fm: Fama-French-Momentum 4 Factor Model
-            #garch: GARCH (1, 1) Model
-            #egarch: EGARCH (1, 1) Model
-    
-            estSetup$authentication(apiKey)
-            estSetup$performEventStudy(estParams = arcParams,
-                               dataFiles = c("request_file" = "'''+ params_dict["requestFile"] + '''",
-                                             "firm_data" = "'''+ params_dict["firmDataFile"] + '''",
-                                             "market_data" = "'''+ params_dict["marketDataFile"] + '''"),
-                               downloadFiles = T)
-                        
-    ''')
-        print("Reading in Results from API to PY DataFrame")
-        estAnalysisReport_tmp = pd.read_csv("./results/analysis_report.csv", sep = ';')
-        estARresults_tmp = pd.read_csv("./results/ar_results.csv", sep=';')
-        estAARresults_tmp = pd.read_csv("./results/aar_results.csv", sep = ';')
-        estCARresults_tmp = pd.read_csv("./results/car_results.csv", sep = ';')
-        estCAARresults_tmp = pd.read_csv("./results/caar_results.csv", sep = ';')
-
-        print("Appending to Results Object")
-        estAnalysisReport =  pd.concat([estAnalysisReport, estAnalysisReport_tmp])
-        estARresults = pd.concat([estARresults, estARresults_tmp])
-        estAARresults = pd.concat([estAARresults, estAARresults_tmp])
-        estCARresults = pd.concat([estCARresults, estCARresults_tmp])
-        estCAARresults = pd.concat([estCAARresults,estCAARresults_tmp])
+                
+                library(EventStudy)
+                
+                setwd("'''+ os.getcwd() +'''")
+                
+                apiUrl <- "'''+ params_dict["apiUrl"] +'''"
+                
+                apiKey <- "'''+ params_dict["apiKey"] + '''"
+                
+                
+                estAPIKey(apiKey)
+                estSetup <- EventStudyAPI$new(apiUrl)
+                
+                arcParams <- ARCApplicationInput$new()
+                arcParams$setResultFileType("'''+ params_dict["ResultFileType"] + '''")
+                arcParams$setReturnType("'''+ params_dict["ReturnType"] + '''")
+                arcParams$setNonTradingDays("'''+ params_dict["NonTradingDays"] + '''")
+                arcParams$setBenchmarkModel("'''+ params_dict["BenchmarkModel"] + '''")    
+                
+                #mm (default): Market Model
+                #mm-sw: Scholes/Williams Model
+                #cpmam: Comparison Period Mean Adjusted
+                #ff3fm: Fama-French 3 Factor Model
+                #ffm4fm: Fama-French-Momentum 4 Factor Model
+                #garch: GARCH (1, 1) Model
+                #egarch: EGARCH (1, 1) Model
+        
+                estSetup$authentication(apiKey)
+                estSetup$performEventStudy(estParams = arcParams,
+                                   dataFiles = c("request_file" = "'''+ params_dict["requestFile"] + '''",
+                                                 "firm_data" = "'''+ params_dict["firmDataFile"] + '''",
+                                                 "market_data" = "'''+ params_dict["marketDataFile"] + '''"),
+                                   downloadFiles = T)
+                            
+        ''')
 
 
+            print("Reading in Results from API to PY DataFrame")
+            estAnalysisReport_tmp = pd.read_csv("./results/analysis_report.csv", sep = ';')
+            estAnalysisReport_tmp['dup_stream_num'] = dup_num
+            estARresults_tmp = pd.read_csv("./results/ar_results.csv", sep=';')
+            estARresults_tmp['dup_stream_num'] = dup_num
+            estAARresults_tmp = pd.read_csv("./results/aar_results.csv", sep = ';')
+            estAARresults_tmp['dup_stream_num'] = dup_num
+            estCARresults_tmp = pd.read_csv("./results/car_results.csv", sep = ';')
+            estCARresults_tmp['dup_stream_num'] = dup_num
+            estCAARresults_tmp = pd.read_csv("./results/caar_results.csv", sep = ';')
+            estCAARresults_tmp['dup_stream_num'] = dup_num
 
-
-
+            print("Appending to Results Object")
+            estAnalysisReport =  pd.concat([estAnalysisReport, estAnalysisReport_tmp])
+            estARresults = pd.concat([estARresults, estARresults_tmp])
+            estAARresults = pd.concat([estAARresults, estAARresults_tmp])
+            estCARresults = pd.concat([estCARresults, estCARresults_tmp])
+            estCAARresults = pd.concat([estCAARresults,estCAARresults_tmp])
 
     return{'AnalysisReport':estAnalysisReport, 'AR_Results': estARresults, 'AAR_Results': estAARresults, 'CAR_Results': estCARresults, "CAAR_Results": estCAARresults}
 
