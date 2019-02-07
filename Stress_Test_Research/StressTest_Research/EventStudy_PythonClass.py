@@ -33,17 +33,19 @@
     #D. IBES Recommendations
     #E. Options Spreads
 
+
+
+#TODO: Phase 5: Event Study Analysis ---In Progress
+
+#TODO: Phase 6: Cluster Analysis
+
 #TODO: Phase 4: Banking Characteristics Acquisition
     #Capital Ratios
     #PPNR componets
     #Shadow Banking Elements
     #FR-14 elements?
 
-#TODO: Phase 5: Event Study Analysis
-
-#TODO: Phase 6: Cluster Analysis
-
-#TODO: Phase 7: Scenario Based Balance Sheet Projections
+    #TODO: Phase 7: Scenario Based Balance Sheet Projections
 
 #TODO: Phase 8: Results Analysis.
 
@@ -66,6 +68,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 pandas2ri.activate()
+
 
 #%load_ext rpy2.ipython
 
@@ -1286,75 +1289,6 @@ def get_idx_prices(world_idx_names, events_cleaned, RunWrdsAPI=True, region=True
         return (qry_results_str)
 
 
-#Workspace
-
-
-
-# Webs ETF Index incorporate Webs Index
-# Fd 17 Countries for Equirty Benchmark
-# iShares
-
-
-
-
-
-#Insertition Point
-#TODO: Review all methods and put into a Class Libary so a DataFrame can be called from the object.
-
-
-#events = []
-#Run WebScrapers
-
-#Get Events from websites
-    #events = getevents_data()
-    #Export the raw event file
-    #events.to_csv("events.csv",sep = ",")
-
-#Get UN Country Codes.
-#From UN Website
-    #event_CountryCodes = get_CountryCodes()
-    #event_CountryCodes.to_csv("event_CountryCodes.csv",sep = ",")
-
-
-
-
-
-#Import events file
-#events = pd.read_csv("events.csv")
-#event_CountryCodes = pd.read_csv("event_CountryCodes.csv")
-#events_cleaned = events_normalize_annctype(events)
-#events_cleaned = DeAgg_Events_Union(events_cleaned = events_cleaned, CombineFrame = True)
-#events_cleaned = normalize_events_CountryCodes_UN(events_cleaned,event_CountryCodes)
-
-#Get World Regions and attach to the events.
-#events_cleaned_df_regions = get_country_regions(events_cleaned)
-#events_cleaned_df_regions.to_csv("events_regions_df.csv", sep = ",")
-
-events_cleaned_df_regions = pd.read_csv("events_regions_df.csv")
-
-#Get all the indices names
-#event_index_names_df = get_idx_names(events_cleaned_df_regions)
-#event_index_names_df.to_csv("event_index_names_df.csv", sep = ",")
-event_index_names_df = pd.read_csv("event_index_names_df.csv")
-
-
-#Get index prices monthly and daily.
-#Daily
-#event_idx_prices = get_idx_prices(event_index_names_df,events_cleaned_df_regions)
-#event_idx_prices.to_csv("regional_country_sector_idx_prices.csv", sep = ",")
-event_idx_prices = pd.read_csv("regional_country_sector_idx_prices.csv")
-
-
-
-#Event Study
-
-
-
-
-
-
-
-
 
 #Make Function that can subset properly by iterating over object until all conditions are applied
 
@@ -1443,28 +1377,13 @@ def EST_Event_Generator(events_cleaned_df_regions,event_index_names_inprices_df)
     return(Request_File)
 
 
-#instead of loops, maybe merges are more appropirate.
-
-#EST_Events_Raw = EST_Event_Generator(events_cleaned_df_regions,event_index_names_inprices_df)
-
-#EST_Events_Raw.to_csv("EST_Events_Raw.csv", sep = ",")
-
-EST_Events_Raw = pd.read_csv("EST_Events_Raw.csv")
-
-
-
-
-#Correct Data Structures
-
-
-
-
 
 
 def EST_File_Generator(EST_Events_Raw, event_idx_prices, event_index_names_df,
                         EstSubset = { "subset_columns" : [["annctype","global_idx","regional_idx","regioncode_x"]],
-                                        "firmID": "regional_idx",
-                                      "marketID":"global_idx"
+                                        "firmID": ["regional_idx"],
+                                      "marketID":["global_idx"],
+                                      "grouping_var": [["annctype","source","regioncode_x"]]
                                     },
                         EstParams = {"start_ev_win": [-10],
                                      "end_ev_win" : [5],
@@ -1484,7 +1403,9 @@ def EST_File_Generator(EST_Events_Raw, event_idx_prices, event_index_names_df,
     print("Setting Event Subset Rule")
     tmp_subset_df = pd.DataFrame.from_dict(EstSubset)
 
-    tmp_rules = pd.concat([tmp_param_df,tmp_subset_df], axis = 1)
+    #May not need to combine rules and params together.
+    tmp_rules = tmp_subset_df
+        #pd.concat([tmp_param_df,tmp_subset_df], axis = 1)
 
     print("Initializng Request File")
     Request_File_df = pd.DataFrame()
@@ -1496,20 +1417,22 @@ def EST_File_Generator(EST_Events_Raw, event_idx_prices, event_index_names_df,
 
 
         print("Generating Grouping Variable and attached Params")
-        tmp_evt_subset_obj["GroupingVar"] = tmp_evt_subset_obj[tmp_rules.iloc[row,tmp_rules.columns.get_loc("subset_columns")]].apply(lambda x : "_".join(x), axis = 1)
+        tmp_evt_subset_obj["GroupingVar"] = tmp_evt_subset_obj[tmp_rules.iloc[row,tmp_rules.columns.get_loc("grouping_var")]].apply(lambda x : "_".join(x), axis = 1)
         tmp_evt_subset_obj["GroupingType"] = "_+_".join(tmp_rules.iloc[row,tmp_rules.columns.get_loc("subset_columns")])
 
         print("Dimensions of Object")
         print(tmp_evt_subset_obj.shape)
 
 
-        print("Applying Params")
-        for param in list(EstParams.keys()):
-            tmp_evt_subset_obj[param]= tmp_rules.loc[row,param]
+        #TODO: Needs correction to apply parameters to whole dataframe, add params to dataframe, get number of rows then add the params to dataframe.
+        #May need to be added afterwards
+#        print("Applying Params")
+#        for param in list(EstParams.keys()):
+#            tmp_evt_subset_obj[param]= tmp_rules.loc[row,param]
 
         print("Applying EST Request File formatting")
 
-        request_headers = ["Event ID", EstSubset["firmID"],EstSubset["marketID"],"date","GroupingVar","GroupingType"] + (list(EstParams.keys()))
+        request_headers = ["Event ID", tmp_rules.iloc[row, tmp_rules.columns.get_loc("firmID")], tmp_rules.iloc[row, tmp_rules.columns.get_loc("marketID")] ,"date","GroupingVar","GroupingType"] # + (list(EstParams.keys()))
 
 
 
@@ -1518,10 +1441,10 @@ def EST_File_Generator(EST_Events_Raw, event_idx_prices, event_index_names_df,
         tmp_evt_subset_obj['date'] = pd.to_datetime(pd.to_datetime(tmp_evt_subset_obj['date']).dt.date).dt.strftime(
             "%d.%m.%Y")
         print("Sorting Results")
-        tmp_evt_subset_obj = tmp_evt_subset_obj.sort_values(["date", "Event ID","GroupingVar", EstSubset["firmID"], EstSubset["marketID"]])
+        tmp_evt_subset_obj = tmp_evt_subset_obj.sort_values(["date", "Event ID","GroupingVar", tmp_rules.iloc[row, tmp_rules.columns.get_loc("firmID")],tmp_rules.iloc[row, tmp_rules.columns.get_loc("marketID")]])
 
         print("Renaming Columns")
-        tmp_evt_subset_obj = tmp_evt_subset_obj.rename({ EstSubset["firmID"] : 'firmID', EstSubset["marketID"] : "marketID"}, axis = 1)
+        tmp_evt_subset_obj = tmp_evt_subset_obj.rename({ tmp_rules.iloc[row, tmp_rules.columns.get_loc("firmID")] : 'firmID', tmp_rules.iloc[row, tmp_rules.columns.get_loc("marketID")] : "marketID"}, axis = 1)
 
         print("Removing Exact Matches with Firm and Market IDs or Nans in Firm ID")
         tmp_evt_subset_obj = tmp_evt_subset_obj[tmp_evt_subset_obj["firmID"] != tmp_evt_subset_obj["marketID"]]
@@ -1529,11 +1452,28 @@ def EST_File_Generator(EST_Events_Raw, event_idx_prices, event_index_names_df,
         tmp_evt_subset_obj = tmp_evt_subset_obj[tmp_evt_subset_obj["firmID"] != "nan"]
 
 
+        print("Applying Params")
+
+        #print("Repeat the rows the length of the country list")
+        tmp_evt_subset_obj_final = pd.DataFrame()
+        for param_cnt in  range(tmp_param_df.shape[0]):
+            tmp_obj = tmp_evt_subset_obj
+            for param in tmp_param_df.columns:
+                tmp_obj[param] = tmp_param_df.loc[param_cnt, param]
+            tmp_evt_subset_obj_final = pd.concat([tmp_evt_subset_obj_final,tmp_obj])
+            # print("Applying Country names to Deaggregated Rows")
+
+
+
+
+
+
         print("Appending Subset to Request DataFrame")
-        Request_File_df = pd.concat([Request_File_df,tmp_evt_subset_obj])
+        Request_File_df = pd.concat([Request_File_df,tmp_evt_subset_obj_final])
 
 
     print("Applying Sequential Numbering for Event ID duplicate but different Firm and Market Streams")
+    Request_File_df = Request_File_df.reset_index(drop=True)
     Request_File_df["dup_stream_num"] = Request_File_df.sort_values(['Event ID','firmID','marketID']).groupby(['Event ID']).cumcount() + 1
 
     Request_File_df = Request_File_df.sort_values(["Event ID", "firmID","dup_stream_num"]).reset_index(drop=True)
@@ -1558,118 +1498,107 @@ def EST_File_Generator(EST_Events_Raw, event_idx_prices, event_index_names_df,
 
     return{'RequestData': Request_File_df, 'FirmData': FirmData_File_df,'MarketData': MarketData_df}
 
-
-#Need to number the Duplicated Event IDs ******DONE
-#Need to add the data for subsetting **********DONE
-#Drop where FirmID and Market ID are the same **************DONE
-#may have to consider the Nan value variations *********** DONE
-#Generate the Firm Data and Market Data files as well as Request File.************** DONE
-
-
-#Pass through to API in R
-#Retrieve Results and combine into Dataset for analysis
-
-
-
-
-PreProcess_EST_Data_Dict   = EST_File_Generator(EST_Events_Raw,event_idx_prices,event_index_names_df)
-
-PreProcess_EST_Data_Dict['RequestData'].head()
-
-test2 = EST_R_API_Wrapper(PreProcess_EST_Data_Dict, run_R = True)
-
+#Update to append results to file incase error or interruption.
+#May need to include a try catch
 def EST_R_API_Wrapper(PreProcess_EST_obj,
-                      params_dict = {
-                         'workingdir' : '.',
-                         'apiKey' : '573e58c665fcc08cc6e5a660beaad0cb',
-                          'apiUrl' :  "http://api.eventstudytools.com",
-                          'ResultFileType':'csv',
-                          'ReturnType':'log',
-                          'NonTradingDays':'earlier',
-                          'BenchmarkModel':'mm',
-                          'resultPath' : './results/',
+                      params_dict={
+                          'workingdir': '.',
+                          'apiKey': '573e58c665fcc08cc6e5a660beaad0cb',
+                          'apiUrl': "http://api.eventstudytools.com",
+                          'ResultFileType': 'csv',
+                          'ReturnType': 'log',
+                          'NonTradingDays': 'earlier',
+                          'BenchmarkModel': 'mm',
+                          'resultPath': './results/',
                           'requestFile': '01_RequestFile_df.csv',
                           'firmDataFile': '02_FirmData_df.csv',
-                          'marketDataFile': '03_MarketData_df.csv' },
-                      run_R = True):
-
+                          'marketDataFile': '03_MarketData_df.csv'},
+                      run_R=True):
     print("Starting EST API Steps")
 
     print("Setting Working Directory")
     workdir = os.chdir(params_dict['workingdir'])
     print(os.getcwd())
 
-
     print("Generating CSV Files for R API EST")
 
-    #May have to loop through he duplicates.
-    #PreProcess_EST_obj_bk = PreProcess_EST_obj
+    # May have to loop through he duplicates.
+    # PreProcess_EST_obj_bk = PreProcess_EST_obj
     # PreProcess_EST_obj = PreProcess_EST_obj_bk
 
-
-
     print("Initializing Results Objects")
-    estAnalysisReport  = pd.DataFrame()
+    estAnalysisReport = pd.DataFrame()
     estARresults = pd.DataFrame()
     estAARresults = pd.DataFrame()
     estCARresults = pd.DataFrame()
     estCAARresults = pd.DataFrame()
 
-#    PreProcess_EST_obj = PreProcess_EST_Data_Dict
-#    dup_num = 1
-    for dup_num in range(1,PreProcess_EST_obj["RequestData"]["dup_stream_num"].max()):
-        print("dup_num_stream:", dup_num )
-        PreProcess_EST_obj_rq_tmp =  PreProcess_EST_obj["RequestData"][PreProcess_EST_obj["RequestData"]["dup_stream_num"] == dup_num][["Event ID", "firmID","marketID", "date","GroupingVar","start_ev_win","end_ev_win","end_est_win","est_win_len"]]
-        print("Firm IDs:",PreProcess_EST_obj_rq_tmp.firmID.unique())
+    #    PreProcess_EST_obj = PreProcess_EST_Data_Dict
+    #    dup_num = 1
+    for dup_num in range(1, PreProcess_EST_obj["RequestData"]["dup_stream_num"].max()):
+        print("dup_num_stream:", dup_num)
+        PreProcess_EST_obj_rq_tmp = \
+        PreProcess_EST_obj["RequestData"][PreProcess_EST_obj["RequestData"]["dup_stream_num"] == dup_num][
+            ["Event ID", "firmID", "marketID", "date", "GroupingVar", "start_ev_win", "end_ev_win", "end_est_win",
+             "est_win_len"]]
+        print("Firm IDs:", PreProcess_EST_obj_rq_tmp.firmID.unique())
         print("Market IDs:", PreProcess_EST_obj_rq_tmp.marketID.unique())
-# Add Dup Stream tag to results
-#        PreProcess_EST_obj_rq_tmp["GroupingVar"] = PreProcess_EST_obj["RequestData"]["GroupingVar"].apply(lambda x : x + "_" + str(dup_num))
-        PreProcess_EST_obj_rq_tmp["GroupingVar"] = PreProcess_EST_obj_rq_tmp["GroupingVar"].apply(lambda x:  "_".join(str.split(x,'_')[0:1] + [str.split(x,'_')[3]]))
-        #PreProcess_EST_obj_rq_tmp["GroupingVar"] = "test"
-        #PreProcess_EST_obj["RequestData"]["Event ID"] = PreProcess_EST_obj["RequestData"]["Event ID"] + 1
+        # Add Dup Stream tag to results
+        #        PreProcess_EST_obj_rq_tmp["GroupingVar"] = PreProcess_EST_obj["RequestData"]["GroupingVar"].apply(lambda x : x + "_" + str(dup_num))
+        #PreProcess_EST_obj_rq_tmp["GroupingVar"] = PreProcess_EST_obj_rq_tmp["GroupingVar"].apply(
+        #    lambda x: "_".join(str.split(x, '_')[0:1] + [str.split(x, '_')[3]]))
+        # PreProcess_EST_obj_rq_tmp["GroupingVar"] = "test"
+        # PreProcess_EST_obj["RequestData"]["Event ID"] = PreProcess_EST_obj["RequestData"]["Event ID"] + 1
 
         print("Creating CSV files to pass to R API")
-        firmID_match_tmp = list(PreProcess_EST_obj['FirmData']['conm'][PreProcess_EST_obj['FirmData']['conm'].isin(list(PreProcess_EST_obj_rq_tmp['firmID'].unique()))].unique())
-        marketID_match_tmp = list(PreProcess_EST_obj['MarketData']['conm'][PreProcess_EST_obj['MarketData']['conm'].isin(list(PreProcess_EST_obj_rq_tmp['marketID'].unique()))].unique())
+        firmID_match_tmp = list(PreProcess_EST_obj['FirmData']['conm'][PreProcess_EST_obj['FirmData']['conm'].isin(
+            list(PreProcess_EST_obj_rq_tmp['firmID'].unique()))].unique())
+        marketID_match_tmp = list(PreProcess_EST_obj['MarketData']['conm'][
+                                      PreProcess_EST_obj['MarketData']['conm'].isin(
+                                          list(PreProcess_EST_obj_rq_tmp['marketID'].unique()))].unique())
 
-        PreProcess_EST_obj['FirmData'][PreProcess_EST_obj['FirmData']['conm'].isin(firmID_match_tmp)].to_csv(params_dict["firmDataFile"], sep=';', header=False, index=False, line_terminator="\n")
-        PreProcess_EST_obj['MarketData'][PreProcess_EST_obj['MarketData']['conm'].isin(marketID_match_tmp)].to_csv(params_dict["marketDataFile"], sep=';', header=False, index=False, line_terminator="\n")
+        PreProcess_EST_obj['FirmData'][PreProcess_EST_obj['FirmData']['conm'].isin(firmID_match_tmp)].to_csv(
+            params_dict["firmDataFile"], sep=';', header=False, index=False, line_terminator="\n")
+        PreProcess_EST_obj['MarketData'][PreProcess_EST_obj['MarketData']['conm'].isin(marketID_match_tmp)].to_csv(
+            params_dict["marketDataFile"], sep=';', header=False, index=False, line_terminator="\n")
 
-
-        #nmake request file that we have firm data for
-        PreProcess_EST_obj_rq_tmp[(PreProcess_EST_obj_rq_tmp["firmID"].isin(firmID_match_tmp)) & (PreProcess_EST_obj_rq_tmp["marketID"].isin(marketID_match_tmp)) ].to_csv(params_dict["requestFile"], sep=';', header=False, index=False,line_terminator="\n")
+        # nmake request file that we have firm data for
+        PreProcess_EST_obj_rq_tmp[(PreProcess_EST_obj_rq_tmp["firmID"].isin(firmID_match_tmp)) & (
+            PreProcess_EST_obj_rq_tmp["marketID"].isin(marketID_match_tmp))].to_csv(params_dict["requestFile"], sep=';',
+                                                                                    header=False, index=False,
+                                                                                    line_terminator="\n")
 
         if run_R:
             print("Running R Event Study Tools API")
             est_api_wrapper = ro.r('''
-                
-           
-                
+
+
+
                 if (!require("EventStudy")) {
                   if (!require("devtools")) {
                   install.packages("devtools")
                     }
                     devtools::install_github("EventStudyTools/api-wrapper.r")
                 }
-                
+
                 library(EventStudy)
-                
-                setwd("'''+ os.getcwd() +'''")
-                
-                apiUrl <- "'''+ params_dict["apiUrl"] +'''"
-                
-                apiKey <- "'''+ params_dict["apiKey"] + '''"
-                
-                
+
+                setwd("''' + os.getcwd() + '''")
+
+                apiUrl <- "''' + params_dict["apiUrl"] + '''"
+
+                apiKey <- "''' + params_dict["apiKey"] + '''"
+
+
                 estAPIKey(apiKey)
                 estSetup <- EventStudyAPI$new(apiUrl)
-                
+
                 arcParams <- ARCApplicationInput$new()
-                arcParams$setResultFileType("'''+ params_dict["ResultFileType"] + '''")
-                arcParams$setReturnType("'''+ params_dict["ReturnType"] + '''")
-                arcParams$setNonTradingDays("'''+ params_dict["NonTradingDays"] + '''")
-                arcParams$setBenchmarkModel("'''+ params_dict["BenchmarkModel"] + '''")    
-                
+                arcParams$setResultFileType("''' + params_dict["ResultFileType"] + '''")
+                arcParams$setReturnType("''' + params_dict["ReturnType"] + '''")
+                arcParams$setNonTradingDays("''' + params_dict["NonTradingDays"] + '''")
+                arcParams$setBenchmarkModel("''' + params_dict["BenchmarkModel"] + '''")    
+
                 #mm (default): Market Model
                 #mm-sw: Scholes/Williams Model
                 #cpmam: Comparison Period Mean Adjusted
@@ -1677,39 +1606,96 @@ def EST_R_API_Wrapper(PreProcess_EST_obj,
                 #ffm4fm: Fama-French-Momentum 4 Factor Model
                 #garch: GARCH (1, 1) Model
                 #egarch: EGARCH (1, 1) Model
-        
+
                 estSetup$authentication(apiKey)
                 estSetup$performEventStudy(estParams = arcParams,
-                                   dataFiles = c("request_file" = "'''+ params_dict["requestFile"] + '''",
-                                                 "firm_data" = "'''+ params_dict["firmDataFile"] + '''",
-                                                 "market_data" = "'''+ params_dict["marketDataFile"] + '''"),
+                                   dataFiles = c("request_file" = "''' + params_dict["requestFile"] + '''",
+                                                 "firm_data" = "''' + params_dict["firmDataFile"] + '''",
+                                                 "market_data" = "''' + params_dict["marketDataFile"] + '''"),
                                    downloadFiles = T)
-                            
+
         ''')
 
-
             print("Reading in Results from API to PY DataFrame")
-            estAnalysisReport_tmp = pd.read_csv("./results/analysis_report.csv", sep = ';')
+            estAnalysisReport_tmp = pd.read_csv("./results/analysis_report.csv", sep=';')
             estAnalysisReport_tmp['dup_stream_num'] = dup_num
             estARresults_tmp = pd.read_csv("./results/ar_results.csv", sep=';')
             estARresults_tmp['dup_stream_num'] = dup_num
-            estAARresults_tmp = pd.read_csv("./results/aar_results.csv", sep = ';')
+            estAARresults_tmp = pd.read_csv("./results/aar_results.csv", sep=';')
             estAARresults_tmp['dup_stream_num'] = dup_num
-            estCARresults_tmp = pd.read_csv("./results/car_results.csv", sep = ';')
+            estCARresults_tmp = pd.read_csv("./results/car_results.csv", sep=';')
             estCARresults_tmp['dup_stream_num'] = dup_num
-            estCAARresults_tmp = pd.read_csv("./results/caar_results.csv", sep = ';')
+            estCAARresults_tmp = pd.read_csv("./results/caar_results.csv", sep=';')
             estCAARresults_tmp['dup_stream_num'] = dup_num
 
             print("Appending to Results Object")
-            estAnalysisReport =  pd.concat([estAnalysisReport, estAnalysisReport_tmp])
+            estAnalysisReport = pd.concat([estAnalysisReport, estAnalysisReport_tmp])
             estARresults = pd.concat([estARresults, estARresults_tmp])
             estAARresults = pd.concat([estAARresults, estAARresults_tmp])
             estCARresults = pd.concat([estCARresults, estCARresults_tmp])
-            estCAARresults = pd.concat([estCAARresults,estCAARresults_tmp])
+            estCAARresults = pd.concat([estCAARresults, estCAARresults_tmp])
 
-    return{'AnalysisReport':estAnalysisReport, 'AR_Results': estARresults, 'AAR_Results': estAARresults, 'CAR_Results': estCARresults, "CAAR_Results": estCAARresults}
+            print("Saving Results to File")
+            estAnalysisReport.to_csv("estAnalysisReport.csv", sep = ',')
+            estARresults.to_csv("estARresults.csv", sep=',')
+            estAARresults.to_csv("estAARresults.csv", sep=',')
+            estCARresults.to_csv("estCARresults.csv", sep=',')
+            estCAARresults.to_csv("estCAARresults.csv", sep=',')
+
+    return {'AnalysisReport': estAnalysisReport, 'AR_Results': estARresults, 'AAR_Results': estAARresults,
+            'CAR_Results': estCARresults, "CAAR_Results": estCAARresults}
 
 
+
+
+
+#Have to make different Dicts for each level (region:global, country:region,sector:country)
+PreProcess_EST_Data_Dict   = EST_File_Generator(EST_Events_Raw,event_idx_prices,event_index_names_df,
+                            EstSubset = { "subset_columns" : [["annctype","global_idx","regional_idx","regioncode_x"],
+                                                              ["annctype","regional_idx","ISO3","country_idx"],
+                                                              ["annctype", "ISO3", "country_idx","sector_idx"]],
+                                        "firmID": ["regional_idx","country_idx","sector_idx"],
+                                      "marketID":["global_idx","regional_idx","country_idx"],
+                                      "grouping_var": [["annctype","source","regioncode_x"],
+                                                        ["annctype","source","country","regioncode_x"],
+                                                        ["annctype","source","country","sector_idx"]
+                                                       ]
+                                    },
+                            EstParams = {"start_ev_win": [-2,-5],
+                                     "end_ev_win" : [2,5],
+                                     "end_est_win" : [-5,-10],
+                                     "est_win_len" : [120,250]} )
+
+
+
+PreProcess_EST_Data_Dict["RequestData"].head()
+
+
+EST_Results = EST_R_API_Wrapper(PreProcess_EST_Data_Dict, run_R = True,
+                                params_dict={
+                                    'workingdir': '.',
+                                    'apiKey': '573e58c665fcc08cc6e5a660beaad0cb',
+                                    'apiUrl': "http://api.eventstudytools.com",
+                                    'ResultFileType': 'csv',
+                                    'ReturnType': 'log',
+                                    'NonTradingDays': 'earlier',
+                                    'BenchmarkModel': 'mm',
+                                    'resultPath': './results/',
+                                    'requestFile': '01_RequestFile_df.csv',
+                                    'firmDataFile': '02_FirmData_df.csv',
+                                    'marketDataFile': '03_MarketData_df.csv'}
+                                )
+
+
+
+
+analysis = EST_Results['AnalysisReport']
+ar = EST_Results['AR_Results']
+aar = EST_Results['AAR_Results']
+car = EST_Results['CAR_Results']
+caar = EST_Results['CAAR_Results']
+
+car.shape
 
 
 
@@ -1722,6 +1708,88 @@ def EST_R_API_Wrapper(PreProcess_EST_obj,
 
 #Participant Level
 #Will need to make a list of banks in US, Euro, and Asia that are relevant and get their market data.
+
+
+
+#Workspace
+
+
+
+
+
+
+
+#Insertition Point
+#TODO: Review all methods and put into a Class Libary so a DataFrame can be called from the object.
+
+
+#events = []
+#Run WebScrapers
+
+#Get Events from websites
+    #events = getevents_data()
+    #Export the raw event file
+    #events.to_csv("events.csv",sep = ",")
+
+#Get UN Country Codes.
+#From UN Website
+    #event_CountryCodes = get_CountryCodes()
+    #event_CountryCodes.to_csv("event_CountryCodes.csv",sep = ",")
+
+
+
+
+
+#Import events file
+#events = pd.read_csv("events.csv")
+#event_CountryCodes = pd.read_csv("event_CountryCodes.csv")
+#events_cleaned = events_normalize_annctype(events)
+#events_cleaned = DeAgg_Events_Union(events_cleaned = events_cleaned, CombineFrame = True)
+#events_cleaned = normalize_events_CountryCodes_UN(events_cleaned,event_CountryCodes)
+
+#Get World Regions and attach to the events.
+#events_cleaned_df_regions = get_country_regions(events_cleaned)
+#events_cleaned_df_regions.to_csv("events_regions_df.csv", sep = ",")
+
+events_cleaned_df_regions = pd.read_csv("events_regions_df.csv")
+
+#Get all the indices names
+#event_index_names_df = get_idx_names(events_cleaned_df_regions)
+#event_index_names_df.to_csv("event_index_names_df.csv", sep = ",")
+event_index_names_df = pd.read_csv("event_index_names_df.csv")
+
+
+#Get index prices monthly and daily.
+#Daily
+#event_idx_prices = get_idx_prices(event_index_names_df,events_cleaned_df_regions)
+#event_idx_prices.to_csv("regional_country_sector_idx_prices.csv", sep = ",")
+
+
+
+event_idx_prices = pd.read_csv("regional_country_sector_idx_prices.csv")
+
+#Get only the index names that exist in the prices file.
+#event_index_names_inprices_df = event_index_names_df[event_index_names_df['gvkeyx'].isin(list(event_idx_prices['gvkeyx'].unique()))]
+#event_index_names_inprices_df.to_csv("event_index_names_inprices_df.csv", sep = ",")
+event_index_names_inprices_df = pd.read_csv("event_index_names_inprices_df.csv")
+
+#Event Study
+
+#EST_Events_Raw = EST_Event_Generator(events_cleaned_df_regions,event_index_names_df)
+
+#EST_Events_Raw.to_csv("EST_Events_Raw.csv", sep = ",")
+EST_Events_Raw = pd.read_csv("EST_Events_Raw.csv")
+
+
+
+
+
+
+
+
+
+
+
 
 
 
