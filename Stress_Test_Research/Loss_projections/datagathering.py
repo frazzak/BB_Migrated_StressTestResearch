@@ -36,17 +36,6 @@ class StressTestData():
 
 
     def Z_macro_process(self, filetype = ".csv"):
-        #print("Initializing Raw Data Frame Dict")
-        #Z_macro_raw_data_dict = {}
-        #print("Searching path for Z_Macro:", self.Z_macro_dir)
-        #for dirName, subdirList, fileList in os.walk(self.Z_macro_dir):
-        #    print('Found directory: %s' % dirName)
-        #        for fname in fileList:
-        #            if fname.endswith(filetype):
-        #                print("Reading File and Adding to Dataframe Dictionary")
-        #                print('\t%s' % fname)
-        #                exec('''Z_macro_raw_data_dict[fname.split(filetype)[0]] = pd.read_csv("'''+ os.path.join(self.Z_macro_dir,fname) + '''")''')
-        #                print("Updating Date Column to be Date type and handle Quarters.")
         Z_macro_raw_data_dict = self.file_dict_read(self.Z_macro_dir,filetype = ".csv")
 
         for k in Z_macro_raw_data_dict.keys():
@@ -57,10 +46,19 @@ class StressTestData():
 
         return(Z_macro_raw_data_dict)
 
-    def X_Y_bankingchar_perf_process(self,filetype = ".csv"):
+    def X_Y_bankingchar_perf_process(self,filetype = ".csv",
+                                     params_dict = {"Calc_df" : "NCO_PPNR_Loan_Calcs",
+                                                    "BankPerf_raw" : "WRDS_Covas_BankPerf",
+                                                    "MergerInfo " : "merger_info_frb"}
+                                     ):
+        BankCharPerf_raw_data_dict = self.file_dict_read(self.BankPerf_dir, filetype=".csv")
 
 
-        return("Banking Characterisitcs and Performance Indicators")
+        print("Preparing Calculated Fields")
+        BankCharPerf_raw_data_dict[params_dict["Calc_df"]]["VarList"] = BankPerf[params_dict["Calc_df"]]["Report: FR Y-9C"].astype(str).apply(
+                                                                    lambda x: x.replace("+", ",").replace("-", ",").replace("(", "").replace(")", "").replace(". . .","").replace(
+                                                                     ",  ,", ",").split(","))
+        return(BankCharPerf_raw_data_dict)
 
 
 
@@ -80,12 +78,15 @@ varpath_dict_args = {
 
 
 
-InputVars_ST = StressTestData(varpath_dict_args).Z_macro_process()
+Z_macro = StressTestData(varpath_dict_args).Z_macro_process()
 
-Z_macro = test["Historic_Domestic"]
-
-Z_macro.info()
+BankPerf = StressTestData(varpath_dict_args).X_Y_bankingchar_perf_process()
 
 
+BankPerf[params_dict["Calc_df"]]["VarList"] = BankPerf[params_dict["Calc_df"]]["Report: FR Y-9C"].astype(str).apply(lambda x :  x.replace("+",",").replace("-",",").replace("(","").replace(")","").replace(". . .", "").replace(",  ,",",").split(","))
 
-Z_macro[Z_macro["pdDate"] <= "2017"].describe().transpose()
+
+BankPerf[params_dict["Calc_df"]][["Variable","Report: FR Y-9C","VarList"]]
+
+
+BankPerf[params_dict["BankPerf_raw"]]
