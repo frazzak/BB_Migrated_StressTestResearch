@@ -53,14 +53,41 @@ class StressTestData():
                                      ):
         BankCharPerf_raw_data_dict = self.file_dict_read(self.BankPerf_dir, filetype=".csv")
 
+        print("Fixing Column Names with Errors")
 
         print("Preparing Calculated Fields")
-        BankCharPerf_raw_data_dict[params_dict["Calc_df"]]["VarList"] = BankPerf[params_dict["Calc_df"]]["Report: FR Y-9C"].astype(str).apply(
-                                                                    lambda x: x.replace("+", ",").replace("-", ",").replace("(", "").replace(")", "").replace(". . .","").replace(
-                                                                     ",  ,", ",").split(","))
+        print("Fixing Errors")
+        print("Fixing BHCK892 to BHCKC892")
+        print("Creating VARLIST Column")
+        BankCharPerf_raw_data_dict[params_dict["Calc_df"]]["VarList"] = BankPerf[params_dict["Calc_df"]]["Report: FR Y-9C"].astype(str).apply(lambda x : [i.strip() for i in  x.replace("BHCK892","BHCKC892").replace("+",",").replace("-",",").replace("(","").replace(")","").replace(". . .", "").replace(",  ,",",").split(",")])
+
+
+        BankCharPerf_raw_data_dict[params_dict["Calc_df"]]
+
+        print("Checking for Column name Discrepancy")
+        miss_col = self.check_missing_BHCCodes(BankCharPerf_raw_data_dict,params_dict)
+
+
+
         return(BankCharPerf_raw_data_dict)
 
+    def check_missing_BHCCodes(self, BankPerf, params_dict):
+        print("Creating List of all Variables from Regulatory and BankPerf dataframes.")
+        varlist_tmp = []
+        for i in range(BankPerf[params_dict["Calc_df"]]["VarList"].shape[0]):
+            # print(BankPerf[params_dict["Calc_df"]]["VarList"][i])
+            varlist_tmp = varlist_tmp + BankPerf[params_dict["Calc_df"]]["VarList"][i]
+            varlist_tmp = [x for x in varlist_tmp if x not in ['nan', ""]]
 
+        bankperf = list(BankPerf[params_dict["BankPerf_raw"]].columns)
+
+        mismatch_result = list(set(varlist_tmp) - set(bankperf))
+
+        if mismatch_result.__len__() > 0:
+            print("Columns not Matching from VarList to BankPerf Data:", mismatch_result)
+        else:
+            print("All Columns Exist in dataframes.")
+        return (mismatch_result)
 
 
 
@@ -83,10 +110,8 @@ Z_macro = StressTestData(varpath_dict_args).Z_macro_process()
 BankPerf = StressTestData(varpath_dict_args).X_Y_bankingchar_perf_process()
 
 
-BankPerf[params_dict["Calc_df"]]["VarList"] = BankPerf[params_dict["Calc_df"]]["Report: FR Y-9C"].astype(str).apply(lambda x :  x.replace("+",",").replace("-",",").replace("(","").replace(")","").replace(". . .", "").replace(",  ,",",").split(","))
 
 
-BankPerf[params_dict["Calc_df"]][["Variable","Report: FR Y-9C","VarList"]]
 
 
-BankPerf[params_dict["BankPerf_raw"]]
+
