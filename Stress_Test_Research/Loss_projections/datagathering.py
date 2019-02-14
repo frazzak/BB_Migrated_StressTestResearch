@@ -61,13 +61,15 @@ class StressTestData():
         print("Creating VARLIST Column")
         BankCharPerf_raw_data_dict[params_dict["Calc_df"]]["VarList"] = BankPerf[params_dict["Calc_df"]]["Report: FR Y-9C"].astype(str).apply(lambda x : [i.strip() for i in  x.replace("BHCK892","BHCKC892").replace("+",",").replace("-",",").replace("(","").replace(")","").replace(". . .", "").replace(",  ,",",").split(",")])
 
-
-        BankCharPerf_raw_data_dict[params_dict["Calc_df"]]
+        print("Additional Clean up for Varlist")
+        BankCharPerf_raw_data_dict[params_dict["Calc_df"]]["VarList"] =  BankCharPerf_raw_data_dict[params_dict["Calc_df"]]["VarList"].apply(lambda x: [i for i in x if i not in ["",np.nan,"nan"]])
 
         print("Checking for Column name Discrepancy")
         miss_col = self.check_missing_BHCCodes(BankCharPerf_raw_data_dict,params_dict)
 
-
+        print("Creating Derived Columns")
+        BankCharPerf_raw_data_dict[params_dict["Calc_df"]]
+        BankPerf[params_dict["Calc_df"]]["Report: FR Y-9C"]
 
         return(BankCharPerf_raw_data_dict)
 
@@ -89,8 +91,8 @@ class StressTestData():
             print("All Columns Exist in dataframes.")
         return (mismatch_result)
 
-
-
+    def create_calculated_fields(self, BankPerf_Raw_df, Calc_df):
+        return("Hello, Work In progress")
 
 
 
@@ -110,6 +112,51 @@ Z_macro = StressTestData(varpath_dict_args).Z_macro_process()
 BankPerf = StressTestData(varpath_dict_args).X_Y_bankingchar_perf_process()
 
 
+BankPerf[params_dict["Calc_df"]]["VarList"].apply(lambda x: [i for i in x if i not in ["",np.nan,"nan"]])
+
+BankPerf
+params_dict = {"Calc_df" : "NCO_PPNR_Loan_Calcs",
+                                                    "BankPerf_raw" : "WRDS_Covas_BankPerf",
+                                                    "MergerInfo " : "merger_info_frb"}
+def BHC_loan_nco_ppnr_create(BankPerf, params_dict, varcat  =["Net charge-offs by type of loan", "Loans categories", "Components of pre-provision net revenue"]):
+    print("Initialize Result DF")
+    loan_nco_ppnr_dict = {}
+
+    calc_tmp = BankPerf[params_dict["Calc_df"]]["Report: FR Y-9C"].astype(str).apply(lambda x: x.replace("BHCK892", "BHCKC892").replace("(", "").replace(")", "").replace(". . .", "").replace("nan","").replace( "+  +", "+").strip())
+
+
+    print("Create String Column with usage calculations")
+    BankPerf[params_dict["Calc_df"]]["Calc_varstr"]= calc_tmp
+
+
+
+    print("Generate Calculated Columns")
+
+    for i in range(0,BankPerf[params_dict["Calc_df"]].shape[0]):
+        tmp_subset = BankPerf[params_dict["Calc_df"]].loc[i,"VarList"]
+        tmp_df = BankPerf[params_dict["BankPerf_raw"]][tmp_subset]
+        tmp_varname =  BankPerf[params_dict["Calc_df"]].loc[i,"Variable"]
+        tmp_varcat =  BankPerf[params_dict["Calc_df"]].loc[i,"Variable Category"]
+        tmp_calc_str = BankPerf[params_dict["Calc_df"]].loc[i,"Calc_varstr"]
+        if tmp_calc_str == "-":
+            tmp_calc_str = ""
+        elif not tmp_calc_str:
+            tmp_calc_str = ""
+
+
+        if tmp_calc_str != "":
+           for col in  tmp_subset:
+               exec(col +''' = tmp_df["'''+col+'''"]''')
+           tmp_result_obj = exec(tmp_calc_str)
+
+           loan_nco_ppnr_dict[tmp_varname] = tmp_result_obj
+
+           loan_nco_ppnr_dict.keys()
+
+
+
+
+BankPerf[params_dict["Calc_df"]]["Variable Category"]
 
 
 
