@@ -68,9 +68,7 @@ class StressTestData():
         miss_col = self.check_missing_BHCCodes(BankCharPerf_raw_data_dict,params_dict)
 
         print("Creating Derived Columns")
-        BankCharPerf_raw_data_dict[params_dict["Calc_df"]]
-        BankPerf[params_dict["Calc_df"]]["Report: FR Y-9C"]
-
+        BankCharPerf_raw_data_dict = self.BHC_loan_nco_ppnr_create(BankCharPerf_raw_data_dict,params_dict)
         return(BankCharPerf_raw_data_dict)
 
     def check_missing_BHCCodes(self, BankPerf, params_dict):
@@ -94,6 +92,41 @@ class StressTestData():
     def create_calculated_fields(self, BankPerf_Raw_df, Calc_df):
         return("Hello, Work In progress")
 
+    def BHC_loan_nco_ppnr_create(self, BankPerf, params_dict):
+        print("Initialize Result DF")
+        loan_nco_ppnr_df = pd.DataFrame()
+        print("Initialize Calculation Column")
+        calc_tmp = BankPerf[params_dict["Calc_df"]]["Report: FR Y-9C"].astype(str).apply(
+            lambda x: x.replace("BHCK892", "BHCKC892").replace("(", "").replace(")", "").replace(". . .", "").replace(
+                "nan", "").replace("+  +", "+").strip())
+        print("Create String Column with usage calculations")
+        BankPerf[params_dict["Calc_df"]]["Calc_varstr"] = calc_tmp
+        print("Generate Calculated Columns")
+        for i in range(0, BankPerf[params_dict["Calc_df"]].shape[0]):
+            tmp_subset = BankPerf[params_dict["Calc_df"]].loc[i, "VarList"]
+            tmp_df = BankPerf[params_dict["BankPerf_raw"]][tmp_subset]
+            tmp_varname = BankPerf[params_dict["Calc_df"]].loc[i, "Variable"]
+            tmp_varcat = BankPerf[params_dict["Calc_df"]].loc[i, "Variable Category"]
+            tmp_calc_str = BankPerf[params_dict["Calc_df"]].loc[i, "Calc_varstr"]
+            print("Get Column Vectors")
+            for col in tmp_subset:
+                print(col)
+                exec(col + ''' = tmp_df["''' + col + '''"]''')
+                print(tmp_df[col].shape)
+
+            print("Calculate Derived Filed for:", tmp_varname, tmp_varcat, tmp_calc_str)
+            if tmp_calc_str:
+                tmp_result_obj = eval(tmp_calc_str)
+            else:
+                tmp_result_obj = np.nan
+            print("Add Derived Field to Result DataFrame")
+            tmp_col_name = tmp_varcat + ":" + tmp_varname
+            loan_nco_ppnr_df[tmp_col_name] = tmp_result_obj
+            print(loan_nco_ppnr_df[tmp_col_name].shape)
+
+        print("Combine Calculated Columns to Original Dataframe")
+        BankPerf_result = pd.concat([BankPerf[params_dict["BankPerf_raw"]], loan_nco_ppnr_df], axis=1)
+        return (BankPerf_result)
 
 
 #Entry Point
@@ -110,55 +143,4 @@ varpath_dict_args = {
 Z_macro = StressTestData(varpath_dict_args).Z_macro_process()
 
 BankPerf = StressTestData(varpath_dict_args).X_Y_bankingchar_perf_process()
-
-
-BankPerf[params_dict["Calc_df"]]["VarList"].apply(lambda x: [i for i in x if i not in ["",np.nan,"nan"]])
-
-BankPerf
-params_dict = {"Calc_df" : "NCO_PPNR_Loan_Calcs",
-                                                    "BankPerf_raw" : "WRDS_Covas_BankPerf",
-                                                    "MergerInfo " : "merger_info_frb"}
-def BHC_loan_nco_ppnr_create(BankPerf, params_dict, varcat  =["Net charge-offs by type of loan", "Loans categories", "Components of pre-provision net revenue"]):
-    print("Initialize Result DF")
-    loan_nco_ppnr_dict = {}
-
-    calc_tmp = BankPerf[params_dict["Calc_df"]]["Report: FR Y-9C"].astype(str).apply(lambda x: x.replace("BHCK892", "BHCKC892").replace("(", "").replace(")", "").replace(". . .", "").replace("nan","").replace( "+  +", "+").strip())
-
-
-    print("Create String Column with usage calculations")
-    BankPerf[params_dict["Calc_df"]]["Calc_varstr"]= calc_tmp
-
-
-
-    print("Generate Calculated Columns")
-
-    for i in range(0,BankPerf[params_dict["Calc_df"]].shape[0]):
-        tmp_subset = BankPerf[params_dict["Calc_df"]].loc[i,"VarList"]
-        tmp_df = BankPerf[params_dict["BankPerf_raw"]][tmp_subset]
-        tmp_varname =  BankPerf[params_dict["Calc_df"]].loc[i,"Variable"]
-        tmp_varcat =  BankPerf[params_dict["Calc_df"]].loc[i,"Variable Category"]
-        tmp_calc_str = BankPerf[params_dict["Calc_df"]].loc[i,"Calc_varstr"]
-        if tmp_calc_str == "-":
-            tmp_calc_str = ""
-        elif not tmp_calc_str:
-            tmp_calc_str = ""
-
-
-        if tmp_calc_str != "":
-           for col in  tmp_subset:
-               exec(col +''' = tmp_df["'''+col+'''"]''')
-           tmp_result_obj = exec(tmp_calc_str)
-
-           loan_nco_ppnr_dict[tmp_varname] = tmp_result_obj
-
-           loan_nco_ppnr_dict.keys()
-
-
-
-
-BankPerf[params_dict["Calc_df"]]["Variable Category"]
-
-
-
-
 
