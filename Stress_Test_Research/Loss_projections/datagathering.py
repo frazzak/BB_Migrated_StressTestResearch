@@ -54,7 +54,48 @@ class StressTestData():
 
     def Z_micro_process(self, filetype = ".csv"):
         Z_micro_raw_data_dict = self.file_dict_read(self.Z_micro_dir, filetype=".csv")
-        return (Z_micro_raw_data_dict)
+
+        Z_micro_raw_data_dict_final = {}
+        for key in Z_micro_raw_data_dict.keys():
+            tmp_df = Z_micro_raw_data_dict[key]
+
+            if key.startswith("GFD_"):
+                print("GFD data source:", key)
+                tmp_subset = ["Date", "Ticker", "Close"]
+                tmp_df = tmp_df[tmp_subset]
+
+                print(tmp_df.shape)
+                print("Formatting Date")
+                tmp_df["Date"] = pd.to_datetime(tmp_df.Date, errors='coerce')
+
+                print("Subsetting for 1970-2020")
+                tmp_df = tmp_df.loc[(tmp_df["Date"] >= "1969-11-01") & (tmp_df["Date"] <= "2020-01-01")]
+
+                print(tmp_df.shape)
+                print("Appending to Final Dictionary")
+                Z_micro_raw_data_dict_final[key] = tmp_df.sort_values("Date")
+
+            if key.startswith("WRDS_"):
+                print("WRDS data source:", key)
+
+                if key == "WRDS_SnP500_Returns":
+                    tmp_subset = ["caldt", "spindx", "sprtrn"]
+                    tmp_df = tmp_df[tmp_subset]
+                    tmp_df["caldt"] = pd.to_datetime(tmp_df.caldt, format="%Y%M%d", errors='coerce')
+                    tmp_df = tmp_df.rename({"caldt": "Date"}, axis=1)
+                    print("Subsetting for 1970-2020")
+                    tmp_df = tmp_df.loc[(tmp_df["Date"] >= "1969-11-01") & (tmp_df["Date"] <= "2020-01-01")]
+
+                #test = Z_micro["WRDS_government_bonds"]
+                    print(tmp_df.shape)
+                    print("Appending to Final Dictionary")
+                    Z_micro_raw_data_dict_final[key] = tmp_df.sort_values("Date")
+            Z_micro_raw_data_dict_final[key] = tmp_df
+            #Once all scenarios are accounted for.
+            #print(tmp_df.shape)
+            #print("Appending to Final Dictionary")
+            #Z_micro_raw_data_dict_final[key] = tmp_df.sort_values("Date")
+        return (Z_micro_raw_data_dict_final)
 
     def X_Y_bankingchar_perf_process(self,filetype = ".csv",
                                      params_dict = {"Calc_df" : "NCO_PPNR_Loan_Calcs",
@@ -132,8 +173,11 @@ class StressTestData():
             print(loan_nco_ppnr_df[tmp_col_name].shape)
 
         print("Combine Calculated Columns to Original Dataframe")
-        identifier_columns = ["RSSD9001","RSSD9999","RSSD9010","RSSD9017","RSSD9161","RSSD9005","RSSD9007","RSSD9008","RSSD9010","RSSD9016","RSSD9045","RSSD9052","RSSD9053","RSSD9101","RSSD9130","RSSD9200","RSSD9950"]
+        identifier_columns = ["RSSD9001","RSSD9999","RSSD9010","RSSD9017","RSSD9161","BHSP8519","RSSD9005","RSSD9007","RSSD9008","RSSD9010","RSSD9016","RSSD9045","RSSD9052","RSSD9053","RSSD9101","RSSD9130","RSSD9200","RSSD9950"]
         BankPerf_result = pd.concat([BankPerf[params_dict["BankPerf_raw"]][identifier_columns], loan_nco_ppnr_df], axis=1)
+        #TODO: Some issue here with data structure, does not allow to view the object.
+        #print("Resetting Index")
+        #BankPerf_result = BankPerf_result.reset_index(drop = True)
         print("Rename Identifier Columns")
         BankPerf_result = BankPerf_result.rename({"RSSD9001":"RSSD_ID","RSSD9999":"ReportingDate","RSSD9161":"CUSIP"}, axis = 1)
         print("Format ReportingDate column")
@@ -147,27 +191,167 @@ class StressTestData():
 
         return (BankPerf_result)
 
+    def bankperf_rates_ratios(self, BankPerf):
+        print("Net Charge-Off rates by type of loan calculations")
+        for nco, loan in zip(
+                list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Net charge-offs by type of loan:")]),
+                list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Loans categories:")])):
+            tmp_str = nco.replace("Net charge-offs by type of loan:", "ncoR:")
+            print(tmp_str)
+            BankPerf[tmp_str] = 400 * ((BankPerf[nco].fillna(0)) / (BankPerf[loan].fillna(0)))
+
+        print(BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("ncoR:")]].describe().transpose())
+
+        for ppnr_comp in list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith(
+                "Components of pre-provision net revenue:")]):
+            tmp_str = ppnr_comp.replace("Components of pre-provision net revenue:", "ppnrRatio:")
+            print(tmp_str)
+            BankPerf[tmp_str] = 400 * (BankPerf[ppnr_comp].fillna(0)) / (BankPerf['Other items:Consolidated assets'])
+        print(
+            BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("ppnrRatio:")]].describe().transpose())
+
+        # Balance sheet composition indicators
+        # Requires interest earning assets calculations.
+        return(BankPerf)
+
 
 #Entry Point
-varpath_dict_args = {
-                    "Z_macro_dir" : "Z_macro/",
-                    "Z_micro_dir" : "Z_micro/",
-                    "BankPerf_dir" : "BankPerf/",
-                    "Data_dir" : "/Users/phn1x/Google Drive/Spring 2019/LossProjection_Research/Data"
-                    }
-
-
-
 init_ST = StressTestData()
+
+#Z_Macro complate and distributions match to Malik 2018
 Z_macro = init_ST.Z_macro_process()
-BankPerf = init_ST.X_Y_bankingchar_perf_process()
-#May need to subset BankPerf to get Xi and Yi
+#Should pring out Summary Statistics
+
 Z_micro = init_ST.Z_micro_process()
+#Need Additional Subsetting and formatting logic for the WRDS data
+#Also need additional interest rate swaps data.
+#May need to calcualte the returns for some of the indices and prices.
+#Should output Summary Statistics
 
-Z_micro.keys()
 
-test = Z_micro["GFD_GoldBullionPrice_NY_$perOz"]
+
+#May need to subset BankPerf to get Xi and Yi
+
+BankPerf = init_ST.X_Y_bankingchar_perf_process()
+#BankPerf_3 = BankPerf
+
+test = bankperf_rates_ratios(BankPerf)
+BankPerf.columns
+
+def bankperf_rates_ratios(BankPerf):
+    #Need to handle NAN rows and outliers.
+
+    print("Net Charge-Off rates by type of loan calculations")
+    for nco, loan in zip(list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Net charge-offs by type of loan:")]),list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Loans categories:")])):
+        tmp_str = nco.replace("Net charge-offs by type of loan:","ncoR:")
+        print(tmp_str)
+        BankPerf[tmp_str] = 400 * ((BankPerf[nco]) / (BankPerf[loan]))
+        #BankPerf = pd.concat([BankPerf,BankPerf_tmp[tmp_str]], ignore_index=True, axis = 1)
+    print(BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("ncoR:")]].describe().transpose())
+
+    print("PPNR Ratios calculations")
+    for ppnr_comp in list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Components of pre-provision net revenue:")]):
+        tmp_str = ppnr_comp.replace("Components of pre-provision net revenue:", "ppnrRatio:")
+        print(tmp_str)
+        BankPerf[tmp_str] = 400 * (BankPerf[ppnr_comp])/(BankPerf['Other items:Consolidated assets'])
+
+    print(BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("ppnrRatio:")]].describe().transpose())
+
+    #Balance sheet composition indicators
+    #Requires interest earning assets calculations.
+
+    return(BankPerf)
+
+
+
+
+
+
+
+
+
+#Filter BHC Indicator Yes,
+
+#Filter Domestic Indicator?
+#Date Range
+BankPerf_2 = BankPerf[(BankPerf["ReportingDate"] >= "1989-12-30") & (BankPerf["ReportingDate"] <= "2017-12-31")] #& (BankPerf["RSSD9045"] == 1) & (BankPerf["RSSD9101"] == 'Y')]
+
+
+
+
+#May need to consider merger inforation and suvivorship information first.
+#Count consecutive dates
+BankPerf_2 = BankPerf_2.sort_values(['RSSD_ID','ReportingDate'])
+BankPerf_2["ConsecutivePeriods"] = BankPerf_2.sort_values(['RSSD_ID','ReportingDate']).groupby(['RSSD_ID']).cumcount() + 1
+
+gb = BankPerf_2.groupby('RSSD_ID')
+gb = gb.agg({"ConsecutivePeriods":['min','max','count']})
+RSSD_ID_consecutive = list(gb[gb["ConsecutivePeriods"]["max"] >= 8].index)
+
+BankPerf_2['Other items:Consolidated assets'].min()
+BankPerf_2['Other items:Consolidated assets'].max()
+
+
+BankPerf_2 = BankPerf_2[BankPerf_2["RSSD_ID"].isin(RSSD_ID_consecutive)]
+
+
+BankPerf_2[['Loans categories:Commercial & industrial',
+           'Loans categories:Construction & land development',
+           'Loans categories:Multifamily real estate',
+           'Loans categories:Nonfarm nonresidential CRE',
+           'Loans categories:Home equity lines of credit',
+           'Loans categories:Residential real estate (excl. HELOCs)',
+           'Loans categories:Credit card',
+           'Loans categories:Consumer (excl. credit card)']].describe().transpose()
+
+BankPerf_2.RSSD_ID.unique().__len__()
+
+
+#Filter out for bhc indicator.
+#Filter out for above 50 bln at end of sample period.
+#To match Malik we need around 1000 banks.
+#Filter to banks that have 8 consecutive quarters
+
+
+
+
+
+
+
+
+
+
+
+
+
+identifier_cols = ["RSSD_ID","ReportingDate","CUSIP","RSSD9045"]
+Xi_Yi_cols = ["Loans categories:", "Net charge-offs by type of loan","Components of pre-provision net revenue:","Other items:"]
+
+tmp_dict = {}
+for colcat in Xi_Yi_cols:
+    tmp_col_names = list(test.columns[pd.Series(test.columns).str.startswith(colcat)])
+    tmp_col_names = identifier_cols + tmp_col_names
+
+    print("Subset DataFrame and append to Dict")
+    exec('''tmp_dict["'''+colcat.replace(":","")+'''"] = test[tmp_col_names]''')
+
+
+
+
+
+
+
+
+
+
+
+
 
 #Find best way to subset the data for Yi and Xi
 #A Wrapper function can handle these additional tasks to produce a Dict with the Dataframes necessary
 
+
+
+
+#VAE-CVAE=MNIST
+#import utils, models, train
