@@ -234,28 +234,39 @@ Z_micro = init_ST.Z_micro_process()
 
 BankPerf = init_ST.X_Y_bankingchar_perf_process()
 
-
-BankPerf.keys()
-
 merger_df = BankPerf["merger_info_frb"]
-
-
-#BankPerf_3 = BankPerf
-
-#Must find some way to reduce the # of banks in dataset to closer to 1000.
-#Can base it only on bank RSSIDs as BHCs from FFIEC topBHCs.
-#Based on top Consolidated Total assets
-
 test = BankPerf_Consecutive_Merger_Aggregation_process(BankPerf)
+
+
+
+test.columns
+
+test = test.drop(["NON_ID","SURV_ID"], axis = 1)
+test2 = test.merge(merger_df, left_on = "RSSD_ID", right_on = "NON_ID", how = "left")
+
+test2["RSSD_ID"][pd.notnull(test2["NON_ID"])] = pd.Series(test2["SURV_ID"][pd.notnull(test2["NON_ID"])])
+
+
+test2 = test2.drop(list(merger_df.columns), axis = 1)
+
+test2.describe.
+
+test3 = test2.merge(merger_df, left_on = "RSSD_ID", right_on = "NON_ID", how = "left")
+
+tobeagg = test3[pd.notnull(test3["NON_ID"])]
+tobeagg.shape
+
 #Incorporate merger info
 
 def BankPerf_Consecutive_Merger_Aggregation_process(BankPerf,concecutiveqtrs = 8, merger_df_name = "merger_info_frb", BankPerf_Calc_df_name = "BankPerf_Calculated"):
     if merger_df_name in BankPerf.keys():
         print("Getting Merger Info from Dictionary")
         merger_info_df = BankPerf[merger_df_name]
-        merger_info_df =  merger_info_df[["MERGE_DT","NON_ID","SURV_ID"]]
+        merger_info_df = merger_info_df[["MERGE_DT","NON_ID","SURV_ID"]]
         merger_info_df["MERGE_DT"] = pd.to_datetime(merger_info_df["MERGE_DT"], format = "%Y%M%d")
         merger_info_df["NON_ID"] = merger_info_df["NON_ID"].astype(int)
+        print(merger_info_df.info())
+        print(merger_info_df.describe())
     else:
         print("Merger Information not found in dictionary")
 
@@ -282,7 +293,12 @@ def BankPerf_Consecutive_Merger_Aggregation_process(BankPerf,concecutiveqtrs = 8
     BankPerf_Merger_df = BankPerf_Calc_df.merge(merger_info_df, left_on = "RSSD_ID", right_on = "NON_ID", how = "left")
     print("Found",BankPerf_Merger_df["RSSD_ID"][pd.notnull(BankPerf_Merger_df["NON_ID"])].unique().__len__(),' Non surviving RSSD_IDs')
     print("Updating Non-Surviving RSSD_IDs with Surviving IDs")
-    BankPerf_Merger_df["RSSD_ID"][pd.notnull(BankPerf_Merger_df["NON_ID"])] = BankPerf_Merger_df["SURV_ID"][pd.notnull(BankPerf_Merger_df["NON_ID"])]
+#    print(BankPerf_Merger_df.columns)
+    #This part is not working properly. Not updating the RSSD_ID field.
+    #May need to loop.
+
+    #test2.loc[:, "RSSD_ID"][pd.notnull(test2["NON_ID"])] = test2.loc[:, "SURV_ID"][pd.notnull(test2["NON_ID"])]
+    BankPerf_Merger_df["RSSD_ID"][pd.notnull(BankPerf_Merger_df["NON_ID"])] = pd.Series(BankPerf_Merger_df["SURV_ID"][pd.notnull(BankPerf_Merger_df["NON_ID"])])
     #BankPerf_Merger_df = BankPerf_Calc_df.merge(merger_info_df, left_on = "RSSD_ID", right_on = "NON_ID", how = "left")
 
 
