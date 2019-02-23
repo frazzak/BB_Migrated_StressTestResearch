@@ -235,90 +235,193 @@ Z_micro = init_ST.Z_micro_process()
 BankPerf = init_ST.X_Y_bankingchar_perf_process()
 
 merger_df = BankPerf["merger_info_frb"]
-test = BankPerf_Consecutive_Merger_Aggregation_process(BankPerf)
+BankPerf["BankPerf_Calculated"].describe().transpose()
+
+
+BankPerf_ConsReduce = BankPerf_ConsecutiveQtrs_Reduce(BankPerf)
+BankPerfMerger = BankPerf_Merger_process(BankPerf_ConsReduce)
+BankPerfAgg = BankPerf_Aggregation_process(BankPerfMerger)
+
+
+#Filter for 1000 Banks as per paper, Look for 2007 RSSD's
+gb = BankPerfAgg["BankPerfAgg"][["RSSD_ID","ReportingDate"]].groupby(["ReportingDate"]).count()
+gb = gb.reset_index()
+gb_list = gb[gb < 1500].dropna()
+BankPerfAgg.keys()
+
+
+import random
+
+
+RSSD_ID_1k = random.sample(list(BankPerfAgg["BankPerfAgg"]["RSSD_ID"].unique()),1000)
+
+
+test_groupby = BankPerfAgg["BankPerfAgg"][BankPerfAgg["BankPerfAgg"]["ReportingDate"] >= '1990-01-01'].groupby(["RSSD_ID"]).agg({'Other items:Consolidated assets': np.mean})
+test_groupby = test_groupby.reset_index().sort_values(["Other items:Consolidated assets"], ascending=[0])
+RSSD_ID_1k = test_groupby["RSSD_ID"][1:1000]
+
+BankPerf_tmp = BankPerfAgg["BankPerfAgg"]
+BankPerf_tmp = BankPerf_tmp[(BankPerf_tmp['ReportingDate'] >= '1989/12/31') & (BankPerf_tmp['ReportingDate'] <= '2017/12/31') & (BankPerf_tmp["RSSD_ID"].isin(RSSD_ID_1k))]
+
+BankPerf_tmp[(BankPerf_tmp.columns[pd.Series(BankPerf_tmp.columns).str.startswith("Loans categories:")]) ].describe().transpose()
 
 
 
-test.columns
-
-test = test.drop(["NON_ID","SURV_ID"], axis = 1)
-test2 = test.merge(merger_df, left_on = "RSSD_ID", right_on = "NON_ID", how = "left")
-
-test2["RSSD_ID"][pd.notnull(test2["NON_ID"])] = pd.Series(test2["SURV_ID"][pd.notnull(test2["NON_ID"])])
+#Drop NA then get mean?
+#Filter for RSSD for 1000 banks?
+#Sort by Consolidated Assets?
 
 
-test2 = test2.drop(list(merger_df.columns), axis = 1)
+result = []
+for reportingDate in gb_list["ReportingDate"]:
+    #print(reportingDate)
+    RSSD_Year = BankPerf_Year_RSSD_Subset(BankPerfAgg, keyname = "BankPerfAgg",year = [reportingDate],between = ["1990-01-01","2007-12-31"])
+    tmp = RSSD_Year.loc[0,['varname','mean','std','50%',"max"]]
 
-test2.describe.
+    if tmp["mean"] >= 2.35e6:
+        print(reportingDate,tmp)
+        result = result.append(reportingDate)
 
-test3 = test2.merge(merger_df, left_on = "RSSD_ID", right_on = "NON_ID", how = "left")
 
-tobeagg = test3[pd.notnull(test3["NON_ID"])]
-tobeagg.shape
+def BankPerf_Year_RSSD_Subset(BankPerf,keyname = "BankPerfAgg", year = None, between = ["1990-01-01","2017-12-31"]):
+    if year is not None:
+        RSSD_ID_tmp = list(BankPerf[keyname]["RSSD_ID"][BankPerf[keyname]["ReportingDate"].isin(year)])
+    else:
+        RSSD_ID_tmp = list(BankPerf[keyname]["RSSD_ID"].unique())
+    BankPerf_tmp = BankPerf[keyname][(BankPerfAgg[keyname]["ReportingDate"] >= between[0]) & (BankPerfAgg[keyname]["ReportingDate"] <= between[1]) & (BankPerf[keyname]["RSSD_ID"].isin(RSSD_ID_tmp))]
 
-#Incorporate merger info
+    print_tmp = BankPerf_tmp[BankPerf_tmp.columns[pd.Series(BankPerf_tmp.columns).str.startswith("Loans categories:")]].describe().transpose()
+    print(print_tmp)
+    print_tmp = print_tmp.reset_index().rename({"index":"varname"}, axis = 1)
+    return(print_tmp)
 
-def BankPerf_Consecutive_Merger_Aggregation_process(BankPerf,concecutiveqtrs = 8, merger_df_name = "merger_info_frb", BankPerf_Calc_df_name = "BankPerf_Calculated"):
+
+
+
+
+
+
+def BankPerf_ConsecutiveQtrs_Reduce(BankPerf,concecutiveqtrs = 8,BankPerf_Calc_df_name = "BankPerf_Calculated"):
+    if BankPerf_Calc_df_name in BankPerf.keys():
+        print("Getting BankPerf Calculated rows")
+        BankPerf_Calc_df = BankPerf[BankPerf_Calc_df_name]
+    else:
+        return("BankPerf Calculated DF not found")
+
+
+    print("Filter Banks for those that are above::",concecutiveqtrs,"consecutive quarters.")
+    BankPerf_Merger_df_gbsum = BankPerf_Calc_df
+    BankPerf_Merger_df_gbsum = BankPerf_Merger_df_gbsum.sort_values(['RSSD_ID', 'ReportingDate'])
+
+    BankPerf_Merger_df_gbsum["ConsecutivePeriods"] = BankPerf_Merger_df_gbsum.sort_values(['RSSD_ID', 'ReportingDate']).groupby(['RSSD_ID']).cumcount() + 1
+
+
+
+    BankPerf_Merger_df_gb_tmp = BankPerf_Merger_df_gbsum.groupby('RSSD_ID')
+    BankPerf_Merger_df_gb_tmp = BankPerf_Merger_df_gb_tmp.agg({"ConsecutivePeriods": ['min', 'max', 'count']})
+
+    RSSD_ID_consecutive = list(BankPerf_Merger_df_gb_tmp[BankPerf_Merger_df_gb_tmp["ConsecutivePeriods"]["max"] >= concecutiveqtrs].index)
+    BankPerf_Merger_df_gbsum = BankPerf_Merger_df_gbsum[BankPerf_Merger_df_gbsum["RSSD_ID"].isin(RSSD_ID_consecutive)]
+
+    BankPerf["BankPerf_ConsecutiveReduced"] = BankPerf_Merger_df_gbsum
+    print(BankPerf["BankPerf_ConsecutiveReduced"].describe().transpose())
+
+    return(BankPerf)
+
+
+def BankPerf_Merger_process(BankPerf, merger_df_name = "merger_info_frb", BankPerf_Calc_df_name = "BankPerf_ConsecutiveReduced"):
     if merger_df_name in BankPerf.keys():
         print("Getting Merger Info from Dictionary")
         merger_info_df = BankPerf[merger_df_name]
         merger_info_df = merger_info_df[["MERGE_DT","NON_ID","SURV_ID"]]
         merger_info_df["MERGE_DT"] = pd.to_datetime(merger_info_df["MERGE_DT"], format = "%Y%M%d")
         merger_info_df["NON_ID"] = merger_info_df["NON_ID"].astype(int)
-        print(merger_info_df.info())
-        print(merger_info_df.describe())
+       # print(merger_info_df.info())
+       # print(merger_info_df.describe())
     else:
-        print("Merger Information not found in dictionary")
+        return("Merger Information not found in dictionary")
 
     if BankPerf_Calc_df_name in BankPerf.keys():
         print("Getting BankPerf Calculated rows")
         BankPerf_Calc_df = BankPerf[BankPerf_Calc_df_name]
     else:
-        print("BankPerf Calculated DF not found")
-
-
-    print("Filter Banks for those that are above::",concecutiveqtrs,"consecutive quarters.")
-
-    BankPerf_Calc_df = BankPerf_Calc_df.sort_values(['RSSD_ID', 'ReportingDate'])
-    BankPerf_Calc_df["ConsecutivePeriods"] = BankPerf_Calc_df.sort_values(['RSSD_ID', 'ReportingDate']).groupby(
-        ['RSSD_ID']).cumcount() + 1
-    BankPerf_Calc_df_gb_tmp = BankPerf_Calc_df.groupby('RSSD_ID')
-    BankPerf_Calc_df_gb_tmp = BankPerf_Calc_df_gb_tmp.agg({"ConsecutivePeriods": ['min', 'max', 'count']})
-    RSSD_ID_consecutive = list(BankPerf_Calc_df_gb_tmp[BankPerf_Calc_df_gb_tmp["ConsecutivePeriods"]["max"] >= concecutiveqtrs].index)
-    BankPerf_Calc_df = BankPerf_Calc_df[BankPerf_Calc_df["RSSD_ID"].isin(RSSD_ID_consecutive)]
-
+        return("BankPerf Calculated DF not found")
 
     print("Loop/merge through merger information and update RSSD of non survivor with survivor ID.")
-    orig_columns = list(BankPerf_Calc_df.columns)
+#    orig_columns = list(BankPerf_Calc_df.columns)
     BankPerf_Merger_df = BankPerf_Calc_df.merge(merger_info_df, left_on = "RSSD_ID", right_on = "NON_ID", how = "left")
     print("Found",BankPerf_Merger_df["RSSD_ID"][pd.notnull(BankPerf_Merger_df["NON_ID"])].unique().__len__(),' Non surviving RSSD_IDs')
     print("Updating Non-Surviving RSSD_IDs with Surviving IDs")
-#    print(BankPerf_Merger_df.columns)
-    #This part is not working properly. Not updating the RSSD_ID field.
-    #May need to loop.
+    BankPerf_Merger_df.loc[pd.notnull(BankPerf_Merger_df["NON_ID"]), ["RSSD_ID"]] = BankPerf_Merger_df.loc[pd.notnull(BankPerf_Merger_df["NON_ID"]), ["SURV_ID"]]
+    print("Dropping Merge Columns")
+    BankPerf_Merger_df = BankPerf_Merger_df.drop(list(merger_info_df.columns), axis = 1 )
+    print("Re Merging to check for remaining mergers")
+    BankPerf_Merger_df = BankPerf_Merger_df.merge(merger_info_df, left_on = "RSSD_ID", right_on = "NON_ID", how = "left")
+    print("Number of NON_ID matching with RSSD_ID:", BankPerf_Merger_df[pd.notnull(BankPerf_Merger_df["NON_ID"])].shape)
+    #if BankPerf_Merger_df[pd.notnull(BankPerf_Merger_df["NON_ID"])].shape == 0:
+    BankPerf["BankPerf_Mergered"] = BankPerf_Merger_df
+    print(BankPerf["BankPerf_Mergered"].describe().transpose())
 
-    #test2.loc[:, "RSSD_ID"][pd.notnull(test2["NON_ID"])] = test2.loc[:, "SURV_ID"][pd.notnull(test2["NON_ID"])]
-    BankPerf_Merger_df["RSSD_ID"][pd.notnull(BankPerf_Merger_df["NON_ID"])] = pd.Series(BankPerf_Merger_df["SURV_ID"][pd.notnull(BankPerf_Merger_df["NON_ID"])])
-    #BankPerf_Merger_df = BankPerf_Calc_df.merge(merger_info_df, left_on = "RSSD_ID", right_on = "NON_ID", how = "left")
+    return(BankPerf)
+
+def BankPerf_Aggregation_process(BankPerf, BankPerf_ToAgg_df_name="BankPerf_Mergered"):
+
+    if BankPerf_ToAgg_df_name in BankPerf.keys():
+        print("Getting BankPerf Calculated rows")
+        BankPerf_Merger_df_gbsum = BankPerf[BankPerf_ToAgg_df_name]
+    else:
+        return("BankPerf Calculated DF not found")
 
 
     print("Aggregate all the updated RSSD_ID columns")
-    BankPerf_Merger_df_gbsum = BankPerf_Merger_df.groupby(["RSSD_ID","ReportingDate"]).sum()
+
+    #BankPerf_Merger_df_gbsum.columns
+    BankPerf_Merger_df_gbsum = BankPerf_Merger_df.groupby(["RSSD_ID","ReportingDate"])
+    BankPerf_Merger_df_gbsum = BankPerf_Merger_df_gbsum.agg({
+        'Net charge-offs by type of loan:Commercial & industrial' : np.sum,
+        'Net charge-offs by type of loan:Construction & land development' : np.sum,
+        'Net charge-offs by type of loan:Multifamily real estate' : np.sum,
+        'Net charge-offs by type of loan:(Nonfarm) nonresidential CRE' : np.sum,
+        'Net charge-offs by type of loan:Home equity lines of credit' : np.sum,
+        'Net charge-offs by type of loan:Residential real estate (excl. HELOCs)' : np.sum,
+        'Net charge-offs by type of loan:Credit card' : np.sum,
+        'Net charge-offs by type of loan:Consumer (excl. credit card)' : np.sum,
+        'Loans categories:Commercial & industrial' : np.sum,
+        'Loans categories:Construction & land development' : np.sum,
+        'Loans categories:Multifamily real estate' : np.sum,
+        'Loans categories:Nonfarm nonresidential CRE' : np.sum,
+        'Loans categories:Home equity lines of credit' : np.sum,
+        'Loans categories:Residential real estate (excl. HELOCs)' : np.sum,
+        'Loans categories:Credit card' : np.sum,
+        'Loans categories:Consumer (excl. credit card)' : np.sum,
+        'Components of pre-provision net revenue:Net interest income' : np.sum,
+        'Components of pre-provision net revenue:Noninterest income' : np.sum,
+        'Components of pre-provision net revenue:Trading income' : np.sum,
+        'Components of pre-provision net revenue:Compensation expense' : np.sum,
+        'Components of pre-provision net revenue:Fixed assets expense' : np.sum,
+        'Components of pre-provision net revenue:Noninterest expense' : np.sum,
+        'Other items:Consolidated assets' : np.sum,
+        'Other items:Interest-earning assets' : np.sum,
+        'Other items:Trading assets' : np.sum,
+        'Other items:Book equity' : np.sum,
+        'Other items:Risk-weighted assets' : np.sum,
+        'Other items:Dividends ' : np.sum,
+        'Other items:Stock purchases' : np.sum,
+        'Other items:Tier 1 common equity' : np.sum,
+        'Other items:= Tier 1 capital' : np.sum,
+        'Other items: = - Perpetual preferred stock' : np.sum,
+        'Other items: = + Nonqual. Perpetual preferred stock' : np.sum,
+        'Other items: = - Qual. class A minority interests' : np.sum,
+        'Other items: = - Qual. restricted core capital' : np.sum,
+        'Other items: = - Qual. mandatory convert. pref. sec.' : np.sum
+    })
+    #May need to add manual column sums.
     BankPerf_Merger_df_gbsum = BankPerf_Merger_df_gbsum.reset_index()
-#    gb_agg = gb.agg({
-#        'Loans categories:Commercial & industrial': np.sum,
-#        'Loans categories:Construction & land development': np.sum,
-#        'Loans categories:Multifamily real estate': np.sum,
-#        'Loans categories:Nonfarm nonresidential CRE': np.sum,
-#        'Loans categories:Home equity lines of credit': np.sum,
-#        'Loans categories:Residential real estate (excl. HELOCs)': np.sum,
-#        'Loans categories:Credit card': np.sum,
-#        'Loans categories:Consumer (excl. credit card)': np.sum
-#    })
-    print(BankPerf_Merger_df_gbsum.describe().transpose())
-    return(BankPerf_Merger_df_gbsum)
 
+    BankPerf["BankPerfAgg"] = BankPerf_Merger_df_gbsum
+    print(BankPerf["BankPerfAgg"].describe().transpose())
 
+    return(BankPerf)
 
 def bankperf_rates_ratios(BankPerf):
     #Need to handle NAN rows and outliers.
@@ -349,93 +452,6 @@ def bankperf_rates_ratios(BankPerf):
     #Requires interest earning assets calculations.
 
     return(BankPerf)
-
-
-
-
-
-
-
-
-
-#Filter BHC Indicator Yes,
-
-#Filter Domestic Indicator?
-#Date Range
-BankPerf_2 = BankPerf[(BankPerf["ReportingDate"] >= "1989-12-30") & (BankPerf["ReportingDate"] <= "2017-12-31")] #& (BankPerf["RSSD9045"] == 1) & (BankPerf["RSSD9101"] == 'Y')]
-
-
-
-
-#May need to consider merger inforation and suvivorship information first.
-#Count consecutive dates
-BankPerf_2 = BankPerf_2.sort_values(['RSSD_ID','ReportingDate'])
-BankPerf_2["ConsecutivePeriods"] = BankPerf_2.sort_values(['RSSD_ID','ReportingDate']).groupby(['RSSD_ID']).cumcount() + 1
-
-gb = BankPerf_2.groupby('RSSD_ID')
-gb = gb.agg({"ConsecutivePeriods":['min','max','count']})
-RSSD_ID_consecutive = list(gb[gb["ConsecutivePeriods"]["max"] >= 8].index)
-
-BankPerf_2['Other items:Consolidated assets'].min()
-BankPerf_2['Other items:Consolidated assets'].max()
-
-
-BankPerf_2 = BankPerf_2[BankPerf_2["RSSD_ID"].isin(RSSD_ID_consecutive)]
-
-
-BankPerf_2[['Loans categories:Commercial & industrial',
-           'Loans categories:Construction & land development',
-           'Loans categories:Multifamily real estate',
-           'Loans categories:Nonfarm nonresidential CRE',
-           'Loans categories:Home equity lines of credit',
-           'Loans categories:Residential real estate (excl. HELOCs)',
-           'Loans categories:Credit card',
-           'Loans categories:Consumer (excl. credit card)']].describe().transpose()
-
-
-
-
-BankPerf_2.RSSD_ID.unique().__len__()
-
-
-#Filter out for bhc indicator.
-#Filter out for above 50 bln at end of sample period.
-#To match Malik we need around 1000 banks.
-#Filter to banks that have 8 consecutive quarters
-
-
-
-
-
-
-
-
-
-
-
-
-
-identifier_cols = ["RSSD_ID","ReportingDate","CUSIP","RSSD9045"]
-Xi_Yi_cols = ["Loans categories:", "Net charge-offs by type of loan","Components of pre-provision net revenue:","Other items:"]
-
-tmp_dict = {}
-for colcat in Xi_Yi_cols:
-    tmp_col_names = list(test.columns[pd.Series(test.columns).str.startswith(colcat)])
-    tmp_col_names = identifier_cols + tmp_col_names
-
-    print("Subset DataFrame and append to Dict")
-    exec('''tmp_dict["'''+colcat.replace(":","")+'''"] = test[tmp_col_names]''')
-
-
-
-
-
-
-
-
-
-
-
 
 
 #Find best way to subset the data for Yi and Xi

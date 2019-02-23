@@ -1772,105 +1772,6 @@ class EventStudyResearch():
 
 
 #Entry Point
-def RunEventStudyResearch(self, scrapeData = True, getidx_names = True, getidx_prices = True,
-                          EstSubset={"subset_columns": [["annctype", "global_idx", "regional_idx", "regioncode_x"],
-                                                        ["annctype", "regional_idx", "ISO3", "country_idx"],
-                                                        ["annctype", "ISO3", "country_idx", "sector_idx"]],
-                                     "firmID": ["regional_idx", "country_idx", "sector_idx"],
-                                     "marketID": ["global_idx", "regional_idx", "country_idx"],
-                                     "grouping_var": [["regioncode_x"],
-                                                      ["country"],
-                                                      ["country", "sector_idx"]
-                                                      ]
-                                     },
-                          EstParams={"start_ev_win": [-2, -3, -5],
-                                     "end_ev_win": [2, 3, 5],
-                                     "end_est_win": [-5, -10, -15],
-                                     "est_win_len": [60, 120, 180]},
-                        run_R = True,
-                         params_dict={
-                                            'workingdir': '.',
-                                            'apiKey': '573e58c665fcc08cc6e5a660beaad0cb',
-                                            'apiUrl': "http://api.eventstudytools.com",
-                                            'ResultFileType': 'csv',
-                                            'ReturnType': 'log',
-                                            'NonTradingDays': 'earlier',
-                                            'BenchmarkModel': 'mm',
-                                            'resultPath': './results/',
-                                            'requestFile': '01_RequestFile_df.csv',
-                                            'firmDataFile': '02_FirmData_df.csv',
-                                            'marketDataFile': '03_MarketData_df.csv'}
-                          , prepareEST = True, EST_Run = True):
-    
-    if scrapeData:
-        print("Run WebScrapers")
-        print('Get Events from websites')
-        EventStudy_obj = EventStudyResearch().getevents_data()
-        EventStudy_obj.to_csv("EventStudy_obj.csv", sep =",")
-            
-        print('Get UN Country Codes.')
-        print("From UN Website")
-        EventStudy_CountryCodes_obj = EventStudyResearch().get_CountryCodes()
-        EventStudy_CountryCodes_obj.to_csv("EventStudy_CountryCodes_obj.csv", sep=",")
-        print("Deaggregate Banking Unions")
-        EventStudy_DeAgg_obj = EventStudyResearch().DeAgg_Events_Union(EventStudy_obj,CombineFrame = True)
-        print("Attach Announcement types which are normalized")
-        EventStudy_normalized_obj = EventStudyResearch().normalize_events_CountryCodes_UN(EventStudy_DeAgg_obj,EventStudy_CountryCodes_obj)
-        EventStudy_normalized_obj.to_csv("EventStudy_normalized_obj.csv", sep=",")
-        print("Get World Regions and attach to the events.")
-        EventStudy_regions_obj =  EventStudyResearch().get_country_regions(EventStudy_normalized_obj)
-        EventStudy_regions_obj.to_csv("EventStudy_regions_obj.csv", sep=",")
-    else:
-        EventStudy_obj = pd.read_csv("EventStudy_obj.csv",sep = ",")
-        EventStudy_CountryCodes_obj = pd.read_csv("EventStudy_CountryCodes_obj.csv", sep=",")
-        EventStudy_normalized_obj = pd.read_csv("EventStudy_normalized_obj.csv", sep=",")
-        EventStudy_regions_obj = pd.read_csv("EventStudy_regions_obj.csv", sep=",")
-        
-    if getidx_names:
-        print("Get all the indices names")
-        EventStudy_idxnames_obj = EventStudyResearch().get_idx_names(EventStudy_regions_obj)
-        EventStudy_idxnames_obj.to_csv("EventStudy_idxnames_obj.csv", sep=",")
-    else:
-        EventStudy_idxnames_obj = pd.read_csv("EventStudy_idxnames_obj.csv", sep=",")
-    
-    if getidx_prices:        
-        print("Get index prices monthly and daily.")
-        EventStudy_idxprices_obj  = EventStudyResearch().get_idx_prices(EventStudy_idxnames_obj,EventStudy_regions_obj, region=True, country=True, sector=True)
-        EventStudy_idxprices_obj.to_csv("EventStudy_idxprices_obj.csv", sep=",")
-    else:
-        EventStudy_idxprices_obj = pd.read_csv("EventStudy_idxprices_obj.csv", sep=",")
-
-    if getidx_names:
-        print("Get only the index names that exist in the prices file.")
-        EventStudy_indexnames_inprices_obj = EventStudy_idxnames_obj[EventStudy_idxnames_obj['gvkeyx'].isin(list(EventStudy_idxprices_obj['gvkeyx'].unique()))]
-        EventStudy_indexnames_inprices_obj.to_csv("EventStudy_indexnames_inprices_obj.csv", sep=",")
-    else:
-        EventStudy_indexnames_inprices_obj = pd.read_csv("EventStudy_indexnames_inprices_obj.csv", sep=",")
-
-    print("Event Study Initlializations")
-
-    if prepareEST:
-        print("Preparing Events with proper indcies and firm names")
-        EventStudy_EST_Raw = EventStudyResearch().EST_Event_Generator(EventStudy_regions_obj,EventStudy_indexnames_inprices_obj)
-        EventStudy_EST_Raw.to_csv("EventStudy_EST_Raw.csv", sep=",")
-    else:
-        EventStudy_EST_Raw = pd.read_csv("EventStudy_EST_Raw.csv", sep=",")
-    
-    if EST_Run:
-        print("Preprocessing Data for EST API formatting")
-        PreProcess_EST_Data_Dict   = EventStudyResearch().EST_File_Generator(EventStudy_EST_Raw,EventStudy_idxprices_obj,EventStudy_indexnames_inprices_obj,
-                                    EstSubset = EstSubset ,
-                                    EstParams = EstParams )
-
-        EST_Results = EventStudyResearch().EST_R_API_Wrapper(PreProcess_EST_Data_Dict, run_R = run_R,
-                                        params_dict= params_dict
-                                        )        
-    else:
-        EST_Results= {}
-
-    return(EST_Results)
-        
-
 
 
 
@@ -1880,67 +1781,11 @@ def RunEventStudyResearch(self, scrapeData = True, getidx_names = True, getidx_p
 #*****************************************************************************************************************************************************************************************************************************
 
 
-EventStudy_obj =  EventStudyResearch().RunEventStudyResearch()
-
-
-#Workspace
-
-#Run WebScrapers
-
-#Get Events from websites
-    #events = getevents_data()
-    #Export the raw event file
-    #events.to_csv("events.csv",sep = ",")
-
-#Get UN Country Codes.
-#From UN Website
-    #event_CountryCodes = get_CountryCodes()
-    #event_CountryCodes.to_csv("event_CountryCodes.csv",sep = ",")
+EventStudy_obj =  EventStudyResearch().RunEventStudyResearch(scrapeData = False, getidx_names = False, getidx_prices = False)
 
 
 
-
-
-#Import events file
-#events = pd.read_csv("events.csv")
-#event_CountryCodes = pd.read_csv("event_CountryCodes.csv")
-#events_cleaned = events_normalize_annctype(events)
-#events_cleaned = DeAgg_Events_Union(events_cleaned = events_cleaned, CombineFrame = True)
-#events_cleaned = normalize_events_CountryCodes_UN(events_cleaned,event_CountryCodes)
-
-#Get World Regions and attach to the events.
-#events_cleaned_df_regions = get_country_regions(events_cleaned)
-#events_cleaned_df_regions.to_csv("events_regions_df.csv", sep = ",")
-
-events_cleaned_df_regions = pd.read_csv("events_regions_df.csv")
-
-#Get all the indices names
-#event_index_names_df = get_idx_names(events_cleaned_df_regions)
-#event_index_names_df.to_csv("event_index_names_df.csv", sep = ",")
-event_index_names_df = pd.read_csv("event_index_names_df.csv")
-
-
-#Get index prices monthly and daily.
-#Daily
-#event_idx_prices = get_idx_prices(event_index_names_df,events_cleaned_df_regions)
-#event_idx_prices.to_csv("regional_country_sector_idx_prices.csv", sep = ",")
-
-event_idx_prices = pd.read_csv("regional_country_sector_idx_prices.csv")
-
-#Get only the index names that exist in the prices file.
-#event_index_names_inprices_df = event_index_names_df[event_index_names_df['gvkeyx'].isin(list(event_idx_prices['gvkeyx'].unique()))]
-#event_index_names_inprices_df.to_csv("event_index_names_inprices_df.csv", sep = ",")
-event_index_names_inprices_df = pd.read_csv("event_index_names_inprices_df.csv")
-
-#Event Study
-
-#EST_Events_Raw = EST_Event_Generator(events_cleaned_df_regions,event_index_names_df)
-
-#EST_Events_Raw.to_csv("EST_Events_Raw.csv", sep = ",")
-EST_Events_Raw = pd.read_csv("EST_Events_Raw.csv")
-
-
-
+#TODO: Resolve formatting issues with Request File.
 
 #TODO: Grouping Variables not working properly for averages.
     #Causing issues with AAR and CAAR
@@ -1951,28 +1796,8 @@ EST_Events_Raw = pd.read_csv("EST_Events_Raw.csv")
     #This way to we focus on just one index per request file.
     #We can look throught he duplicate index numbers.
     #Otherwise too many combinations
+    #Filter out same firm and market referneces
     #TODO: Any way to create just 1 Request file and handle for the duplicate event IDs.
-
-
-
-#Have to make different Dicts for each level (region:global, country:region,sector:country)
-PreProcess_EST_Data_Dict   = EST_File_Generator(EST_Events_Raw,event_idx_prices,event_index_names_df,
-                            EstSubset = { "subset_columns" : [["annctype","global_idx","regional_idx","regioncode_x"],
-                                                              ["annctype","regional_idx","ISO3","country_idx"],
-                                                              ["annctype", "ISO3", "country_idx","sector_idx"]],
-                                        "firmID": ["regional_idx","country_idx","sector_idx"],
-                                      "marketID":["global_idx","regional_idx","country_idx"],
-                                      "grouping_var": [["source","regioncode_x"],
-                                                        ["source","country"],
-                                                        ["source","country","sector_idx"]
-                                                       ]
-                                    },
-                            EstParams = {"start_ev_win": [-2,-3,-5],
-                                     "end_ev_win" : [2,3,5],
-                                     "end_est_win" : [-5,-10,-15],
-                                     "est_win_len" : [60,120,180]} )
-
-
 
 
 
@@ -1983,70 +1808,6 @@ PreProcess_EST_Data_Dict   = EST_File_Generator(EST_Events_Raw,event_idx_prices,
 #Manually create functions to comeplete tasks.
 
 
-
-
-#TODO: Grouping Variables not working properly for averages.
-    #Causing issues with AAR and CAAR
-    #Seems to be too many unique grouping variables.
-    #the count per group is too low.
-
-#TODO: May need to sort and rank the duplicate indicies rather the whole streams
-    #This way to we focus on just one index per request file.
-    #We can look throught he duplicate index numbers.
-    #Otherwise too many combinations
-    #TODO: Any way to create just 1 Request file and handle for the duplicate event IDs.
-
-
-PreProcess_EST_Data_Dict["RequestData"].shape
-PreProcess_EST_Data_Dict["RequestData"].dup_stream_num.max()
-
-
-request_data_df =PreProcess_EST_Data_Dict["RequestData"]
-
-request_data_df["Event ID"].unique().__len__()
-
-#Backup Object
-PreProcess_EST_Data_Dict_RequestData_bk = PreProcess_EST_Data_Dict["RequestData"]
-#PreProcess_EST_Data_Dict["RequestData"] = PreProcess_EST_Data_Dict_RequestData_bk
-
-#Set to only stream 1
-
-PreProcess_EST_Data_Dict["RequestData"] = PreProcess_EST_Data_Dict_RequestData_bk[PreProcess_EST_Data_Dict_RequestData_bk["dup_stream_num"].isin(list(range(1,10)))]
-
-
-
-
-EST_Results = EST_R_API_Wrapper(PreProcess_EST_Data_Dict, run_R = True,
-                                params_dict={
-                                    'workingdir': '.',
-                                    'apiKey': '573e58c665fcc08cc6e5a660beaad0cb',
-                                    'apiUrl': "http://api.eventstudytools.com",
-                                    'ResultFileType': 'csv',
-                                    'ReturnType': 'log',
-                                    'NonTradingDays': 'earlier',
-                                    'BenchmarkModel': 'mm',
-                                    'resultPath': './results/',
-                                    'requestFile': '01_RequestFile_df.csv',
-                                    'firmDataFile': '02_FirmData_df.csv',
-                                    'marketDataFile': '03_MarketData_df.csv'}
-                                )
-
-
-
-
-
-analysis = EST_Results['AnalysisReport']
-ar = EST_Results['AR_Results']
-aar = EST_Results['AAR_Results']
-car = EST_Results['CAR_Results']
-caar = EST_Results['CAAR_Results']
-
-#car.shape
-
-
-
-
-
 #Cluster Analysis of Returns around Events.
 
 
@@ -2054,76 +1815,6 @@ caar = EST_Results['CAAR_Results']
 
 #Participant Level
 #Will need to make a list of banks in US, Euro, and Asia that are relevant and get their market data.
-
-
-
-
-#events = []
-#Run WebScrapers
-
-#Get Events from websites
-    #events = getevents_data()
-    #Export the raw event file
-    #events.to_csv("events.csv",sep = ",")
-
-#Get UN Country Codes.
-#From UN Website
-    #event_CountryCodes = get_CountryCodes()
-    #event_CountryCodes.to_csv("event_CountryCodes.csv",sep = ",")
-
-
-
-
-
-#Import events file
-#events = pd.read_csv("events.csv")
-#event_CountryCodes = pd.read_csv("event_CountryCodes.csv")
-#events_cleaned = events_normalize_annctype(events)
-#events_cleaned = DeAgg_Events_Union(events_cleaned = events_cleaned, CombineFrame = True)
-#events_cleaned = normalize_events_CountryCodes_UN(events_cleaned,event_CountryCodes)
-
-#Get World Regions and attach to the events.
-#events_cleaned_df_regions = get_country_regions(events_cleaned)
-#events_cleaned_df_regions.to_csv("events_regions_df.csv", sep = ",")
-
-events_cleaned_df_regions = pd.read_csv("events_regions_df.csv")
-
-#Get all the indices names
-#event_index_names_df = get_idx_names(events_cleaned_df_regions)
-#event_index_names_df.to_csv("event_index_names_df.csv", sep = ",")
-event_index_names_df = pd.read_csv("event_index_names_df.csv")
-
-
-#Get index prices monthly and daily.
-#Daily
-#event_idx_prices = get_idx_prices(event_index_names_df,events_cleaned_df_regions)
-#event_idx_prices.to_csv("regional_country_sector_idx_prices.csv", sep = ",")
-
-
-
-event_idx_prices = pd.read_csv("regional_country_sector_idx_prices.csv")
-
-#Get only the index names that exist in the prices file.
-#event_index_names_inprices_df = event_index_names_df[event_index_names_df['gvkeyx'].isin(list(event_idx_prices['gvkeyx'].unique()))]
-#event_index_names_inprices_df.to_csv("event_index_names_inprices_df.csv", sep = ",")
-event_index_names_inprices_df = pd.read_csv("event_index_names_inprices_df.csv")
-
-#Event Study
-
-#EST_Events_Raw = EST_Event_Generator(events_cleaned_df_regions,event_index_names_df)
-
-#EST_Events_Raw.to_csv("EST_Events_Raw.csv", sep = ",")
-EST_Events_Raw = pd.read_csv("EST_Events_Raw.csv")
-
-
-
-
-
-
-
-
-
-
 
 
 
