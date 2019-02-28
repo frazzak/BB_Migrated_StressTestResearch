@@ -175,8 +175,17 @@ class StressTestData():
                                                              sincedt="1989-12-31")
 
         print("Applying Mergers File")
-        BankPerfMerged = self.BankPerf_Merger_process(BankPerfConRedcued, merger_df_name="merger_info_frb",
-                                                 BankPerf_Calc_df_name="BankPerf_ConsecutiveReduced")
+        BankPerfMerged = self.BankPerf_Merger_process(BankPerfConRedcued
+                                                      , merger_df_name="merger_info_frb_new"
+                                                      ,BankPerf_Calc_df_name="BankPerf_ConsecutiveReduced"
+                                                      , merger_df_subset=["#ID_RSSD_PREDECESSOR", "ID_RSSD_SUCCESSOR", "DT_TRANS"], merger_df_datecol="DT_TRANS",
+                                                        merger_df_predecessor="#ID_RSSD_PREDECESSOR", merger_df_successor="ID_RSSD_SUCCESSOR")
+
+        #BankPerf_Merger_process(self, BankPerf, merger_df_name="merger_info_frb",
+        #                        merger_df_subset=["MERGE_DT", "NON_ID", "SURV_ID"], merger_df_datecol="MERGE_DT",
+        #                        merger_df_predecessor="NON_ID", merger_df_successor="SURV_ID"
+        #BankPerf_Calc_df_name = None)
+
         print("Aggregating Based on Mergers")
         BankAgg = self.BankPerf_Aggregation_process(BankPerfMerged, BankPerf_ToAgg_df_name="BankPerf_Mergered")
 
@@ -390,13 +399,14 @@ class StressTestData():
 
         return (BankPerf)
 
-    def BankPerf_Merger_process(self, BankPerf, merger_df_name="merger_info_frb", BankPerf_Calc_df_name=None):
+    def BankPerf_Merger_process(self, BankPerf, merger_df_name="merger_info_frb", merger_df_subset = ["MERGE_DT", "NON_ID", "SURV_ID"], merger_df_datecol = "MERGE_DT",merger_df_predecessor = "NON_ID",merger_df_successor = "SURV_ID",
+                                BankPerf_Calc_df_name=None):
         if merger_df_name in BankPerf.keys():
             print("Getting Merger Info from Dictionary")
             merger_info_df = BankPerf[merger_df_name]
-            merger_info_df = merger_info_df[["MERGE_DT", "NON_ID", "SURV_ID"]]
-            merger_info_df["MERGE_DT"] = pd.to_datetime(merger_info_df["MERGE_DT"], format="%Y%M%d")
-            merger_info_df["NON_ID"] = merger_info_df["NON_ID"].astype(int)
+            merger_info_df = merger_info_df[merger_df_subset]
+            merger_info_df[merger_df_datecol] = pd.to_datetime(merger_info_df[merger_df_datecol], format="%Y%M%d")
+            merger_info_df[merger_df_predecessor] = merger_info_df[merger_df_predecessor].astype(int)
         # print(merger_info_df.info())
         # print(merger_info_df.describe())
         else:
@@ -410,18 +420,18 @@ class StressTestData():
 
         print("Loop/merge through merger information and update RSSD of non survivor with survivor ID.")
         #    orig_columns = list(BankPerf_Calc_df.columns)
-        BankPerf_Merger_df = BankPerf_Calc_df.merge(merger_info_df, left_on="RSSD_ID", right_on="NON_ID", how="left")
-        print("Found", BankPerf_Merger_df["RSSD_ID"][pd.notnull(BankPerf_Merger_df["NON_ID"])].unique().__len__(),
+        BankPerf_Merger_df = BankPerf_Calc_df.merge(merger_info_df, left_on="RSSD_ID", right_on=merger_df_predecessor, how="left")
+        print("Found", BankPerf_Merger_df["RSSD_ID"][pd.notnull(BankPerf_Merger_df[merger_df_predecessor])].unique().__len__(),
               ' Non surviving RSSD_IDs')
         print("Updating Non-Surviving RSSD_IDs with Surviving IDs")
-        BankPerf_Merger_df.loc[pd.notnull(BankPerf_Merger_df["NON_ID"]), ["RSSD_ID"]] = BankPerf_Merger_df.loc[
-            pd.notnull(BankPerf_Merger_df["NON_ID"]), ["SURV_ID"]]
+        BankPerf_Merger_df.loc[pd.notnull(BankPerf_Merger_df[merger_df_predecessor]), ["RSSD_ID"]] = BankPerf_Merger_df.loc[
+            pd.notnull(BankPerf_Merger_df[merger_df_predecessor]), [merger_df_successor]]
         print("Dropping Merge Columns")
         BankPerf_Merger_df = BankPerf_Merger_df.drop(list(merger_info_df.columns), axis=1)
         print("Re Merging to check for remaining mergers")
-        BankPerf_Merger_df = BankPerf_Merger_df.merge(merger_info_df, left_on="RSSD_ID", right_on="NON_ID", how="left")
+        BankPerf_Merger_df = BankPerf_Merger_df.merge(merger_info_df, left_on="RSSD_ID", right_on=merger_df_predecessor, how="left")
         print("Number of NON_ID matching with RSSD_ID:",
-              BankPerf_Merger_df[pd.notnull(BankPerf_Merger_df["NON_ID"])].shape)
+              BankPerf_Merger_df[pd.notnull(BankPerf_Merger_df[merger_df_predecessor])].shape)
         # if BankPerf_Merger_df[pd.notnull(BankPerf_Merger_df["NON_ID"])].shape == 0:
         BankPerf["BankPerf_Mergered"] = BankPerf_Merger_df
         print(BankPerf["BankPerf_Mergered"].describe().transpose())
@@ -532,25 +542,31 @@ class StressTestData():
 
 def bankperf_rates_ratios(BankPerf, replace_nan = True):
     #Need to handle NAN rows and outliers.
+
+
     if replace_nan:
         print("Replacing nans, infs, and -infs in dataframe")
-        BankPerf = BankPerf[~BankPerf.isin([np.nan, np.inf, -np.inf]).any(1)]
 
+        BankPerf = BankPerf.replace("0.0",np.nan)
+        BankPerf = BankPerf[~BankPerf.isin([np.inf,np.nan, -np.inf]).any(1)]
     print("Loans categories Descriptive Statistics")
     #BankPerf = BankPerf[~BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Loans categories:")]].isin([np.nan, np.inf, -np.inf]).any(1)]
     #print(BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Loans categories:")]].describe().transpose())
 
     print("Net Charge-Off rates by type of loan calculations")
     for nco, loan in zip(list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Net charge-offs by type of loan:")]),list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Loans categories:")])):
+        print("Charge-Off",nco, "Loan Category:",loan)
+
         tmp_str = nco.replace("Net charge-offs by type of loan:","ncoR:")
         print(tmp_str)
         BankPerf[tmp_str] = ((BankPerf[nco].astype(float)) / (BankPerf[loan].astype(float)))
-        BankPerf[tmp_str] = BankPerf[tmp_str] * 400
+        BankPerf[tmp_str] = BankPerf[tmp_str] * 100
         #BankPerf = pd.concat([BankPerf,BankPerf_tmp[tmp_str]], ignore_index=True, axis = 1)
     print(BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("ncoR:")]].describe().transpose())
 
     print("PPNR Ratios calculations")
     for ppnr_comp in list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Components of pre-provision net revenue:")]):
+        print(ppnr_comp,)
         tmp_str = ppnr_comp.replace("Components of pre-provision net revenue:", "ppnrRatio:")
         print(tmp_str)
         BankPerf[tmp_str] = ((BankPerf[ppnr_comp].astype(float))/(BankPerf['Other items:Consolidated assets'].astype(float)))
@@ -582,10 +598,13 @@ Z_micro = init_ST.Z_micro_process()
 #May need to subset BankPerf to get Xi and Yi
 
 BankPerf = init_ST.X_Y_bankingchar_perf_process()
+BankPerf_2 = BankPerf
+BankPerf_2.keys()
+BankPerf = BankPerf_2["BankPerf_Calculated_Subset_BankPerf"]
 
 
 
-NCO_Test = bankperf_rates_ratios(RSSD_Subset_test["BankPerf"], replace_nan = True)
+NCO_Test = bankperf_rates_ratios(BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"], replace_nan = False)
 
 
 
