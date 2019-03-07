@@ -50,7 +50,7 @@ class StressTestData():
             Z_macro_raw_data_dict[k]["pdDate"] = pd.to_datetime(Z_macro_raw_data_dict[k]["Date"].apply(lambda x: "-".join(x.split(" "))).str.replace(r'(Q\d) (\d+)', r'\2-\1'), errors = 'coerce')
             print("Dropping Original Date Column")
             Z_macro_raw_data_dict[k] = Z_macro_raw_data_dict[k].drop("Date", axis = 1)
-
+            print(Z_macro_raw_data_dict[k].describe().transpose())
         return(Z_macro_raw_data_dict)
 
     def Z_micro_process(self, filetype = ".csv"):
@@ -132,79 +132,142 @@ class StressTestData():
                                              ",  ,": ",",
                                              "+  +": "+",
                                              "-  -": "-"
-                                         }
+                                         },
 
                                      },
                                      keyname=None, groupfunction=np.mean, groupby=["RSSD_ID", "ReportingDate"],
                                      groupagg_col='Other items:Consolidated assets',
                                      RSSD_DateParam=["1989-12-31", "2018-01-01"],
                                      ReportingDateParam=["1989-12-31", "2017-12-31"], RSSDList_len=1000, dropdup=False,
-                                     replace_nan=False
+                                     replace_nan=False, merge = True, Consqtr = True, combinecol = True, reducedf = True
                                      ):
 
         print("Reading in CSV files from", self.BankPerf_dir)
-        BankCharPerf_raw_data_dict = file_dict_read(self.BankPerf_dir, filetype=filetype)
+        BankCharPerf_raw_data_dict = self.file_dict_read(self.BankPerf_dir, filetype=filetype)
         print(BankCharPerf_raw_data_dict.keys())
-        print("Combining DataFrames")
-        BankCharPerf_raw_data_dict = self.BHC_DF_Reducer(BankCharPerf_raw_data_dict, params_dict["CallReport_prefix"],
-                                                    ["RSSD9001", "RSSD9999"])
+
+        if reducedf:
+            print("Combining DataFrames")
+            BankCharPerf_raw_data_dict = self.BHC_DF_Reducer(BankCharPerf_raw_data_dict, keyprefix = params_dict["CallReport_prefix"],merge_on =  ["RSSD9001", "RSSD9999"], outputkeyname = "WRDS_Covas_CallReport_Combined")
+
         print("Preparing Calculated Fields")
         print("Creating temp VARLISTs Column")
         for k, v in replace_dict.items():
             # print(k,v)
             print("Replacing characters from dict for", k)
             BankCharPerf_raw_data_dict[params_dict["Calc_df"]][k] = BankCharPerf_raw_data_dict[params_dict["Calc_df"]][
-                v["calcol"]].astype(str).apply(
-                lambda x: [i.strip() for i in replace_all(x, replace_dict[k]).split(",")])
+                v["calcol"]].astype(str).apply(lambda x: [i.strip() for i in self.replace_all(x, replace_dict[k]).split(",")])
             print("Replacing blanks, nans and nan strings")
-            BankCharPerf_raw_data_dict[params_dict["Calc_df"]][k] = BankCharPerf_raw_data_dict[params_dict["Calc_df"]][
-                k].apply(lambda x: [i for i in x if i not in ["", np.nan, "nan"]])
+            BankCharPerf_raw_data_dict[params_dict["Calc_df"]][k] = BankCharPerf_raw_data_dict[params_dict["Calc_df"]][k].apply(lambda x: [i for i in x if i not in ["", np.nan, "nan"]])
 
-        # Needs update to handle each key
+
         print("Checking for Column name Discrepancy")
         miss_col = self.check_missing_BHCCodes(BankCharPerf_raw_data_dict, params_dict, replace_dict)
         print(miss_col)
         # Iterate through Objects, combine and concat
         print("Combining and Creating Derived Columns")
-        BankCharPerf_raw_data_dict["BankPerf_Calculated"] = self.BHC_loan_nco_ppnr_create(BankCharPerf_raw_data_dict,
-                                                                                     params_dict, replace_dict)
+        BankCharPerf_raw_data_dict["BankPerf_Calculated"] = self.BHC_loan_nco_ppnr_create(BankCharPerf_raw_data_dict,params_dict, replace_dict)
 
-        print("Applying Consecutive Quarters Rule")
-        BankPerfConRedcued = self.BankPerf_ConsecutiveQtrs_Reduce(BankCharPerf_raw_data_dict, concecutiveqtrs=8,
-                                                             BankPerf_Calc_df_name="BankPerf_Calculated",
-                                                             sincedt="1989-12-31")
 
-        print("Applying Mergers File")
-        BankPerfMerged = self.BankPerf_Merger_process(BankPerfConRedcued
-                                                      , merger_df_name="merger_info_frb_new"
-                                                      ,BankPerf_Calc_df_name="BankPerf_ConsecutiveReduced"
-                                                      , merger_df_subset=["#ID_RSSD_PREDECESSOR", "ID_RSSD_SUCCESSOR", "DT_TRANS"], merger_df_datecol="DT_TRANS",
-                                                        merger_df_predecessor="#ID_RSSD_PREDECESSOR", merger_df_successor="ID_RSSD_SUCCESSOR")
 
-        #BankPerf_Merger_process(self, BankPerf, merger_df_name="merger_info_frb",
-        #                        merger_df_subset=["MERGE_DT", "NON_ID", "SURV_ID"], merger_df_datecol="MERGE_DT",
-        #                        merger_df_predecessor="NON_ID", merger_df_successor="SURV_ID"
-        #BankPerf_Calc_df_name = None)
+        if Consqtr:
+            print("Applying Consecutive Quarters Rule")
+            BankCharPerf_raw_data_dict = self.BankPerf_ConsecutiveQtrs_Reduce(BankCharPerf_raw_data_dict, concecutiveqtrs=8,
+                                                                 BankPerf_Calc_df_name="BankPerf_Calculated",
+                                                                 sincedt="1990-01-30", outputkeyname = "BankPerf_MainCalc")
 
-        print("Aggregating Based on Mergers")
-        BankAgg = self.BankPerf_Aggregation_process(BankPerfMerged, BankPerf_ToAgg_df_name="BankPerf_Mergered")
+        #BankPerfConRedcued.keys()
+        if combinecol:
+            print("Updating Calculated Columns based on Date Varying Calculations")
+            BankCharPerf_raw_data_dict = self.BankPerf_Combine_Cols(BankCharPerf_raw_data_dict, src_keyname="BankPerf_MainCalc",
+                                                            output_keyname="BankPerf_MainCalc")
+        if merge:
+            print("Applying Mergers File")
+            BankCharPerf_raw_data_dict = self.BankPerf_Merger_process(BankCharPerf_raw_data_dict
+                                                          , merger_df_name="merger_info_frb_new"
+                                                          ,BankPerf_Calc_df_name="BankPerf_MainCalc"
+                                                          , merger_df_subset=["#ID_RSSD_PREDECESSOR", "ID_RSSD_SUCCESSOR", "DT_TRANS"], merger_df_datecol="DT_TRANS",
+                                                            merger_df_predecessor="#ID_RSSD_PREDECESSOR", merger_df_successor="ID_RSSD_SUCCESSOR", outputkeyname = "BankPerf_MainCalc")
 
-        print("Getting Subset of Each Data Frame based on top 1000 RSSD's based on Consolidated Assets")
-        for keyname in [v for v in BankAgg.keys() if v.startswith("BankPerf_")]:
+            #BankPerf_Merger_process(self, BankPerf, merger_df_name="merger_info_frb",
+            #                        merger_df_subset=["MERGE_DT", "NON_ID", "SURV_ID"], merger_df_datecol="MERGE_DT",
+            #                        merger_df_predecessor="NON_ID", merger_df_successor="SURV_ID"
+            #BankPerf_Calc_df_name = None)
 
-            Rssd_tmp = self.RSSD_Subset(BankAgg, keyname=keyname, groupfunction=groupfunction, groupby=groupby,
+            print("Aggregating Based on Mergers")
+            BankCharPerf_raw_data_dict = self.BankPerf_Aggregation_process(BankCharPerf_raw_data_dict, BankPerf_ToAgg_df_name="BankPerf_MainCalc", outputkeyname = "BankPerf_MainCalc")
+
+        print("Getting Subset of Each Data Frame based on top 1000 RSSD's based on ",groupagg_col )
+        for keyname in [v for v in BankCharPerf_raw_data_dict.keys() if v.startswith("BankPerf_")]:
+
+            Rssd_tmp = self.RSSD_Subset(BankCharPerf_raw_data_dict, keyname=keyname, groupfunction=groupfunction, groupby=groupby,
                                    groupagg_col=groupagg_col, RSSD_DateParam=RSSD_DateParam,
                                    ReportingDateParam=ReportingDateParam, RSSDList_len=RSSDList_len, dropdup=dropdup,
                                    replace_nan=replace_nan)
             for k, v in Rssd_tmp.items():
                 keyname_tmp = keyname + "_Subset" + "_" + k
                 print(keyname_tmp)
-                BankAgg[keyname_tmp] = v
+                BankCharPerf_raw_data_dict[keyname_tmp] = v
         gc.collect()
-        return (BankAgg)
+        return (BankCharPerf_raw_data_dict)
 
-    def BHC_DF_Reducer(self, BankPerf, keyprefix=params_dict["CallReport_prefix"], merge_on=["RSSD9001", "RSSD9999"],
-                       outputkeyname="WRDS_Covas_CallReport_Combined"):
+    def BankPerf_Combine_Cols(self, BankPerf, output_keyname=None, src_keyname="BankPerf_Calculated",
+                              calc_keyname="NCO_PPNR_Loan_Calcs"):
+        agg_exceptions = BankPerf["NCO_PPNR_Loan_Calcs"][
+            pd.notnull(BankPerf[calc_keyname]["DT_Since"]) | pd.notnull(BankPerf[calc_keyname]["DT_Till"])][
+            ["Variable Category", "Variable", "DT_Since", "DT_Till"]]
+
+        print("Source DF", src_keyname)
+        Master_DF_tmp = BankPerf[src_keyname]
+
+        for row in list(agg_exceptions.index):
+            # print(agg_exceptions.iloc[row,])
+            # tmp_result_obj = pd.DataFrame()
+            tmp_col_name = agg_exceptions.loc[row, "Variable Category"] + ":" + agg_exceptions.loc[row, "Variable"]
+            tmp_agg_col = tmp_col_name.split("_")[0]
+            tmp_DT_Since = agg_exceptions.loc[row, "DT_Since"]
+            tmp_DT_Till = agg_exceptions.loc[row, "DT_Till"]
+            print("Fixing out of bounds dates")
+            if tmp_DT_Till == "9999-12-31":
+                tmp_DT_Till = "2100-12-31"
+            else:
+                tmp_DT_Till = agg_exceptions.loc[row, "DT_Till"]
+
+            if tmp_DT_Since == "9999-12-31":
+                tmp_DT_Since = "2100-12-31"
+            else:
+                tmp_DT_Since = agg_exceptions.loc[row, "DT_Since"]
+
+            print(tmp_col_name, tmp_DT_Since, tmp_DT_Till, tmp_agg_col)
+            print("Getting Subset Index for Reportign Dates with Different calculations")
+            tmp_subset_idx = Master_DF_tmp[
+                (Master_DF_tmp["ReportingDate"] > tmp_DT_Since) & (Master_DF_tmp["ReportingDate"] < tmp_DT_Till)].index
+            if tmp_agg_col in Master_DF_tmp.columns:
+                print("Appending to New Vector")
+                # Master_DF_tmp[tmp_agg_col] = pd.concat([Master_DF_tmp[tmp_agg_col], col_subset_df])
+                Master_DF_tmp.loc[tmp_subset_idx, tmp_agg_col] = Master_DF_tmp.loc[tmp_subset_idx, tmp_col_name]
+
+            else:
+                print("Initializing Column")
+                Master_DF_tmp[tmp_agg_col] = np.nan
+                print("Appending to New Vector")
+                Master_DF_tmp.loc[tmp_subset_idx, tmp_agg_col] = Master_DF_tmp.loc[tmp_subset_idx, tmp_col_name]
+                # Master_DF_tmp[tmp_agg_col] = pd.concat([Master_DF_tmp[tmp_agg_col], col_subset_df])
+
+        LoanList = [x for x in Master_DF_tmp.columns[Master_DF_tmp.columns.str.startswith("Loans categories:")] if
+                    "_" not in x]
+        print(Master_DF_tmp[LoanList].describe().transpose())
+
+        print("Saving updated frame to Dictionary")
+        if output_keyname is None:
+            tmp_name = src_keyname + "_Exceptions"
+            BankPerf[tmp_name] = Master_DF_tmp
+        else:
+            BankPerf[output_keyname] = Master_DF_tmp
+        return (BankPerf)
+
+    def BHC_DF_Reducer(self, BankPerf, keyprefix=None, merge_on=["RSSD9001", "RSSD9999"],
+                       outputkeyname="WRDS_Covas_BankPerf_CallReport"):
         print("Create list of dataframes to combine")
         DF_raw_list = [v for v in BankPerf.keys() if v.startswith(keyprefix)]
 
@@ -235,9 +298,10 @@ class StressTestData():
                 varlist_tmp = varlist_tmp + BankPerf[params_dict["Calc_df"]][k][i]
                 varlist_tmp = [x for x in varlist_tmp if x not in ['nan', ""]]
 
-            bankperf = list(BankPerf[v["df_keyname"]].columns)
+            if v["df_keyname"] in BankPerf.keys():
+                bankperf = list(BankPerf[v["df_keyname"]].columns)
 
-            mismatch_result = list(set(varlist_tmp) - set(bankperf))
+                mismatch_result = list(set(varlist_tmp) - set(bankperf))
 
             if mismatch_result.__len__() > 0:
                 print("Columns not Matching from VarList to BankPerf Data:", mismatch_result)
@@ -258,53 +322,69 @@ class StressTestData():
                                                   "RSSD9045": "BHC_Indicator", "RSSD9016": "FHC_Indicator",
                                                   "RSSD9101": "Domestic_Indicator"
                                      , "RSSD9138": "Financial_Sub_Indicator", "RSSD9397": "LargestEntityBHC",
-                                                  "RSSD9375": "HeadOffice_RSSD_ID"}):
+                                                  "RSSD9375": "HeadOffice_RSSD_ID", "RCFD2170" : "TotalAssets"}):
         print("Initialize Result DF")
         BankPerf_result = pd.DataFrame()
         loan_nco_ppnr_df = pd.DataFrame()
         for k, v in replace_dict.items():
-            # print(k,v)
-            print("Replacing characters from dict for", k)
-            del v["+"]
-            del v["-"]
-            #        del v[")"]
-            #        del v["("]
-            print("Initialize Calculation Column")
-            calc_tmp = BankPerf[params_dict["Calc_df"]][v["calcol"]].astype(str).apply(
-                lambda x: replace_all(x, replace_dict[k]).strip())
-            print("Create String Column with usage calculations")
-            BankPerf[params_dict["Calc_df"]]["Calc_varstr"] = calc_tmp
-            print("Generate Calculated Columns")
-            for i in range(0, BankPerf[params_dict["Calc_df"]].shape[0]):
-                tmp_subset = BankPerf[params_dict["Calc_df"]].loc[i, k]
-                tmp_df = BankPerf[v["df_keyname"]][tmp_subset]
-                tmp_varname = BankPerf[params_dict["Calc_df"]].loc[i, "Variable"]
-                tmp_varcat = BankPerf[params_dict["Calc_df"]].loc[i, "Variable Category"]
-                tmp_calc_str = BankPerf[params_dict["Calc_df"]].loc[i, "Calc_varstr"]
-                print("Get Column Vectors")
-                for col in tmp_subset:
-                    print(col)
-                    exec(col + ''' = tmp_df["''' + col + '''"]''')
-                    print(tmp_df[col].shape)
-                print("Calculate Derived Filed for:", tmp_varname, tmp_varcat, tmp_calc_str)
-                if tmp_calc_str not in ["", "nan", np.nan]:
-                    tmp_result_obj = eval(tmp_calc_str)
-                else:
-                    tmp_result_obj = np.nan
-                print("Add Derived Field to Result DataFrame")
-                tmp_col_name = tmp_varcat + ":" + tmp_varname
-                loan_nco_ppnr_df[tmp_col_name] = tmp_result_obj
-                print(loan_nco_ppnr_df[tmp_col_name].shape)
-            # Combine
-            print("Combine Calculated Columns to Original Dataframe")
-            BankPerf_result_tmp = pd.concat([BankPerf[v["df_keyname"]][identifier_columns], loan_nco_ppnr_df], axis=1)
-            print("Rename Identifier Columns")
-            BankPerf_result_tmp = BankPerf_result_tmp.rename(rename_col_dict, axis=1)
-            print("Format ReportingDate column")
-            BankPerf_result_tmp["ReportingDate"] = pd.to_datetime(BankPerf_result_tmp["ReportingDate"], format="%Y%m%d")
-            BankPerf_result = pd.concat([BankPerf_result, BankPerf_result_tmp])
+            if v["df_keyname"] in BankPerf.keys():
+                # print(k,v)
+                print("Replacing characters from dict for", k)
+                del v["+"]
+                del v["-"]
+                #        del v[")"]
+                #        del v["("]
+                print("Initialize Calculation Column")
+                calc_tmp = BankPerf[params_dict["Calc_df"]][v["calcol"]].astype(str).apply(
+                    lambda x: self.replace_all(x, replace_dict[k]).strip())
 
-        return (BankPerf_result)
+                print("Create String Column with usage calculations")
+                BankPerf[params_dict["Calc_df"]]["Calc_varstr"] = calc_tmp
+
+                print("Generate Calculated Columns")
+                for i in range(0, BankPerf[params_dict["Calc_df"]].shape[0]):
+
+            #    if v["df_keyname"] in BankPerf.keys():
+                    tmp_subset = BankPerf[params_dict["Calc_df"]].loc[i, k]
+                    tmp_df = BankPerf[v["df_keyname"]][tmp_subset]
+
+                    tmp_date_str = (BankPerf[params_dict["Calc_df"]].loc[i, "DT_Since"] == np.nan) & (
+                                BankPerf[params_dict["Calc_df"]].loc[i, "DT_Till"] == np.nan)
+
+                    tmp_varname = BankPerf[params_dict["Calc_df"]].loc[i, "Variable"]
+                    tmp_varcat = BankPerf[params_dict["Calc_df"]].loc[i, "Variable Category"]
+                    tmp_calc_str = BankPerf[params_dict["Calc_df"]].loc[i, "Calc_varstr"]
+
+
+                    print("Get Column Vectors")
+                    for col in tmp_subset:
+                        print(col,tmp_date_str)
+                        exec(col + ''' = tmp_df["''' + col + '''"]''')
+
+                    print("Calculate Derived Filed for:", tmp_varname, tmp_varcat, tmp_calc_str)
+
+                    tmp_col_name = tmp_varcat + ":" + tmp_varname
+
+                    if tmp_calc_str not in ["", "nan", np.nan]:
+                        #if not tmp_date_str:
+                        tmp_result_obj = eval(tmp_calc_str)
+                    else:
+                        tmp_result_obj = np.nan
+                    print("Add Derived Field to Result DataFrame")
+
+                    loan_nco_ppnr_df[tmp_col_name] = tmp_result_obj
+                    print(loan_nco_ppnr_df[tmp_col_name].shape)
+                # Combine
+                #if v["df_keyname"] in BankPerf.keys():
+                print("Combine Calculated Columns to Original Dataframe")
+                BankPerf_result_tmp = pd.concat([BankPerf[v["df_keyname"]][identifier_columns], loan_nco_ppnr_df], axis=1)
+                print("Rename Identifier Columns")
+                BankPerf_result_tmp = BankPerf_result_tmp.rename(rename_col_dict, axis=1)
+                print("Format ReportingDate column")
+                BankPerf_result_tmp["ReportingDate"] = pd.to_datetime(BankPerf_result_tmp["ReportingDate"], format="%Y%m%d")
+                BankPerf_result = pd.concat([BankPerf_result, BankPerf_result_tmp])
+
+            return (BankPerf_result)
 
     def RSSD_Subset(self, BankPerf, keyname=None, groupfunction=np.mean, groupby=["RSSD_ID", "ReportingDate"],
                     groupagg_col="'Other items:Consolidated assets'", RSSD_DateParam=["1989-12-31", "2017-12-31"],
@@ -370,7 +450,7 @@ class StressTestData():
         print_tmp = print_tmp.reset_index().rename({"index": "varname"}, axis=1)
         return (print_tmp)
 
-    def BankPerf_ConsecutiveQtrs_Reduce(self, BankPerf, concecutiveqtrs=8, BankPerf_Calc_df_name=None, sincedt="1989-12-31"):
+    def BankPerf_ConsecutiveQtrs_Reduce(self, BankPerf, concecutiveqtrs=8, BankPerf_Calc_df_name=None, sincedt="1989-12-31", outputkeyname = None):
         if BankPerf_Calc_df_name in BankPerf.keys():
             print("Getting BankPerf Calculated rows")
             BankPerf_Calc_df = BankPerf[BankPerf_Calc_df_name]
@@ -394,13 +474,18 @@ class StressTestData():
         BankPerf_Merger_df_gbsum = BankPerf_Merger_df_gbsum[
             BankPerf_Merger_df_gbsum["RSSD_ID"].isin(RSSD_ID_consecutive)]
 
+
         BankPerf["BankPerf_ConsecutiveReduced"] = BankPerf_Merger_df_gbsum
         print(BankPerf["BankPerf_ConsecutiveReduced"].describe().transpose())
+
+        if outputkeyname is not None:
+            BankPerf[outputkeyname] = BankPerf_Merger_df_gbsum
+            print(BankPerf[outputkeyname].describe().transpose())
 
         return (BankPerf)
 
     def BankPerf_Merger_process(self, BankPerf, merger_df_name="merger_info_frb", merger_df_subset = ["MERGE_DT", "NON_ID", "SURV_ID"], merger_df_datecol = "MERGE_DT",merger_df_predecessor = "NON_ID",merger_df_successor = "SURV_ID",
-                                BankPerf_Calc_df_name=None):
+                                BankPerf_Calc_df_name=None, outputkeyname = None):
         if merger_df_name in BankPerf.keys():
             print("Getting Merger Info from Dictionary")
             merger_info_df = BankPerf[merger_df_name]
@@ -433,12 +518,17 @@ class StressTestData():
         print("Number of NON_ID matching with RSSD_ID:",
               BankPerf_Merger_df[pd.notnull(BankPerf_Merger_df[merger_df_predecessor])].shape)
         # if BankPerf_Merger_df[pd.notnull(BankPerf_Merger_df["NON_ID"])].shape == 0:
+
         BankPerf["BankPerf_Mergered"] = BankPerf_Merger_df
         print(BankPerf["BankPerf_Mergered"].describe().transpose())
 
+        if outputkeyname is not None:
+            BankPerf[outputkeyname] = BankPerf_Merger_df
+            print(BankPerf[outputkeyname].describe().transpose())
+
         return (BankPerf)
 
-    def BankPerf_Aggregation_process(self, BankPerf, BankPerf_ToAgg_df_name=None):
+    def BankPerf_Aggregation_process(self, BankPerf, BankPerf_ToAgg_df_name=None, outputkeyname = None):
 
         if BankPerf_ToAgg_df_name in BankPerf.keys():
             print("Getting BankPerf Calculated rows")
@@ -449,51 +539,58 @@ class StressTestData():
         print("Aggregate all the updated RSSD_ID columns")
 
         # BankPerf_Merger_df_gbsum.columns
-        BankPerf_Merger_df_gbsum = BankPerf_Merger_df_gbsum.groupby(["RSSD_ID", "ReportingDate"])
-        BankPerf_Merger_df_gbsum = BankPerf_Merger_df_gbsum.agg({
+        BankPerf_Merger_df_gbsum = BankPerf_Merger_df_gbsum.groupby(["RSSD_ID", "ReportingDate","BHC_Indicator","FHC_Indicator"]).sum()
+        #Find a way to make this part dynamic.
+        #BankPerf_Merger_df_gbsum = BankPerf_Merger_df_gbsum.agg({
             # 'TotalAssets' : np.sum,
-            'Net charge-offs by type of loan:Commercial & industrial': np.sum,
-            'Net charge-offs by type of loan:Construction & land development': np.sum,
-            'Net charge-offs by type of loan:Multifamily real estate': np.sum,
-            'Net charge-offs by type of loan:(Nonfarm) nonresidential CRE': np.sum,
-            'Net charge-offs by type of loan:Home equity lines of credit': np.sum,
-            'Net charge-offs by type of loan:Residential real estate (excl. HELOCs)': np.sum,
-            'Net charge-offs by type of loan:Credit card': np.sum,
-            'Net charge-offs by type of loan:Consumer (excl. credit card)': np.sum,
-            'Loans categories:Commercial & industrial': np.sum,
-            'Loans categories:Construction & land development': np.sum,
-            'Loans categories:Multifamily real estate': np.sum,
-            'Loans categories:Nonfarm nonresidential CRE': np.sum,
-            'Loans categories:Home equity lines of credit': np.sum,
-            'Loans categories:Residential real estate (excl. HELOCs)': np.sum,
-            'Loans categories:Credit card': np.sum,
-            'Loans categories:Consumer (excl. credit card)': np.sum,
-            'Components of pre-provision net revenue:Net interest income': np.sum,
-            'Components of pre-provision net revenue:Noninterest income': np.sum,
-            'Components of pre-provision net revenue:Trading income': np.sum,
-            'Components of pre-provision net revenue:Compensation expense': np.sum,
-            'Components of pre-provision net revenue:Fixed assets expense': np.sum,
-            'Components of pre-provision net revenue:Noninterest expense': np.sum,
-            'Other items:Consolidated assets': np.sum,
-            'Other items:Interest-earning assets': np.sum,
-            'Other items:Trading assets': np.sum,
-            'Other items:Book equity': np.sum,
-            'Other items:Risk-weighted assets': np.sum,
-            'Other items:Dividends ': np.sum,
-            'Other items:Stock purchases': np.sum,
-            'Other items:Tier 1 common equity': np.sum,
-            'Other items:= Tier 1 capital': np.sum,
-            'Other items: = - Perpetual preferred stock': np.sum,
-            'Other items: = + Nonqual. Perpetual preferred stock': np.sum,
-            'Other items: = - Qual. class A minority interests': np.sum,
-            'Other items: = - Qual. restricted core capital': np.sum,
-            'Other items: = - Qual. mandatory convert. pref. sec.': np.sum
-        })
+            #'Net charge-offs by type of loan:Commercial & industrial': np.sum,
+            #'Net charge-offs by type of loan:Construction & land development': np.sum,
+            #'Net charge-offs by type of loan:Multifamily real estate': np.sum,
+            #'Net charge-offs by type of loan:(Nonfarm) nonresidential CRE': np.sum,
+            #'Net charge-offs by type of loan:Home equity lines of credit': np.sum,
+            #'Net charge-offs by type of loan:Residential real estate (excl. HELOCs)': np.sum,
+            #'Net charge-offs by type of loan:Credit card': np.sum,
+            #'Net charge-offs by type of loan:Consumer (excl. credit card)': np.sum,
+            #'Loans categories:Commercial & industrial': np.sum,
+            #'Loans categories:Construction & land development': np.sum,
+            #'Loans categories:Multifamily real estate': np.sum,
+            #'Loans categories:Nonfarm nonresidential CRE': np.sum,
+            #'Loans categories:Home equity lines of credit': np.sum,
+            #'Loans categories:Residential real estate (excl. HELOCs)': np.sum,
+            #'Loans categories:Credit card': np.sum,
+            #'Loans categories:Consumer (excl. credit card)': np.sum,
+            #'Components of pre-provision net revenue:Net interest income': np.sum,
+            #'Components of pre-provision net revenue:Noninterest income': np.sum,
+            #'Components of pre-provision net revenue:Trading income': np.sum,
+            #'Components of pre-provision net revenue:Compensation expense': np.sum,
+            #'Components of pre-provision net revenue:Fixed assets expense': np.sum,
+            #'Components of pre-provision net revenue:Noninterest expense': np.sum,
+            #'Other items:Consolidated assets': np.sum,
+            #'Other items:Interest-earning assets': np.sum,
+            #'Other items:Trading assets': np.sum,
+            #'Other items:Book equity': np.sum,
+            #'Other items:Risk-weighted assets': np.sum,
+            #'Other items:Dividends ': np.sum,
+            #'Other items:Stock purchases': np.sum,
+            #'Other items:Tier 1 common equity': np.sum,
+            #'Other items:= Tier 1 capital': np.sum,
+            #'Other items: = - Perpetual preferred stock': np.sum,
+            #'Other items: = + Nonqual. Perpetual preferred stock': np.sum,
+            #'Other items: = - Qual. class A minority interests': np.sum,
+            #'Other items: = - Qual. restricted core capital': np.sum,
+            #'Other items: = - Qual. mandatory convert. pref. sec.': np.sum,
+            #'Other items:Total Assets' : np.sum
+        #})
         # May need to add manual column sums.
         BankPerf_Merger_df_gbsum = BankPerf_Merger_df_gbsum.reset_index()
 
         BankPerf["BankPerf_Agg"] = BankPerf_Merger_df_gbsum
         print(BankPerf["BankPerf_Agg"].describe().transpose())
+
+        if outputkeyname is not None:
+            BankPerf[outputkeyname] = BankPerf_Merger_df_gbsum
+            print(BankPerf[outputkeyname].describe().transpose())
+
 
         return (BankPerf)
 
@@ -540,43 +637,6 @@ class StressTestData():
 
 
 
-def bankperf_rates_ratios(BankPerf, replace_nan = True):
-    #Need to handle NAN rows and outliers.
-
-
-    if replace_nan:
-        print("Replacing nans, infs, and -infs in dataframe")
-
-        BankPerf = BankPerf.replace("0.0",np.nan)
-        BankPerf = BankPerf[~BankPerf.isin([np.inf,np.nan, -np.inf]).any(1)]
-    print("Loans categories Descriptive Statistics")
-    #BankPerf = BankPerf[~BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Loans categories:")]].isin([np.nan, np.inf, -np.inf]).any(1)]
-    #print(BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Loans categories:")]].describe().transpose())
-
-    print("Net Charge-Off rates by type of loan calculations")
-    for nco, loan in zip(list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Net charge-offs by type of loan:")]),list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Loans categories:")])):
-        print("Charge-Off",nco, "Loan Category:",loan)
-
-        tmp_str = nco.replace("Net charge-offs by type of loan:","ncoR:")
-        print(tmp_str)
-        BankPerf[tmp_str] = ((BankPerf[nco].astype(float)) / (BankPerf[loan].astype(float)))
-        BankPerf[tmp_str] = BankPerf[tmp_str] * 100
-        #BankPerf = pd.concat([BankPerf,BankPerf_tmp[tmp_str]], ignore_index=True, axis = 1)
-    print(BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("ncoR:")]].describe().transpose())
-
-    print("PPNR Ratios calculations")
-    for ppnr_comp in list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Components of pre-provision net revenue:")]):
-        print(ppnr_comp,)
-        tmp_str = ppnr_comp.replace("Components of pre-provision net revenue:", "ppnrRatio:")
-        print(tmp_str)
-        BankPerf[tmp_str] = ((BankPerf[ppnr_comp].astype(float))/(BankPerf['Other items:Consolidated assets'].astype(float)))
-        BankPerf[tmp_str] = BankPerf[tmp_str]  * 400
-    print(BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("ppnrRatio:")]].describe().transpose())
-
-    #Balance sheet composition indicators
-    #Requires interest earning assets calculations.
-
-    return(BankPerf)
 
 
 
@@ -585,6 +645,18 @@ init_ST = StressTestData()
 
 #Z_Macro complate and distributions match to Malik 2018
 Z_macro = init_ST.Z_macro_process()
+#Z_macro["Historic_Domestic"].keys()
+#Z_macro.keys()
+
+#Z_macro_Domestic_colsuse = [x for x in Z_macro["Historic_Domestic"].columns if x not in ["Scenario Name"]]
+#Z_macro["Historic_Domestic"][Z_macro_Domestic_colsuse].to_csv("../Data_Output/Z_Macro_Domestic.csv", sep = ",", index = False)
+#Z_macro_International_colsuse = [x for x in Z_macro["Historic_International"].columns if x not in ["Scenario Name"]]
+#Z_macro["Historic_International"][Z_macro_International_colsuse].to_csv("../Data_Output/Z_Macro_International.csv", sep = ",", index = False)
+#Z_macro_combined = Z_macro["Historic_Domestic"][Z_macro_Domestic_colsuse].merge(Z_macro["Historic_International"][Z_macro_International_colsuse], on = "pdDate")
+#Z_macro_combined.to_csv("../Data_Output/Z_Macro.csv", sep = ",", index = False)
+
+
+
 #Should pring out Summary Statistics
 
 Z_micro = init_ST.Z_micro_process()
@@ -597,16 +669,126 @@ Z_micro = init_ST.Z_micro_process()
 #gc.collect()
 #May need to subset BankPerf to get Xi and Yi
 
-BankPerf = init_ST.X_Y_bankingchar_perf_process()
+BankPerf = init_ST.X_Y_bankingchar_perf_process(groupfunction=np.mean, groupby=["RSSD_ID", "ReportingDate"],
+                                     groupagg_col='Other items:Total Assets',
+                                     RSSD_DateParam=["1990-03-31", "2018-01-01"],
+                                     ReportingDateParam=["1990-03-31", "2018-01-01"], RSSDList_len=1000, dropdup=False,
+                                     replace_nan=False, combinecol=False, merge = True, reducedf = False)
+BankPerf.keys()
+
+BankPerf_Combine_Cols_tmp = BankPerf_Combine_Cols(BankPerf, src_keyname = "BankPerf_Agg_Subset_BankPerf")
+
+
+
+def BankPerf_Combine_Cols(BankPerf, output_keyname = None,src_keyname = "BankPerf_Calculated",calc_keyname = "NCO_PPNR_Loan_Calcs"):
+    agg_exceptions = BankPerf["NCO_PPNR_Loan_Calcs"][pd.notnull(BankPerf[calc_keyname]["DT_Since"]) | pd.notnull(BankPerf[calc_keyname]["DT_Till"]) ][["Variable Category","Variable","DT_Since","DT_Till"]]
+
+    print("Source DF",src_keyname)
+    Master_DF_tmp = BankPerf[src_keyname]
+
+    for row in list(agg_exceptions.index):
+        # print(agg_exceptions.iloc[row,])
+        #tmp_result_obj = pd.DataFrame()
+        tmp_col_name = agg_exceptions.loc[row, "Variable Category"] + ":" + agg_exceptions.loc[row, "Variable"]
+        tmp_agg_col = tmp_col_name.split("_")[0]
+        tmp_DT_Since = agg_exceptions.loc[row, "DT_Since"]
+        tmp_DT_Till = agg_exceptions.loc[row, "DT_Till"]
+        print("Fixing out of bounds dates")
+        if tmp_DT_Till == "9999-12-31":
+            tmp_DT_Till = "2100-12-31"
+        else:
+                tmp_DT_Till = agg_exceptions.loc[row, "DT_Till"]
+
+        if tmp_DT_Since == "9999-12-31":
+            tmp_DT_Since = "2100-12-31"
+        else:
+            tmp_DT_Since = agg_exceptions.loc[row, "DT_Since"]
+
+
+        print(tmp_col_name, tmp_DT_Since, tmp_DT_Till,tmp_agg_col )
+        print("Getting Subset Index for Reportign Dates with Different calculations")
+        tmp_subset_idx = Master_DF_tmp[(Master_DF_tmp["ReportingDate"] > tmp_DT_Since) & (Master_DF_tmp["ReportingDate"] < tmp_DT_Till)].index
+        if tmp_agg_col in Master_DF_tmp.columns:
+                print("Appending to New Vector")
+                #Master_DF_tmp[tmp_agg_col] = pd.concat([Master_DF_tmp[tmp_agg_col], col_subset_df])
+                Master_DF_tmp.loc[tmp_subset_idx,tmp_agg_col] = Master_DF_tmp.loc[tmp_subset_idx,tmp_col_name]
+
+        else:
+                print("Initializing Column")
+                Master_DF_tmp[tmp_agg_col] = np.nan
+                print("Appending to New Vector")
+                Master_DF_tmp.loc[tmp_subset_idx, tmp_agg_col] = Master_DF_tmp.loc[tmp_subset_idx, tmp_col_name]
+                #Master_DF_tmp[tmp_agg_col] = pd.concat([Master_DF_tmp[tmp_agg_col], col_subset_df])
+
+
+    LoanList = [x for x in Master_DF_tmp.columns[Master_DF_tmp.columns.str.startswith("Loans categories:")] if "_" not in x]
+    print(Master_DF_tmp[LoanList].describe().transpose())
+
+    print("Saving updated frame to Dictionary")
+    if output_keyname is None:
+        tmp_name = src_keyname + "_Exceptions"
+        BankPerf[tmp_name] = Master_DF_tmp
+    else:
+        BankPerf[output_keyname] = Master_DF_tmp
+    return(BankPerf)
+
+
+Master_DF_tmp.columns
+
+
+#Workspace
 BankPerf_2 = BankPerf
+
 BankPerf_2.keys()
-BankPerf = BankPerf_2["BankPerf_Calculated_Subset_BankPerf"]
+BankPerf = BankPerf_2["BankPerf_ConsecutiveReduced_Subset_BankPerf"]
 
 
 
-NCO_Test = bankperf_rates_ratios(BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"], replace_nan = False)
+NCO_Df = bankperf_rates_ratios(BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"], replace_nan = False)
 
 
+def bankperf_rates_ratios(BankPerf, replace_nan = True):
+    #Need to handle NAN rows and outliers.
+    print("Replace 0.0 with np.nan")
+    BankPerf = BankPerf.replace(0.0, np.nan)
+    if replace_nan:
+        print("Replacing nans, infs, and -infs in dataframe")
+        BankPerf = BankPerf[~BankPerf.isin([np.inf,np.nan, -np.inf]).any(1)]
+    print("Loans categories Descriptive Statistics")
+    #BankPerf = BankPerf[~BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Loans categories:")]].isin([np.nan, np.inf, -np.inf]).any(1)]
+    #print(BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Loans categories:")]].describe().transpose())
+
+    BankPerf_tmp = BankPerf.replace(0.0, np.nan)
+    print("Net Charge-Off rates by type of loan calculations")
+    for nco, loan in zip(list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Net charge-offs by type of loan:")]),list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Loans categories:")])):
+        print("Charge-Off",nco, "Loan Category:",loan)
+
+        tmp_str = nco.replace("Net charge-offs by type of loan:","ncoR:")
+        print(tmp_str)
+        #Should we group them by year first?
+        #BankPerf_groupby = BankPerf.groupby(["RSSD_ID", BankPerf.ReportingDate.dt.year]).agg({nco:np.sum, loan:np.sum})
+        #BankPerf_groupby = BankPerf_groupby.reset_index()
+        BankPerf_tmp = BankPerf_tmp[(pd.notnull(BankPerf_tmp[nco])) & (pd.notnull(BankPerf_tmp[loan]))]
+        BankPerf_tmp[tmp_str] = (((BankPerf_tmp[nco]) / (BankPerf_tmp[loan])) * 100)
+#        BankPerf[tmp_str] = BankPerf[tmp_str] * 400
+        #BankPerf = pd.concat([BankPerf,BankPerf_tmp[tmp_str]], ignore_index=True, axis = 1)
+    print(BankPerf_tmp[BankPerf_tmp.columns[pd.Series(BankPerf_tmp.columns).str.startswith("ncoR:")]].describe().transpose())
+
+    BankPerf_tmp = BankPerf.replace(0.0, np.nan)
+    print("PPNR Ratios calculations")
+    for ppnr_comp in list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Components of pre-provision net revenue:")]):
+        print(ppnr_comp,)
+        tmp_str = ppnr_comp.replace("Components of pre-provision net revenue:", "ppnrRatio:")
+        print(tmp_str)
+        BankPerf_tmp = BankPerf_tmp[(pd.notnull(BankPerf_tmp[ppnr_comp])) & (pd.notnull(BankPerf_tmp['Other items:Consolidated assets']))]
+        BankPerf_tmp[tmp_str] = ((BankPerf_tmp[ppnr_comp])/(BankPerf_tmp['Other items:Consolidated assets']))
+        BankPerf_tmp[tmp_str] = BankPerf_tmp[tmp_str]  * 100
+    print(BankPerf_tmp[BankPerf_tmp.columns[pd.Series(BankPerf_tmp.columns).str.startswith("ppnrRatio:")]].describe().transpose())
+
+    #Balance sheet composition indicators
+    #Requires interest earning assets calculations.
+
+    return(BankPerf)
 
 
 
