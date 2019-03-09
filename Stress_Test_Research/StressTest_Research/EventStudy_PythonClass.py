@@ -91,9 +91,9 @@ class EventStudyResearch():
         fsb_events = ro.r('''
         if (!require("rvest")) {
           install.packages("rvest")
-            }
-        library("rvest")
-        
+            }     
+            
+        library(rvest)     
         if (!require("devtools")) {
           install.packages("devtools")   
         }
@@ -1541,6 +1541,19 @@ class EventStudyResearch():
                     ["Event ID", "firmID", "marketID", "date", "GroupingVar", "start_ev_win", "end_ev_win",
                      "end_est_win",
                      "est_win_len"]]
+            #TODO:Reduce based on count Groul by Grouping Var and make sure counts are more than 1.?
+            #TODO: We need to find a way to consider events that are grouped just with 1 count.
+            print("Filtering out Grouping Vars with less than 1 record")
+            tmp_gb = PreProcess_EST_obj_rq_tmp.groupby("GroupingVar").count()
+            tmp_gb = PreProcess_EST_obj_rq_tmp.reset_index()
+            tmp_gb = testgb[tmp_gb["Event ID"] > 1]
+            tmp_gb = tmp_gb["GroupingVar"]
+
+            PreProcess_EST_obj_rq_tmp = PreProcess_EST_obj_rq_tmp[PreProcess_EST_obj_rq_tmp["GroupingVar"].isin(tmp_gb)]
+
+
+
+
             print("Firm IDs:", PreProcess_EST_obj_rq_tmp.firmID.unique())
             print("Market IDs:", PreProcess_EST_obj_rq_tmp.marketID.unique())
             # Add Dup Stream tag to results
@@ -1772,19 +1785,30 @@ class EventStudyResearch():
 
 
 #Entry Point
-import gc
-gc.collect()
+#import gc
+#gc.collect()
 
 
 #*****************************************************************************************************************************************************************************************************************************
 #*****************************************************************************************************************************************************************************************************************************
 
 
-EventStudy_obj =  EventStudyResearch().RunEventStudyResearch(scrapeData = False, getidx_names = False, getidx_prices = False)
+EventStudy_obj =  EventStudyResearch().RunEventStudyResearch(scrapeData = False, getidx_names = False, getidx_prices = False,prepareEST = True, EST_Run = True)
 
+colnames = ["Event ID", "firmID", "marketID", "date", "GroupingVar", "start_ev_win", "end_ev_win","end_est_win","est_win_len"]
+test = pd.read_csv("01_RequestFile_df.csv", sep = ";", header = None )
 
+test.columns = colnames
+
+testgb = test.groupby("GroupingVar").count()
+testgb = testgb.reset_index()
+
+testgb = testgb[testgb["Event ID"] > 1]
+
+testgb["GroupingVar"]
 
 #TODO: Resolve formatting issues with Request File.
+#File works for AR and CAR, but no AAR or CAAR.  This points to Grouping Issues.
 
 #TODO: Grouping Variables not working properly for averages.
     #Causing issues with AAR and CAAR
