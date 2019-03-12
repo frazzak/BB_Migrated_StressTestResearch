@@ -181,7 +181,7 @@ class StressTestData():
                                      groupagg_col='Other items:Consolidated assets',
                                      RSSD_DateParam=["1989-12-31", "2018-01-01"],
                                      ReportingDateParam=["1989-12-31", "2017-12-31"], RSSDList_len=1000, dropdup=False,
-                                     replace_nan=False, merge = True, Consqtr = True, combinecol = True, reducedf = True, skip_prefix = None
+                                     replace_nan=False, merge = True, Consqtr = True, combinecol = True, reducedf = True, skip_prefix = None, Y_calc = True, RSSD_Subset = True
                                      ):
 
         print("Reading in CSV files from", self.BankPerf_dir)
@@ -239,17 +239,26 @@ class StressTestData():
             print("Aggregating Based on Mergers")
             BankCharPerf_raw_data_dict = self.BankPerf_Aggregation_process(BankCharPerf_raw_data_dict, BankPerf_ToAgg_df_name="BankPerf_MainCalc", outputkeyname = "BankPerf_MainCalc")
 
-        print("Getting Subset of Each Data Frame based on top 1000 RSSD's based on ",groupagg_col )
-        for keyname in [v for v in BankCharPerf_raw_data_dict.keys() if v.startswith("BankPerf_")]:
-
-            Rssd_tmp = self.RSSD_Subset(BankCharPerf_raw_data_dict, keyname=keyname, groupfunction=groupfunction, groupby=groupby,
-                                   groupagg_col=groupagg_col, RSSD_DateParam=RSSD_DateParam,
-                                   ReportingDateParam=ReportingDateParam, RSSDList_len=RSSDList_len, dropdup=dropdup,
-                                   replace_nan=replace_nan)
-            for k, v in Rssd_tmp.items():
-                keyname_tmp = keyname + "_Subset" + "_" + k
+        if Y_calc:
+            for keyname in [v for v in BankCharPerf_raw_data_dict.keys() if v.startswith("BankPerf_")]:
+                print("Calculating Y_i NCO Ratios and PPNR Ratios")
+                keyname_tmp = keyname + "_XYcalc"
                 print(keyname_tmp)
-                BankCharPerf_raw_data_dict[keyname_tmp] = v
+                BankCharPerf_raw_data_dict[keyname_tmp] = self.bankperf_rates_ratios(BankCharPerf_raw_data_dict[keyname])
+
+        if RSSD_Subset:
+            for keyname in [v for v in BankCharPerf_raw_data_dict.keys() if v.startswith("BankPerf_")]:
+                print("Getting Subset of Each Data Frame based on top", RSSDList_len, "RSSD's based on ", groupagg_col)
+                Rssd_tmp = self.RSSD_Subset(BankCharPerf_raw_data_dict, keyname=keyname, groupfunction=groupfunction, groupby=groupby,
+                                       groupagg_col=groupagg_col, RSSD_DateParam=RSSD_DateParam,
+                                       ReportingDateParam=ReportingDateParam, RSSDList_len=RSSDList_len, dropdup=dropdup,
+                                       replace_nan=replace_nan)
+                for k, v in Rssd_tmp.items():
+                    keyname_tmp = keyname + "_Subset" + "_" + k
+                    print(keyname_tmp)
+                    BankCharPerf_raw_data_dict[keyname_tmp] = v
+
+
         gc.collect()
         return (BankCharPerf_raw_data_dict)
 
@@ -642,44 +651,82 @@ class StressTestData():
 
         return (BankPerf)
 
-    def bankperf_rates_ratios(self, BankPerf, replace_nan=True):
+    def bankperf_rates_ratios(self,BankPerf, replace_nan=True
+                              , ncoR_dict={
+                'Net charge-offs by type of loan:Commercial & industrial': 'Loans categories:Commercial & industrial_Covas'
+                ,
+                'Net charge-offs by type of loan:Construction & land development': 'Loans categories:Construction & land development'
+                ,
+                'Net charge-offs by type of loan:(Nonfarm) nonresidential CRE': 'Loans categories:Nonfarm nonresidential CRE_Covas'
+                ,
+                'Net charge-offs by type of loan:Home equity lines of credit': 'Loans categories:Home equity lines of credit'
+                ,
+                'Net charge-offs by type of loan:Residential real estate (excl. HELOCs)': 'Loans categories:Residential real estate (excl. HELOCs)_Covas'
+                , 'Net charge-offs by type of loan:Credit card': 'Loans categories:Credit card'
+                ,
+                'Net charge-offs by type of loan:Consumer (excl. credit card)': 'Loans categories:Consumer (excl. credit card)_Covas'
+                }
+
+                              ):
         # Need to handle NAN rows and outliers.
+
         if replace_nan:
-            print("Replacing nans, infs, and -infs in dataframe")
-            BankPerf = BankPerf[~BankPerf.isin([np.nan, np.inf, -np.inf]).any(1)]
+            print("Replace 0.0 with np.nan")
+            BankPerf = BankPerf.replace(0.0, np.nan)
 
         print("Loans categories Descriptive Statistics")
         # BankPerf = BankPerf[~BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Loans categories:")]].isin([np.nan, np.inf, -np.inf]).any(1)]
         # print(BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Loans categories:")]].describe().transpose())
 
+        # BankPerf_tmp = BankPerf
+        BankPerf_tmp = BankPerf
         print("Net Charge-Off rates by type of loan calculations")
-        for nco, loan in zip(
-                list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Net charge-offs by type of loan:")]),
-                list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Loans categories:")])):
+
+        for nco, loan in ncoR_dict.items():
+            print("Charge-Off", nco, "Loan Category:", loan)
+            BankPerf_subset_idx = BankPerf_tmp[
+                (BankPerf_tmp[nco] >= 0) & (BankPerf_tmp[nco] <= BankPerf_tmp[loan])].index
+
             tmp_str = nco.replace("Net charge-offs by type of loan:", "ncoR:")
             print(tmp_str)
-            BankPerf[tmp_str] = ((BankPerf[nco].astype(float)) / (BankPerf[loan].astype(float)))
-            BankPerf[tmp_str] = BankPerf[tmp_str] * 400
-            # BankPerf = pd.concat([BankPerf,BankPerf_tmp[tmp_str]], ignore_index=True, axis = 1)
-        print(BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("ncoR:")]].describe().transpose())
+            BankPerf_tmp[tmp_str] = np.nan
+            BankPerf_tmp.loc[BankPerf_subset_idx, tmp_str] = 100 * (
+                        (BankPerf_tmp.loc[BankPerf_subset_idx, nco]) / (BankPerf_tmp.loc[BankPerf_subset_idx, loan]))
+            BankPerf_clean_tmp_idx = BankPerf_tmp.loc[BankPerf_subset_idx, tmp_str][
+                BankPerf_tmp[tmp_str].isin([np.inf, -np.inf])].index
+            BankPerf_tmp.loc[BankPerf_clean_tmp_idx, tmp_str] = np.nan
+        #        BankPerf[tmp_str] = BankPerf[tmp_str] * 400
+
+        # BankPerf_tmp = pd.concat([BankPerf_tmp,BankPerf_tmp2[tmp_str]], ignore_index=True, axis = 1)
+        print(BankPerf_tmp[
+                  BankPerf_tmp.columns[pd.Series(BankPerf_tmp.columns).str.startswith("ncoR:")]].describe().transpose())
 
         print("PPNR Ratios calculations")
-        for ppnr_comp in list(BankPerf.columns[pd.Series(BankPerf.columns).str.startswith(
+        for ppnr_comp in list(BankPerf_tmp.columns[pd.Series(BankPerf_tmp.columns).str.startswith(
                 "Components of pre-provision net revenue:")]):
+            print(ppnr_comp)
+            BankPerf_subset_idx = BankPerf_tmp[
+                (BankPerf_tmp[ppnr_comp] <= BankPerf_tmp['Other items:Consolidated assets'])].index
+
             tmp_str = ppnr_comp.replace("Components of pre-provision net revenue:", "ppnrRatio:")
             print(tmp_str)
-            BankPerf[tmp_str] = ((BankPerf[ppnr_comp].astype(float)) / (
-                BankPerf['Other items:Consolidated assets'].astype(float)))
-            BankPerf[tmp_str] = BankPerf[tmp_str] * 400
-        print(
-            BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("ppnrRatio:")]].describe().transpose())
+
+            BankPerf_tmp[tmp_str] = np.nan
+
+            BankPerf_tmp.loc[BankPerf_subset_idx, tmp_str] = 100 * (
+                        (BankPerf_tmp.loc[BankPerf_subset_idx, ppnr_comp]) / (
+                BankPerf_tmp.loc[BankPerf_subset_idx, 'Other items:Consolidated assets']))
+            BankPerf_clean_tmp_idx = BankPerf_tmp.loc[BankPerf_subset_idx, tmp_str][
+                BankPerf_tmp[tmp_str].isin([np.inf, -np.inf])].index
+            BankPerf_tmp.loc[BankPerf_clean_tmp_idx, tmp_str] = np.nan
+
+        print(BankPerf_tmp[BankPerf_tmp.columns[
+            pd.Series(BankPerf_tmp.columns).str.startswith("ppnrRatio:")]].describe().transpose())
 
         # Balance sheet composition indicators
         # Requires interest earning assets calculations.
 
-        return (BankPerf)
-
-
+        return (BankPerf_tmp)
 
 
 
@@ -758,89 +805,24 @@ BankPerf = StressTestData().X_Y_bankingchar_perf_process(groupfunction=np.mean, 
                                              "-  -": "-"
                                          },
 
-                                     })
+                                     }, RSSD_Subset = True, Y_calc= True)
 
 
 #Workspace
-
 BankPerf.keys()
-
-
-NCO_Df = bankperf_rates_ratios(BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"], replace_nan = False)
-
-
-def bankperf_rates_ratios(BankPerf, replace_nan = True
-                          ,ncoR_dict = {'Net charge-offs by type of loan:Commercial & industrial':'Loans categories:Commercial & industrial_Covas'
-                                        ,'Net charge-offs by type of loan:Construction & land development':'Loans categories:Construction & land development'
-                                        ,'Net charge-offs by type of loan:(Nonfarm) nonresidential CRE': 'Loans categories:Nonfarm nonresidential CRE_Covas'
-                                        , 'Net charge-offs by type of loan:Home equity lines of credit' : 'Loans categories:Home equity lines of credit'
-                                        , 'Net charge-offs by type of loan:Residential real estate (excl. HELOCs)': 'Loans categories:Residential real estate (excl. HELOCs)_Covas'
-                                        ,'Net charge-offs by type of loan:Credit card' : 'Loans categories:Credit card'
-                                        ,'Net charge-offs by type of loan:Consumer (excl. credit card)' : 'Loans categories:Consumer (excl. credit card)_Covas'
-                                                                                                                                        }
-
-                          ):
-    #Need to handle NAN rows and outliers.
-
-    if replace_nan:
-        print("Replace 0.0 with np.nan")
-        BankPerf = BankPerf.replace(0.0, np.nan)
-
-
-    print("Loans categories Descriptive Statistics")
-    #BankPerf = BankPerf[~BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Loans categories:")]].isin([np.nan, np.inf, -np.inf]).any(1)]
-    #print(BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Loans categories:")]].describe().transpose())
-
-    #BankPerf_tmp = BankPerf
-    BankPerf_tmp = BankPerf
-    print("Net Charge-Off rates by type of loan calculations")
-
-    for nco,loan in ncoR_dict.items() :
-
-        print("Charge-Off",nco, "Loan Category:",loan)
-        BankPerf_subset_idx = BankPerf_tmp[(BankPerf_tmp[nco] >= 0) & (BankPerf_tmp[nco] <= BankPerf_tmp[loan])].index
-
-        tmp_str = nco.replace("Net charge-offs by type of loan:", "ncoR:")
-        print(tmp_str)
-        BankPerf_tmp[tmp_str] = np.nan
-        BankPerf_tmp.loc[BankPerf_subset_idx,tmp_str] = 100 * ((BankPerf_tmp.loc[BankPerf_subset_idx,nco])/(BankPerf_tmp.loc[BankPerf_subset_idx,loan]))
-        BankPerf_clean_tmp_idx = BankPerf_tmp.loc[BankPerf_subset_idx,tmp_str][BankPerf_tmp[tmp_str].isin([np.inf, -np.inf])].index
-        BankPerf_tmp.loc[BankPerf_clean_tmp_idx, tmp_str] = np.nan
-#        BankPerf[tmp_str] = BankPerf[tmp_str] * 400
-
-        #BankPerf_tmp = pd.concat([BankPerf_tmp,BankPerf_tmp2[tmp_str]], ignore_index=True, axis = 1)
-    print(BankPerf_tmp[BankPerf_tmp.columns[pd.Series(BankPerf_tmp.columns).str.startswith("ncoR:")]].describe().transpose())
-
-
-    print("PPNR Ratios calculations")
-    for ppnr_comp in list(BankPerf_tmp.columns[pd.Series(BankPerf_tmp.columns).str.startswith("Components of pre-provision net revenue:")]):
-            print(ppnr_comp)
-            BankPerf_subset_idx = BankPerf_tmp[(BankPerf_tmp[ppnr_comp] <= BankPerf_tmp['Other items:Consolidated assets'])].index
-
-
-
-            tmp_str = ppnr_comp.replace("Components of pre-provision net revenue:", "ppnrRatio:")
-            print(tmp_str)
-
-            BankPerf_tmp[tmp_str] = np.nan
-
-            BankPerf_tmp.loc[BankPerf_subset_idx, tmp_str] = 100 * ((BankPerf_tmp.loc[BankPerf_subset_idx, ppnr_comp])/(BankPerf_tmp.loc[BankPerf_subset_idx,'Other items:Consolidated assets']))
-            BankPerf_clean_tmp_idx = BankPerf_tmp.loc[BankPerf_subset_idx, tmp_str][BankPerf_tmp[tmp_str].isin([np.inf, -np.inf])].index
-            BankPerf_tmp.loc[BankPerf_clean_tmp_idx, tmp_str] = np.nan
-
-        print(BankPerf_tmp[BankPerf_tmp.columns[pd.Series(BankPerf_tmp.columns).str.startswith("ppnrRatio:")]].describe().transpose())
-
-
-    #Balance sheet composition indicators
-    #Requires interest earning assets calculations.
-
-    return(BankPerf_tmp)
+BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].keys()
 
 
 
 
+X_i = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","Loans categories:Commercial & industrial_Covas","Loans categories:Construction & land development","Loans categories:Multifamily real estate","Loans categories:Nonfarm nonresidential CRE_Covas","Loans categories:Nonfarm nonresidential CRE","Loans categories:Home equity lines of credit","Loans categories:Residential real estate (excl. HELOCs)_Covas","Loans categories:Credit card","Loans categories:Consumer (excl. credit card)_Covas"))]]
+
+X_i.to_csv("../Data_Output/X_ij.csv", sep = ",", index= False)
 
 
+Y_i = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","ncoR:","ppnrRatio:"))]]
+
+Y_i.to_csv("../Data_Output/Y_ij.csv", sep = ",", index= False)
 
 
 
