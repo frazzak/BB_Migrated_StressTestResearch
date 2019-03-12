@@ -51,6 +51,8 @@ class StressTestData():
                     "Z_macro_dir" : "Z_macro/",
                     "Z_micro_dir" : "Z_micro/",
                     "BankPerf_dir" : "BankPerf/",
+                    "SBidx_dir":"ShadowBanking_Proxies/",
+                    "Sectoridx_dir":"Sector_Indices/",
                     "Data_dir" : "/Users/phn1x/Google Drive/Spring 2019/LossProjection_Research/Data"
                     }):
         print("Initialize Objects")
@@ -85,6 +87,45 @@ class StressTestData():
                         exec('''tmp_dict[fname.split(filetype)[0]] = pd.read_csv("''' + os.path.join(dirName, fname) + '''")''')
         return(tmp_dict)
 
+    def sectoridx_process(self, Sectoridx_dir = None , filetype = ".csv"):
+        if Sectoridx_dir is None:
+            Sectoridx_dir = self.Sectoridx_dir
+
+        sectoridx_dict = self.file_dict_read(Sectoridx_dir, filetype=filetype)
+        dfs = list()
+        for keyname in sectoridx_dict.keys():
+            print(keyname)
+            tmp_df = sectoridx_dict[keyname]
+            tmp_df["datadate"] = pd.to_datetime(tmp_df["datadate"], format="%Y%M%d").dt.date
+            tmp_df = tmp_df[["datadate", "tic", "prccm"]]
+            tmp_df = tmp_df.pivot_table(index="datadate", columns="tic", values="prccm")
+            tmp_df = tmp_df.reset_index()
+            print(tmp_df.describe().transpose())
+            dfs.append(tmp_df)
+
+            print("Combine List with Left Merge")
+            final_raw_df = reduce(lambda left, right: pd.merge(left, right, on="datadate", how="left"), dfs)
+            final_raw_df = final_raw_df.rename({"datadate": "Date"}, axis=1)
+            print(final_raw_df.describe().transpose())
+            sectoridx_dict["sectoridx"] = final_raw_df
+            return (sectoridx_dict)
+
+
+    def SBidx_process(self, filetype = ".csv"):
+        SBidx_dict = self.file_dict_read(self.SBidx_dir,filetype = ".csv")
+        dfs = list()
+        for keyname in SBidx_dict.keys():
+            print(keyname)
+            tmp_df = SBidx_dict[keyname]
+            tmp_df["DATE"] = pd.to_datetime(tmp_df["DATE"]).dt.date
+            dfs.append(tmp_df)
+
+        print("Combine List with Left Merge")
+        final_raw_df = reduce(lambda left, right: pd.merge(left, right, on="DATE", how="left"), dfs)
+        final_raw_df = final_raw_df.rename({"DATE":"Date"}, axis = 1)
+        print(final_raw_df.describe().transpose())
+        SBidx_dict["SB_idx_prox"] = final_raw_df
+        return(SBidx_dict)
 
     def Z_macro_process(self, filetype = ".csv"):
         Z_macro_raw_data_dict = self.file_dict_read(self.Z_macro_dir,filetype = ".csv")
@@ -750,6 +791,24 @@ Z_macro = init_ST.Z_macro_process()
 #Z_macro_combined = Z_macro["Historic_Domestic"][Z_macro_Domestic_colsuse].merge(Z_macro["Historic_International"][Z_macro_International_colsuse], on = "pdDate")
 #Z_macro_combined.to_csv("../Data_Output/Z_Macro.csv", sep = ",", index = False)
 
+#Shadow Banking Proxies
+SBidx = init_ST.SBidx_process()
+SBidx["SB_idx_prox"].to_csv("../Data_Output/SBidx.csv", sep = ",", index = False)
+
+
+#Sector Indices
+SectorIdx = init_ST.sectoridx_process()
+SectorIdx.keys()
+
+SectorIdx["sectoridx"].to_csv("../Data_Output/Sectidx.csv", sep = ",", index = False)
+
+
+test = sectoridx_process(Sectoridx_dir = "Sector_Indices")
+
+
+test.keys()
+
+
 
 
 #Should pring out Summary Statistics
@@ -820,19 +879,24 @@ X_i = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["B
 X_i.to_csv("../Data_Output/X_ij.csv", sep = ",", index= False)
 
 
-Y_i = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","ncoR:","ppnrRatio:"))]]
+Y_i = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","ncoR:","ppnrRatio:","Other items:= Tier 1 capital"))]].describe().transpose()
 
 Y_i.to_csv("../Data_Output/Y_ij.csv", sep = ",", index= False)
 
 
 
+#Need to calculate the measured CR_t,i
+#Other items:Book equity #t
+#Other items:Risk-weighted assets #t-1
 
+#May need to calculate  the Net Charge Off, Book Equirty and CRi.
+#Have to get time period lags.
 
-#Find best way to subset the data for Yi and Xi
-#A Wrapper function can handle these additional tasks to produce a Dict with the Dataframes necessary
 
 
 
 
 #VAE-CVAE=MNIST
 #import utils, models, train
+
+
