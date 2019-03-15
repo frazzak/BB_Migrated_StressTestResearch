@@ -222,7 +222,7 @@ class StressTestData():
                                      groupagg_col='Other items:Consolidated assets',
                                      RSSD_DateParam=["1989-12-31", "2018-01-01"],
                                      ReportingDateParam=["1989-12-31", "2017-12-31"], RSSDList_len=1000, dropdup=False,
-                                     replace_nan=False, merge = True, Consqtr = True, combinecol = True, reducedf = True, skip_prefix = None, Y_calc = True, RSSD_Subset = True
+                                     replace_nan=False, merge = True, Consqtr = True, combinecol = True, reducedf = True, skip_prefix = None, Y_calc = True, RSSD_Subset = True, calc_CR_hist = True,get_prev_time_cols = True
                                      ):
 
         print("Reading in CSV files from", self.BankPerf_dir)
@@ -286,6 +286,18 @@ class StressTestData():
                 keyname_tmp = keyname + "_XYcalc"
                 print(keyname_tmp)
                 BankCharPerf_raw_data_dict[keyname_tmp] = self.bankperf_rates_ratios(BankCharPerf_raw_data_dict[keyname])
+                #print("Merging Yi to original dataframe.")
+                #BankCharPerf_raw_data_dict[keyname] = BankCharPerf_raw_data_dict[keyname].merge(BankCharPerf_raw_data_dict[keyname_tmp], on = ["RSSD_ID","ReportingDate"])
+
+        if calc_CR_hist:
+            for keyname in [v for v in BankCharPerf_raw_data_dict.keys() if v.startswith("BankPerf_XYcalc")]:
+                BankCharPerf_raw_data_dict[keyname] =  self.calc_TCR1_hist(BankCharPerf_raw_data_dict[keyname], fillna= False)
+
+
+        if get_prev_time_cols:
+            for keyname in [v for v in BankCharPerf_raw_data_dict.keys() if v.startswith("BankPerf_")]:
+                BankCharPerf_raw_data_dict[keyname] =  self.get_prev_timeperiod(BankCharPerf_raw_data_dict[keyname], shift = 1, fillna= False)
+
 
         if RSSD_Subset:
             for keyname in [v for v in BankCharPerf_raw_data_dict.keys() if v.startswith("BankPerf_")]:
@@ -409,13 +421,21 @@ class StressTestData():
 
     def BHC_loan_nco_ppnr_create(self, BankPerf, params_dict, replace_dict,
                                  identifier_columns=["RSSD9001", "RSSD9999", "RSSD9010", "RSSD9017", "RSSD9161",
-                                                     "RSSD9045", "RSSD9016", "RSSD9101"],
+                                                     "RSSD9045", "RSSD9016", "RSSD9101","BHCK4635","BHCK4605","BHCK4340","BHCK4598","BHCK3519","BHCK3210","BHCK3368","BHCKC245","BHCKC249"],
                                  rename_col_dict={"RSSD9001": "RSSD_ID", "RSSD9999": "ReportingDate",
                                                   "RSSD9161": "CUSIP", "BHCK2170": "TotalAssets",
                                                   "RSSD9045": "BHC_Indicator", "RSSD9016": "FHC_Indicator",
                                                   "RSSD9101": "Domestic_Indicator"
-                                     , "RSSD9138": "Financial_Sub_Indicator", "RSSD9397": "LargestEntityBHC",
-                                                  "RSSD9375": "HeadOffice_RSSD_ID", "RCFD2170" : "TotalAssets"}):
+                                                 , "RSSD9138": "Financial_Sub_Indicator", "RSSD9397": "LargestEntityBHC",
+                                                  "RSSD9375": "HeadOffice_RSSD_ID", "RCFD2170" : "TotalAssets","BHCK3368":"QrtAvgTotalAssets",
+                                                  "BHCK4635":"Chargeoffs","BHCK4605":"Recoveries","BHCK3210":"Total Equity Capital",
+                                                  "BHCKC245":"Total Equity_1","BHCKC249":"Total Equity_2", "BHCK3519":"QrtAvgEqCap",
+                                                  "BHCK4340":"Net income(loss)","BHCK4598":"Less:Cash dividends on perp perf stock",
+                                                  "RSSD9010":"Entity short name","RSSD9017":"Legal name"
+                                                  }):
+
+
+
         print("Initialize Result DF")
         BankPerf_result = pd.DataFrame()
         loan_nco_ppnr_df = pd.DataFrame()
@@ -692,7 +712,7 @@ class StressTestData():
 
         return (BankPerf)
 
-    def bankperf_rates_ratios(self,BankPerf, replace_nan=True
+    def bankperf_rates_ratios(self,BankPerf, replace_nan=True, fillna = True
                               , ncoR_dict={
                 'Net charge-offs by type of loan:Commercial & industrial': 'Loans categories:Commercial & industrial_Covas'
                 ,
@@ -711,9 +731,13 @@ class StressTestData():
                               ):
         # Need to handle NAN rows and outliers.
 
+        if fillna:
+            print("Forward Filling Nans")
+            BankPerf = BankPerf.fillna(method = 'ffill')
         if replace_nan:
             print("Replace 0.0 with np.nan")
             BankPerf = BankPerf.replace(0.0, np.nan)
+
 
         print("Loans categories Descriptive Statistics")
         # BankPerf = BankPerf[~BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.startswith("Loans categories:")]].isin([np.nan, np.inf, -np.inf]).any(1)]
@@ -769,6 +793,40 @@ class StressTestData():
 
         return (BankPerf_tmp)
 
+    def calc_TCR1_hist(self, BankPerf_df, T1C_col = "Other items:= Tier 1 capital", RWA_col = "Other items:Risk-weighted assets", fillna = False):
+        print("Initialize T1CR column")
+        tmp_T1CR = "Other items:T1CR"
+        if fillna:
+            BankPerf_df = BankPerf_df.fillna(method = "ffill")
+            tmp_idx = BankPerf_df[[T1C_col,RWA_col]].index
+        else:
+            tmp_idx = BankPerf_df[[T1C_col,RWA_col]][pd.notnull(BankPerf_df[T1C_col]) & pd.notnull(BankPerf_df[RWA_col])].index
+
+        print("Calculating T1CR based on historical columns")
+        BankPerf_df.loc[tmp_idx,tmp_T1CR] = BankPerf_df.loc[tmp_idx,T1C_col]/BankPerf_df.loc[tmp_idx,RWA_col]
+
+        print(BankPerf_df.describe().transpose())
+
+        return(BankPerf_df)
+
+    #Get previous time periods
+    def get_prev_timeperiod(self, Bankperf_df, shift = 1, colnames = None, groupby = "RSSD_ID", fillna = None):
+        if fillna:
+            Bankperf_df = Bankperf_df.fillna(method = "ffill")
+        if colnames == None:
+            for colname in [v for v in Bankperf_df.keys() if v not in [groupby, "ReportingDate"]]:
+
+                tmp_colname = colname + "_t-" + str(shift)
+                print(colname, tmp_colname)
+                Bankperf_df[tmp_colname] = Bankperf_df.groupby(groupby)[colname].shift(shift)
+        else:
+            for colname in [v for v in colnames if v not in [groupby, "ReportingDate"]]:
+                tmp_colname = colname + "_t-" + str(shift)
+                print(colname, tmp_colname)
+                Bankperf_df[tmp_colname] = Bankperf_df.groupby(groupby)[colname].shift(shift)
+        print(Bankperf_df.shape)
+        print(Bankperf_df.describe().transpose())
+        return(Bankperf_df)
 
 
 
@@ -798,15 +856,10 @@ SBidx["SB_idx_prox"].to_csv("../Data_Output/SBidx.csv", sep = ",", index = False
 
 #Sector Indices
 SectorIdx = init_ST.sectoridx_process()
-SectorIdx.keys()
+#SectorIdx.keys()
 
 SectorIdx["sectoridx"].to_csv("../Data_Output/Sectidx.csv", sep = ",", index = False)
 
-
-test = sectoridx_process(Sectoridx_dir = "Sector_Indices")
-
-
-test.keys()
 
 
 
@@ -869,21 +922,51 @@ BankPerf = StressTestData().X_Y_bankingchar_perf_process(groupfunction=np.mean, 
 
 #Workspace
 BankPerf.keys()
-BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].keys()
+list(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns)
 
 
+
+
+#Create TCR1 Column
 
 
 X_i = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","Loans categories:Commercial & industrial_Covas","Loans categories:Construction & land development","Loans categories:Multifamily real estate","Loans categories:Nonfarm nonresidential CRE_Covas","Loans categories:Nonfarm nonresidential CRE","Loans categories:Home equity lines of credit","Loans categories:Residential real estate (excl. HELOCs)_Covas","Loans categories:Credit card","Loans categories:Consumer (excl. credit card)_Covas"))]]
 
 X_i.to_csv("../Data_Output/X_ij.csv", sep = ",", index= False)
 
+X_i.describe().transpose()
 
-Y_i = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","ncoR:","ppnrRatio:","Other items:= Tier 1 capital"))]].describe().transpose()
 
+
+
+
+Y_i = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","ncoR:","ppnrRatio:","Other items:= Tier 1 capital"))]]
+
+Y_i.describe().transpose()
 Y_i.to_csv("../Data_Output/Y_ij.csv", sep = ",", index= False)
 
 
+
+XY_Combined = X_i.merge(Y_i, on = ["RSSD_ID","ReportingDate"])
+
+
+#Create calculated Net Charge Off and Book Equity.
+#Create calculated Capital Ratio.
+#Get Net Charge off amount via Data Source
+#Get PPNR
+
+
+
+
+#Calc NCO
+
+
+
+
+
+#Need to develop a Capital Ratio Calculator.
+
+#This will be needed for the predicted values to compare with the Ground Truth.
 
 #Need to calculate the measured CR_t,i
 #Other items:Book equity #t
@@ -893,6 +976,26 @@ Y_i.to_csv("../Data_Output/Y_ij.csv", sep = ",", index= False)
 #Have to get time period lags.
 
 
+#Calculate PPNR as PPNR componet ratio * consolidated assets of previous period.
+
+#calculate net charge off
+#Sum of associated loan of previous period * current period charge off rate.
+#Book Equity
+#Book Equity of previous period + .65 * (ppnr - nco) - dividends_t-1 - Stock Repurchases t-1
+#CR - Book Equity - Reg Capital Deductions of previous period/ Risk weighted Assets
+
+
+#Should we just update each row with columns with t-1
+
+
+
+
+#Discrimitative to Macro-Economic and Bank.
+#Get from source data,
+#Charge-offs : BHCK4635
+#Total Equity : BHCK310
+#Net Charge-offs : BHCK4635 - BHCK4605
+#Return on Equity : BHCK4340-BHCK4598/Average(BHCK310)
 
 
 
