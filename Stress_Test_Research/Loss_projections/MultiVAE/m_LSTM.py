@@ -55,6 +55,7 @@ def train(inputs, targets, epcho, lstm_lr, threshold):
        
     m_LSTM = mLSTM(m1, n, m2, dim_hidden)
     m_loss = torch.nn.MSELoss()
+    #print(m_loss)
     m_optimizer = torch.optim.SGD(m_LSTM.parameters(), lr=lstm_lr)
     t_loss = np.inf
     
@@ -64,14 +65,15 @@ def train(inputs, targets, epcho, lstm_lr, threshold):
         loss = m_loss(outputs, targets)
         loss.backward(retain_graph=True)
         m_optimizer.step()
-        #print(loss.data[0])
+    #    print(loss.data)
         if t_loss > loss.data and np.abs(t_loss - loss.data) > threshold:
             t_loss = loss.data
         else:
+            #print(loss.data)
             print("Done!")
             break
     
-    return m_LSTM
+    return m_LSTM, loss.data
 
 def predict(model, inputs):
     

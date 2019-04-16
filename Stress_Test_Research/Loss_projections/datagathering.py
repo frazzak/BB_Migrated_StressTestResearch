@@ -47,10 +47,6 @@ from functools import reduce
    '''
 
 
-CDS_Swaps_Full = pd.read_csv("~/Downloads/CDS_WRDS.csv")
-del CDS_Swaps_Full
-
-CDS_Swaps_Full.describe().transpose()
 
 class StressTestData():
     def __init__(self,varpath_dict_args = {
@@ -159,24 +155,24 @@ class StressTestData():
 
 
         dfs = list()
-        for keyname in [v for v in Z_micro.keys() if v.startswith("GFD_")]:
+        for keyname in [v for v in Z_micro_raw_data_dict.keys() if v.startswith("GFD_")]:
             print(keyname)
-            tmp_df = Z_micro[keyname]
+            tmp_df = Z_micro_raw_data_dict[keyname]
             tmp_df["Date"] = pd.to_datetime(tmp_df["Date"]).dt.date
             dfs.append(tmp_df[["Date", "Close"]].rename({"Close": keyname}, axis=1))
 
-        for keyname in [v for v in Z_micro.keys() if v.startswith("WRDS_")]:
+        for keyname in [v for v in Z_micro_raw_data_dict.keys() if v.startswith("WRDS_")]:
             # keyname = "WRDS_SnP500_Returns"
             print(keyname)
-            if "caldt" in Z_micro[keyname].keys():
+            if "caldt" in Z_micro_raw_data_dict[keyname].keys():
                 print("Filter from 1970")
-                tmp_df = Z_micro[keyname][Z_micro[keyname]["caldt"] > 19691231]
+                tmp_df = Z_micro_raw_data_dict[keyname][Z_micro_raw_data_dict[keyname]["caldt"] > 19691231]
                 tmp_df["caldt"] = pd.to_datetime(tmp_df["caldt"], format="%Y%M%d").dt.date
                 dfs.append(tmp_df.rename({"caldt": "Date"}, axis=1))
 
-            if "date" in Z_micro[keyname].keys():
+            if "date" in Z_micro_raw_data_dict[keyname].keys():
                 print("Filter from 1970")
-                tmp_df = Z_micro[keyname][Z_micro[keyname]["date"] > 19691231]
+                tmp_df = Z_micro_raw_data_dict[keyname][Z_micro_raw_data_dict[keyname]["date"] > 19691231]
                 tmp_df["date"] = pd.to_datetime(tmp_df["date"], format="%Y%M%d").dt.date
                 dfs.append(tmp_df.rename({"date": "Date"}, axis=1))
 
@@ -837,6 +833,26 @@ class StressTestData():
         return(Bankperf_df)
 
 
+def DateValues_Extractor(DF, DateColumn="ReportingDate", day=[30, 31], month=[3, 6, 9, 12], year=None):
+    if day != None and len(day) > 0:
+        print("Subsetting Day")
+        DF = DF[(pd.to_datetime(DF[DateColumn]).dt.day.isin(day))]
+
+    if month != None and len(month) > 0:
+        print("Subsetting Month")
+        DF = DF[(pd.to_datetime(DF[DateColumn]).dt.month.isin(month))]
+
+    if year != None and len(year) > 0:
+        print("Subsetting Year")
+        DF = DF[(pd.to_datetime(DF[DateColumn]).dt.year.isin(year))]
+
+    return (DF)
+
+
+#CDS_Swaps_Full = pd.read_csv("~/Downloads/CDS_WRDS.csv")
+#del CDS_Swaps_Full
+
+#CDS_Swaps_Full.describe().transpose()
 
 
 
@@ -863,7 +879,12 @@ Z_macro["Historic_Domestic"][Z_macro_Domestic_colsuse][pd.to_datetime(Z_macro["H
 Z_macro["Historic_International"][Z_macro_International_colsuse][pd.to_datetime(Z_macro["Historic_International"]["Date"]) <= "2017-12-31"].describe().transpose()
 #Z_macro["Historic_International"][Z_macro_International_colsuse].to_csv("../Data_Output/Z_Macro_International.csv", sep = ",", index = False)
 #Z_macro_combined = Z_macro["Historic_Domestic"][Z_macro_Domestic_colsuse].merge(Z_macro["Historic_International"][Z_macro_International_colsuse], on = "pdDate")
-#Z_macro_combined.to_csv("../Data_Output/Z_Macro.csv", sep = ",", index = False)
+Z_macro_combined = Z_macro["Historic_Domestic"][Z_macro_Domestic_colsuse].merge(Z_macro["Historic_International"][Z_macro_International_colsuse], on = "Date")
+
+#Z_macro_combined.columns
+
+#
+Z_macro_combined.to_csv("../Data_Output/Z_Macro.csv", sep = ",", index = False)
 
 #Shadow Banking Proxies
 SBidx = init_ST.SBidx_process()
@@ -871,158 +892,174 @@ SBidx = init_ST.SBidx_process()
 
 
 SBidx["SB_idx_prox"] = SBidx["SB_idx_prox"].rename({"Date":"ReportingDate"},axis = 1)
-SBidx["SB_idx_prox"]["ReportingDate"] =  pd.to_datetime(SBidx["SB_idx_prox"].ReportingDate).dt.year.astype(str) + " Q" + pd.to_datetime(SBidx["SB_idx_prox"].ReportingDate).dt.quarter.astype(str)
-
-SBidx["SB_idx_prox"].keys()
 
 
-SBidx["SB_idx_prox"]["ReportingDate"]
+#Subset Quarter values only.
 
+SBidx["SB_idx_prox"] = SBidx["SB_idx_prox"][(pd.to_datetime(SBidx["SB_idx_prox"]["ReportingDate"]).dt.month.isin([3,6,9,12])) & (pd.to_datetime(SBidx["SB_idx_prox"]["ReportingDate"]).dt.day.isin([30,31]))]
+
+
+#Trim Dates
 SBidx["SB_idx_prox"][(pd.to_datetime(SBidx["SB_idx_prox"]["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(SBidx["SB_idx_prox"]["ReportingDate"]) <= "2017-12-31")].describe().transpose()
 
 
+SBidx["SB_idx_prox"]["ReportingDate"] =  pd.to_datetime(SBidx["SB_idx_prox"].ReportingDate).dt.year.astype(str) + " Q" + pd.to_datetime(SBidx["SB_idx_prox"].ReportingDate).dt.quarter.astype(str)
+
+#SBidx["SB_idx_prox"].keys()
+
+
+#SBidx["SB_idx_prox"]["ReportingDate"]
+
+#Select only the Quarterly values / Get only 3-31, 6-30,9-30. 12-31
 SBidx["SB_idx_prox"].to_csv("../Data_Output/SBidx.csv", sep = ",", index = False)
 
 
 
 #Sector Indices
+#Select only the Quarterly values / Get only 3-31, 6-30,9-30. 12-31
 SectorIdx = init_ST.sectoridx_process()
 #
-SectorIdx.keys()
-SectorIdx["sectoridx"].keys()
+#SectorIdx.keys()
+#SectorIdx["sectoridx"].keys()
 
-SectorIdx["sectoridx"].to_csv("../Data_Output/Sectidx.csv", sep = ",", index = False)
+#SectorIdx["sectoridx"].to_csv("../Data_Output/Sectidx.csv", sep = ",", index = False)
 
-SectorIdx["sectoridx"].Date
-
+#We may have to average quarterly values or quarterly return values.
 SectorIdx["sectoridx"] = SectorIdx["sectoridx"].rename({"Date":"ReportingDate"},axis = 1)
+#Select only the Quarterly values
+SectorIdx["sectoridx"] = SectorIdx["sectoridx"][(pd.to_datetime(SectorIdx["sectoridx"]["ReportingDate"]).dt.month.isin([3,6,9,12])) & (pd.to_datetime(SectorIdx["sectoridx"]["ReportingDate"]).dt.day.isin([30,31]))]
+SectorIdx["sectoridx"][(pd.to_datetime(SectorIdx["sectoridx"]["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(SectorIdx["sectoridx"]["ReportingDate"]) <= "2017-12-31")].describe().transpose()
+
 SectorIdx["sectoridx"]["ReportingDate"] =  pd.to_datetime(SectorIdx["sectoridx"].ReportingDate).dt.year.astype(str) + " Q" + pd.to_datetime(SectorIdx["sectoridx"].ReportingDate).dt.quarter.astype(str)
 SectorIdx["sectoridx"].to_csv("../Data_Output/Sectidx.csv", sep = ",", index = False)
 
-
-SectorIdx["sectoridx"][(pd.to_datetime(SectorIdx["sectoridx"]["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(SectorIdx["sectoridx"]["ReportingDate"]) <= "2017-12-31")].describe().transpose()
-
-
-SectorIdx["WRDS_SP500_RealEstate_Indicies"]["tic"].unique()
-
-
-SectorIdx["sectoridx"].keys()
-SectorIdx.keys()
+#SectorIdx["WRDS_SP500_RealEstate_Indicies"]["tic"].unique()
+#SectorIdx["sectoridx"].keys()
+#SectorIdx.keys()
 #Should pring out Summary Statistics
+
+
+
 
 Z_micro = init_ST.Z_micro_process()
 
-Z_micro.keys()
-Z_micro["WRDS_government_bonds"].keys()
+#Z_micro.keys()
+#Z_micro["WRDS_government_bonds"].keys()
 
-Z_micro["WRDS_US Treasury and Inflation Indexes"].keys()
+#Z_micro["WRDS_US Treasury and Inflation Indexes"].keys()
 
 
 Z_micro["Z_Micro"] = Z_micro["Z_Micro"].rename({"Date":"ReportingDate"},axis = 1)
+Z_micro["Z_Micro"] = DateValues_Extractor(Z_micro["Z_Micro"])
+Z_micro["Z_Micro"][(pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) <= "2017-12-31")].describe().transpose()
+#TODO:Remove all NAN columns
+Z_micro["Z_Micro"] = Z_micro["Z_Micro"].dropna(axis = 1 , how = 'all')
+
+Z_micro["Z_Micro"].keys()
 
 
 
-Z_micro["WRDS_currency_swaps"].keys()
 
-Z_micro["WRDS_government_bonds"].keys()
+#Z_micro["WRDS_currency_swaps"].keys()
+
+#Z_micro["WRDS_government_bonds"].keys()
+
+
+
+# CurrencySwapsList = ('exusal',
+# 'exalus',
+# 'exbzus',
+# 'excaus',
+# 'exchus',
+# 'exdnus',
+# 'exhkus',
+# 'exinus',
+# 'exjpus',
+# 'exkous',
+# 'exmaus',
+# 'exmxus',
+# 'exusnz',
+# 'exnzus',
+# 'exnous',
+# 'exsius',
+# 'exsfus',
+# 'exslus',
+# 'exsdus',
+# 'exszus',
+# 'extaus',
+# 'exthus',
+# 'exusuk',
+# 'exukus',
+# 'exvzus',
+# 'exusir',
+# 'exusec',
+# 'execus',
+# 'exuseu',
+# 'exeuus',
+# 'twexb',
+# 'twexm',
+# 'twexo',
+# 'indexgx',
+# 'ReportingDate')
+#
+# list(Z_micro["Z_Micro"].columns)
+#
+#
+# z_micro_currsqp = Z_micro["Z_Micro"][Z_micro["Z_Micro"].columns[(pd.Series(Z_micro["Z_Micro"].columns).str.startswith(CurrencySwapsList))]]
+#
+# z_micro_currsqp[(pd.to_datetime(z_micro_currsqp["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(z_micro_currsqp["ReportingDate"]) <= "2017-12-31")].describe().transpose()
+#
+#
+#
+# #
+# GovernmentBondsList = ('D_AH_M3',
+#  'D_AH_M6',
+#  'D_AH_Y1',
+#  'D_COMP_Y10P',
+#  'D_LTNOM_Y25P',
+#  'D_TCMNOM_Y20',
+#  'LTAVG_Y10P',
+#  'TB_M3',
+#  'TB_M6',
+#  'TB_WK4',
+#  'TB_Y1',
+#  'TCMII_Y10',
+#  'TCMII_Y20',
+#  'TCMII_Y30',
+#  'TCMII_Y5',
+#  'TCMII_Y7',
+#  'TCMNOM_M1',
+#  'TCMNOM_M3',
+#  'TCMNOM_M6',
+#  'TCMNOM_Y10',
+#  'TCMNOM_Y1',
+#  'TCMNOM_Y20',
+#  'TCMNOM_Y2',
+#  'TCMNOM_Y30',
+#  'TCMNOM_Y3',
+#  'TCMNOM_Y5',
+#  'TCMNOM_Y7',
+#   'ReportingDate')
+
+# z_micro_govtbonds = Z_micro["Z_Micro"][Z_micro["Z_Micro"].columns[(pd.Series(Z_micro["Z_Micro"].columns).str.startswith(GovernmentBondsList))]]
+#
+# z_micro_govtbonds.keys().__len__()
+#
+# z_micro_govtbonds[(pd.to_datetime(z_micro_govtbonds["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(z_micro_govtbonds["ReportingDate"]) <= "2017-12-31")].describe().transpose()[["count","mean","std","min","50%","max"]]
+
+
 
 Z_micro["Z_Micro"][(pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) <= "2017-12-31")].describe().transpose()
-
-CurrencySwapsList = ('exusal',
-'exalus',
-'exbzus',
-'excaus',
-'exchus',
-'exdnus',
-'exhkus',
-'exinus',
-'exjpus',
-'exkous',
-'exmaus',
-'exmxus',
-'exusnz',
-'exnzus',
-'exnous',
-'exsius',
-'exsfus',
-'exslus',
-'exsdus',
-'exszus',
-'extaus',
-'exthus',
-'exusuk',
-'exukus',
-'exvzus',
-'exusir',
-'exusec',
-'execus',
-'exuseu',
-'exeuus',
-'twexb',
-'twexm',
-'twexo',
-'indexgx',
-'ReportingDate')
-
-list(Z_micro["Z_Micro"].columns)
-
-
-z_micro_currsqp = Z_micro["Z_Micro"][Z_micro["Z_Micro"].columns[(pd.Series(Z_micro["Z_Micro"].columns).str.startswith(CurrencySwapsList))]]
-
-z_micro_currsqp[(pd.to_datetime(z_micro_currsqp["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(z_micro_currsqp["ReportingDate"]) <= "2017-12-31")].describe().transpose()
-
-
-
-#
-GovernmentBondsList = ('D_AH_M3',
- 'D_AH_M6',
- 'D_AH_Y1',
- 'D_COMP_Y10P',
- 'D_LTNOM_Y25P',
- 'D_TCMNOM_Y20',
- 'LTAVG_Y10P',
- 'TB_M3',
- 'TB_M6',
- 'TB_WK4',
- 'TB_Y1',
- 'TCMII_Y10',
- 'TCMII_Y20',
- 'TCMII_Y30',
- 'TCMII_Y5',
- 'TCMII_Y7',
- 'TCMNOM_M1',
- 'TCMNOM_M3',
- 'TCMNOM_M6',
- 'TCMNOM_Y10',
- 'TCMNOM_Y1',
- 'TCMNOM_Y20',
- 'TCMNOM_Y2',
- 'TCMNOM_Y30',
- 'TCMNOM_Y3',
- 'TCMNOM_Y5',
- 'TCMNOM_Y7',
-  'ReportingDate')
-
-z_micro_govtbonds = Z_micro["Z_Micro"][Z_micro["Z_Micro"].columns[(pd.Series(Z_micro["Z_Micro"].columns).str.startswith(GovernmentBondsList))]]
-
-z_micro_govtbonds.keys().__len__()
-
-z_micro_govtbonds[(pd.to_datetime(z_micro_govtbonds["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(z_micro_govtbonds["ReportingDate"]) <= "2017-12-31")].describe().transpose()[["count","mean","std","min","50%","max"]]
-
-
-
-
 Z_micro["Z_Micro"]["ReportingDate"] =  pd.to_datetime(Z_micro["Z_Micro"].ReportingDate).dt.year.astype(str) + " Q" + pd.to_datetime(Z_micro["Z_Micro"].ReportingDate).dt.quarter.astype(str)
 
 #Foward fill, then backward fill
-list(Z_micro["Z_Micro"].keys()).__len__()
+#list(Z_micro["Z_Micro"].keys()).__len__()
 
-Z_micro["Z_Micro"] = Z_micro["Z_Micro"].fillna(method = "ffill").fillna(method = "bfill")
+#Z_micro["Z_Micro"] = Z_micro["Z_Micro"].fillna(method = "ffill").fillna(method = "bfill")
 
 Z_micro["Z_Micro"].to_csv("../Data_Output/Z_micro.csv", sep = ",", index = False)
 
 
-Z_micro["Z_Micro"][(pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) <= "2017-12-31")].describe().transpose()
 
 
 #Need Additional Subsetting and formatting logic for the WRDS data
@@ -1070,11 +1107,72 @@ BankPerf = StressTestData().X_Y_bankingchar_perf_process(groupfunction=np.mean, 
 
                                      }, RSSD_Subset = True, Y_calc= True)
 
+#TODO: Verify that the RSSID in X and Y match out.
+BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"].keys()
 
 #Workspace
-[v for v in BankPerf.keys() if v.startswith("BankPerf_ConsecutiveReduced")]
+[v for v in BankPerf.keys() if v.startswith("BankPerf_ConsecutiveReduced_XYcalc_Subset")]
 
-BankPerf["BankPerf_ConsecutiveReduced_Subset_DescriptiveStats"]
+BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_DescriptiveStats"]
+
+BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]["RSSD_ID"].unique().__len__()
+
+
+
+[v for v in BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns if v.endswith("t-1")]
+
+list(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns)
+
+BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].ReportingDate =  BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].ReportingDate.dt.year.astype(str) + " Q" + BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].ReportingDate.dt.quarter.astype(str)
+
+
+Xi = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.endswith(("RSSD_ID","ReportingDate","Loans categories:Commercial & industrial_Covas","Loans categories:Construction & land development","Loans categories:Multifamily real estate","Loans categories:Nonfarm nonresidential CRE_Covas","Loans categories:Home equity lines of credit","Loans categories:Residential real estate (excl. HELOCs)_Covas","Loans categories:Credit card","Loans categories:Consumer (excl. credit card)_Covas"))]]
+
+
+Xi.to_csv("../Data_Output/Xij.csv", sep = ",", index= False)
+Xi.describe().transpose()
+Xi.keys()
+
+
+Xi_tminus1 = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","Loans categories:Commercial & industrial_Covas_t-1","Loans categories:Construction & land development_t-1","Loans categories:Multifamily real estate_t-1","Loans categories:Nonfarm nonresidential CRE_Covas_t-1","Loans categories:Home equity lines of credit_t-1","Loans categories:Residential real estate (excl. HELOCs)_Covas_t-1","Loans categories:Credit card_t-1","Loans categories:Consumer (excl. credit card)_Covas_t-1"))]]
+
+
+Xi_tminus1.to_csv("../Data_Output/Xij_tminus1.csv", sep = ",", index= False)
+Xi_tminus1.describe().transpose()
+Xi_tminus1.keys()
+
+
+
+
+XY_GT_labels = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","Chargeoffs","Recoveries","Net income(loss)","Less:Cash dividends on perp perf stock","Total Equity_1","Total Equity_2","Other items:Book equity","Other items:Dividends ","Other items:Stock purchases","Other items:Risk-weighted assets","Other items:Tier 1 common equity","Other items:T1CR"))]]
+
+XY_GT_labels.to_csv("../Data_Output/XY_GT_labels.csv", sep = ",", index= False)
+XY_GT_labels.describe().transpose()
+XY_GT_labels.keys()
+
+
+
+XY_GT_labels_tminus1 = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","Chargeoffs_t-1","Recoveries_t-1","Net income(loss)_t-1","Less:Cash dividends on perp perf stock_t-1","Total Equity_1_t-1","Total Equity_2_t-1","Other items:Book equity_t-1","Other items:Dividends _t-1","Other items:Stock purchases_t-1","Other items:Risk-weighted assets_t-1","Other items:Tier 1 common equity_t-1","Other items:T1CR_t-1"))]]
+
+
+XY_GT_labels_tminus1.to_csv("../Data_Output/XY_GT_labels_tminus1.csv", sep = ",", index= False)
+XY_GT_labels_tminus1.describe().transpose()
+XY_GT_labels_tminus1.keys()
+
+
+
+
+
+Yi = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[(pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","ncoR:","ppnrRatio:"))) & (~pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.endswith("_t-1"))]]
+Yi.describe().transpose()
+Yi.to_csv("../Data_Output/Yij.csv", sep = ",", index= False)
+Yi.keys()
+
+
+Yi_tminus1 = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[(pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","ncoR:","ppnrRatio:"))) & (pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.endswith("_t-1"))]]
+Yi_tminus1.describe().transpose()
+Yi_tminus1.to_csv("../Data_Output/Yij_tminus1.csv", sep = ",", index= False)
+
 
 
 
@@ -1124,31 +1222,6 @@ BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"][['RSSD_ID','ReportingDat
 X_i.ReportingDate.dt.year.astype(str) + " Q" + X_i.ReportingDate.dt.quarter.astype(str)
 
 list(BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"].columns)
-
-X_i = BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","Loans categories:Commercial & industrial_Covas","Loans categories:Construction & land development","Loans categories:Multifamily real estate","Loans categories:Nonfarm nonresidential CRE_Covas","Loans categories:Nonfarm nonresidential CRE","Loans categories:Home equity lines of credit","Loans categories:Residential real estate (excl. HELOCs)_Covas","Loans categories:Credit card","Loans categories:Consumer (excl. credit card)_Covas",'LABEL:T1CR','LABEL:T1CR_t-1'))]]
-
-X_i["ReportingDate"] =  X_i.ReportingDate.dt.year.astype(str) + " Q" + X_i.ReportingDate.dt.quarter.astype(str)
-
-
-
-X_i.to_csv("../Data_Output/X_ij.csv", sep = ",", index= False)
-
-X_i.describe().transpose()
-
-X_i.keys()
-
-
-
-Y_i = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[(pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","ncoR:","ppnrRatio:")))
-& (~pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.endswith("_t-1"))]]
-
-Y_i.describe().transpose()
-Y_i["ReportingDate"] =  Y_i.ReportingDate.dt.year.astype(str) + " Q" + Y_i.ReportingDate.dt.quarter.astype(str)
-Y_i.to_csv("../Data_Output/Y_ij.csv", sep = ",", index= False)
-
-
-Y_i.keys()
-
 
 
 #Create calculated Net Charge Off and Book Equity.

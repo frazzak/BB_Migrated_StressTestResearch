@@ -14,10 +14,12 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from CGAN import CGAN
-from GAN import GAN
+#from CGAN import CGAN
+#from GAN import GAN
 from MultiVAE import m_MCVAE
 from MultiVAE import m_LSTM
+
+
 
 
 def elbo_loss(output_modalities, output_estimations, mu, logvar):
@@ -342,6 +344,8 @@ def load_quarter_based_data(quarter_ID, cond_name,
     data_X_quarter = torch.from_numpy(data_X_quarter)
     data_Y_quarter = torch.from_numpy(data_Y_quarter)
 
+#    data_X_quarter.shape
+
     # with four modalities, one conditional and other three for inputs
     #TODO: Static search for modality names.
     #TODO: Improve to dynamic based on file naming.
@@ -371,19 +375,27 @@ def build_train_eval_data(X, Y, modality, cond, train_window, test_window):
     cond_t is used to generate mod_t
     normally train_windwo[1] = test_window[0], in a consecutive manner
     '''
+    #modality = moda
 
-    # building data for generative model
+    print('Building data for generative model')
     mod_train = []
     mod_test = []
+    print("Generating test and training set for Conditionaly Modality")
     cond_train = cond[train_window[0]:train_window[1], :]
     cond_test = cond[test_window[0]:test_window[1], :]
+
+    print("Generating test and training sets for other modalities")
     for mod in modality:
         mod_train.extend([mod[train_window[0]:train_window[1], :]])
         mod_test.extend([mod[test_window[0]:test_window[1], :]])
 
-    # building data for LSTM component
+ #   X.shape
+
+    print('Building data for LSTM component')
+    print("Generating Training and Testing for X")
     X_train = X[:, train_window[0]:train_window[1], :]
     X_test = X[:, test_window[0]:test_window[1], :]
+    print("Generating Training and Testing for Y,Y_t-1")
     Y_train_t_1 = Y[:, train_window[0]-1:train_window[1]-1, :]
     Y_train_t = Y[:, train_window[0]:train_window[1], :]
     Y_test_t_1 = Y[:, test_window[0]-1:test_window[1]-1, :]
@@ -443,8 +455,8 @@ def get_raw_train_test_data(moda_names = ['SBidx', 'zmicro', 'domestic', 'intern
 
     # TODO: Try to use full historical Bank Data rather than just 10 years for testing and 3 for training.
     print("Create Training and Testing Sets")
-    train_window = [1, 11]  # indicating ten years
-    test_window = [11, 14]  # use three years to evaluate
+    #train_window = [1, 11]  # indicating ten years
+    #test_window = [11, 14]  # use three years to evaluate
     print("Running Train Eval Data Function")
     train_sets, test_sets = build_train_eval_data(X, Y, moda, cond, train_window, test_window)
     print("Done!")
@@ -458,8 +470,8 @@ def get_raw_train_test_data(moda_names = ['SBidx', 'zmicro', 'domestic', 'intern
 
     return cond_train, cond_test, mod_train, mod_test, num_cond, cond_name, train_sets, test_sets
 
-
-cond_train, cond_test, mod_train, mod_test, num_cond, cond_name, train_sets, test_sets = get_raw_train_test_data(quarter_ID = 0, cond_name = "domestic", train_window = [0,9], test_window = [10,14])
+os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/")
+cond_train, cond_test, mod_train, mod_test, num_cond, cond_name, train_sets, test_sets = get_raw_train_test_data(quarter_ID = 0, cond_name = "domestic")
 
 
 
@@ -531,7 +543,9 @@ results, pred_moda = GenerativeModelCompare(num_cond, cond_train, cond_test, mod
 def LSTM_BankPrediction(pred_moda, learn_types = ["Only_Y", "Y&X", "Y&X&moda"], lstm_lr = 1e-2, threshold = 1e-3 ):
     print("Comparison on LSTM models")
     #learn_types = ["Only_Y", "Y&X", "Y&X&moda"]
+    rmse_train_list = []
     rmse_lst = []
+    #TODO: Iterate through learn types list rather than a range list counter.
     for ids in range(0, 3):
         m_learn_type = learn_types[ids]
         #lstm_lr = 1e-2
@@ -545,6 +559,10 @@ def LSTM_BankPrediction(pred_moda, learn_types = ["Only_Y", "Y&X", "Y&X&moda"], 
         #TODO: Address the Static nature of the learn type to raw inputs mapping
         if m_learn_type == learn_types[1]:
             print(learn_types[1])
+            # train_sets[2].shape
+            # train_sets[3].shape
+            # test_sets[3].shape
+            # test_sets[2].shape
             raw_inputs = torch.cat((train_sets[3], train_sets[2]), dim=2)
             raw_eval_inputs = torch.cat((test_sets[3], test_sets[2]), dim=2)
         #TODO: Address the Static nature of the learn type to raw inputs mapping
@@ -566,7 +584,7 @@ def LSTM_BankPrediction(pred_moda, learn_types = ["Only_Y", "Y&X", "Y&X&moda"], 
             raw_eval_inputs = torch.cat((raw_eval_inputs, raw_eval_moda.double()), dim=2)
 
 
-        print("Setting Inputs and Target Parameters")
+        print("Setting Inputs and Target Parameters for Training")
         # TODO: Investigate how to resolve the static nature of setting the target
         raw_targets = train_sets[4]
         n, t, m1 = raw_inputs.shape
@@ -579,8 +597,13 @@ def LSTM_BankPrediction(pred_moda, learn_types = ["Only_Y", "Y&X", "Y&X&moda"], 
 
 
         print("Training LSTM model")
-        m_lstm = m_LSTM.train(inputs, targets, 50, lstm_lr, threshold)
+        m_lstm, train_loss = m_LSTM.train(inputs, targets, 50, lstm_lr, threshold)
 
+        print("Calculating Training RMSE")
+        rmse_train_list.append(train_loss)
+        print("%s\terror:\t%.5f" % (m_learn_type, train_loss))
+
+        print("Setting Inputs and Target Parameters for Testing")
         #raw_eval_inputs = raw_inputs = torch.cat((test_sets[3], test_sets[2]), dim=2)
         #TODO: Investigate how to resolve the static nature of setting the target
         raw_eval_targets = test_sets[4]
@@ -593,24 +616,33 @@ def LSTM_BankPrediction(pred_moda, learn_types = ["Only_Y", "Y&X", "Y&X&moda"], 
             targets[:, i, :] = raw_eval_targets[i, :, :]
 
 
-        print("Running Predictions on Inputs using Trained Model")
+        print("Running Predictions on Inputs using Trained Model: Testing Error")
         pred = m_LSTM.predict(m_lstm, inputs)
 
 
-        print("Calculating RMSE")
+        print("Calculating Testing RMSE")
         rmse = torch.nn.functional.mse_loss(pred, targets)
         rmse_lst.append(rmse)
         print("%s\terror:\t%.5f" % (m_learn_type, rmse))
 
-    rmse_lst = torch.stack(rmse_lst)
-    result_obj = pd.DataFrame([rmse_lst.data], columns = learn_types)
+    rmse_train_lst_sk = torch.stack(rmse_train_list)
+    rmse_lst_sk = torch.stack(rmse_lst)
+    rmse_list_final = [rmse_train_lst_sk, rmse_lst_sk.data]
+    result_obj = pd.DataFrame(rmse_list_final, columns = learn_types, index = ["TrainErr","TestErr"])
     return(result_obj)
+
 
 BankPredEval = LSTM_BankPrediction(pred_moda, learn_types=["Only_Y", "Y&X", "Y&X&moda"], lstm_lr=1e-2, threshold=1e-3)
 
-
-
-
+#Graphical LSTM MSE representaiton.
+# with torch.no_grad():
+#     prediction = model.forward(xtest).view(-1)
+#     loss = criterion(prediction, ytest)
+#     plt.title("MESLoss: {:.5f}".format(loss))
+#     plt.plot(prediction.detach().numpy(), label="pred")
+#     plt.plot(ytest.detach().numpy(), label="true")
+#     plt.legend()
+#     plt.show()
 
 
 
@@ -622,7 +654,7 @@ BankPredEval = LSTM_BankPrediction(pred_moda, learn_types=["Only_Y", "Y&X", "Y&X
 
 
 #Previous Code.
-
+0
 
 #if __name__=="__main__":
 
