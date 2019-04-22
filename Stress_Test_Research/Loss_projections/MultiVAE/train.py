@@ -243,46 +243,53 @@ def train_CVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_ra
 
     return m_error
 def train_MCVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rate, conditional):
-
+    #conditional = True
     # parameters for mcvae
+    print("Model parameter initialization")
     use_cuda = False
     epcho = 1000
-    #learning_rate = 1e-2
+    learning_rate = 1e-6
     latent_size = 10
     modality_size = len(mod_train)
     #conditional = True
     layer_size = [128, 64, 32]
     mod_input_sizes = []
-    for i in range(0, len(mod_train)):
+    for i in range(0, modality_size):
+        print(mod_train[i].shape)
         mod_input_sizes.extend([mod_train[i].shape[1]])
 
-    mcvae = m_MCVAE.MCVAE(latent_size, modality_size, conditional,
-                          num_cond, mod_input_sizes, layer_size, use_cuda)
+
+    mcvae = m_MCVAE.MCVAE(latent_size, modality_size, conditional, num_cond, mod_input_sizes, layer_size, use_cuda)
     m_optimizer = torch.optim.Adam(mcvae.parameters(), lr=learning_rate)
+    print("Model parameter initialization Done!")
+    print("Training Started!")
 
     #t_loss = -np.inf
     mcvae.train()
+    #i = 0
+    #TODO: Model training giving nan loss. Could be related to the additonal data.
     for i in range(0, epcho):
         m_optimizer.zero_grad()
         outputs, mu, logvar = mcvae.forward(mod_train, cond_train)
         m_loss, MSE, KLD = elbo_loss(mod_train, outputs, mu, logvar)
         m_loss.backward()
         m_optimizer.step()
-        #if i%100 == 0:
-        #    print("loss:%.2f\tMSE:%.2f\tKLD:%.2f" % (m_loss.data[0], MSE, KLD))
-    #print("Training Done!")
+        if i%100 == 0: # print loss at every 100 epochs #TODO: Good potential training visualization, loss decresing every 100 epochs..
+           print("epoch:",i)
+           print("loss:%.2f\tMSE:%.2f\tKLD:%.2f" % (m_loss.data, MSE, KLD))
+    print("Training Done!")
 
-
-    """testing procedure
-    """
+    print("Testing Started")
     mcvae.test()
     batch_size = mod_test[0].shape[0]
     estimations = mcvae.inference(n=batch_size, cond=cond_test)
     error_mse = inference_error(mod_test, estimations)
+
     if conditional:
         print("MCVAE testing_error (mse):%.2f" % error_mse)
     else:
         print("MVAE testing_error (mse):%.2f" % error_mse)
+    print("Testing Ended")
 
     return error_mse, estimations
 
@@ -320,11 +327,12 @@ def load_quarter_based_data(quarter_ID, cond_name,
                             path_dict = {"path_root" : os.path.join(os.getcwd(),"data/quarter_based/"),
                                          "X_qtr" : "data_X_quarter.npy",
                                          "Y_qtr" : "data_Y_quarter.npy",
+                                         "XYCap_qtr" : "data_XYCap_quarter.npy",
                                          "Moda_prefix":"data_moda_",
                                          "Moda_suffix":"_quarter.npy"
 
                                          }
-                            , modality_names = ['SBidx', 'zmicro', 'domestic', 'international']):
+                            , modality_names = ['SBidx', 'zmicro', 'domestic', 'international', 'Sectidx']):
 
     print("Loading Raw Bank Characteristics, X and Performance Data, Y")
     # if path_dict["path_root"] is None:
@@ -336,14 +344,18 @@ def load_quarter_based_data(quarter_ID, cond_name,
     #     #data_X_quarter = reform_data(data_X_quarter)
     #     #data_Y_quarter = reform_data(data_Y_quarter)
     # else:
+    #quarter_ID = 3
     print("Loading X Variable")
     data_X_quarter = np.load( path_dict["path_root"] + path_dict["X_qtr"])[quarter_ID]
     print("Loading Y Variable")
     data_Y_quarter = np.load( path_dict["path_root"] + path_dict["Y_qtr"])[quarter_ID]
+    print("Loading XYCap Variable")
+    data_XYCap_quarter = np.load(path_dict["path_root"] + path_dict["XYCap_qtr"])[quarter_ID]
+
     print("Converting to Torch format")
     data_X_quarter = torch.from_numpy(data_X_quarter)
     data_Y_quarter = torch.from_numpy(data_Y_quarter)
-
+    data_XYCap_quarter = torch.from_numpy(data_XYCap_quarter)
 #    data_X_quarter.shape
 
     # with four modalities, one conditional and other three for inputs
@@ -359,17 +371,22 @@ def load_quarter_based_data(quarter_ID, cond_name,
             print("Loading Conditional Modality:", names)
             data_moda_cond = np.load( path_dict["path_root"] +  path_dict["Moda_prefix"] + cond_name + path_dict["Moda_suffix"])[quarter_ID]
             #data_moda_cond = reform_data(data_moda_cond)
+            data_moda_cond = np.nan_to_num(data_moda_cond)
             data_moda_cond = torch.from_numpy(data_moda_cond).float()
+            print(data_moda_cond.shape)
         else:
             print("Loading Regular Modality:", names)
             temp_moda = np.load(path_dict["path_root"] +  path_dict["Moda_prefix"] + names + path_dict["Moda_suffix"])[quarter_ID]
+            temp_moda = np.nan_to_num(temp_moda)
             #temp_moda = reform_data(temp_moda)
             temp_moda = torch.from_numpy(temp_moda).float()
+            print(temp_moda.shape)
+
             data_moda_quarter.extend([temp_moda])
 
-    return data_X_quarter, data_Y_quarter, data_moda_quarter, data_moda_cond
+    return data_X_quarter, data_Y_quarter, data_XYCap_quarter, data_moda_quarter, data_moda_cond
 
-def build_train_eval_data(X, Y, modality, cond, train_window, test_window):
+def build_train_eval_data(X, Y, XYCap, modality, cond, train_window, test_window):
     '''
     the model requires inputs as X_t, Y_t-1, mod_t, and cond_t
     cond_t is used to generate mod_t
@@ -401,18 +418,39 @@ def build_train_eval_data(X, Y, modality, cond, train_window, test_window):
     Y_test_t_1 = Y[:, test_window[0]-1:test_window[1]-1, :]
     Y_test_t = Y[:, test_window[0]:test_window[1], :]
 
-    train_sets = (mod_train, cond_train, X_train, Y_train_t_1, Y_train_t)
-    test_sets = (mod_test, cond_test, X_test, Y_test_t_1, Y_test_t)
+    print("Generating Training and Testing for XYCap")
+    XYCap_train_t_1 = XYCap[:, train_window[0] - 1:train_window[1] - 1, :]
+    XYCap_train_t = XYCap[:, train_window[0]:train_window[1], :]
+    XYCap_test_t_1 = XYCap[:, test_window[0] - 1:test_window[1] - 1, :]
+    XYCap_test_t = XYCap[:, test_window[0]:test_window[1], :]
 
-    return train_sets, test_sets
+    #TODO:Loop this and automate
+    traintest_sets_dict = {"modTrain":mod_train,
+                  "condTrain": cond_train,
+                  "XTrain": X_train,
+                  "Ytminus1Train": Y_train_t_1,
+                  "YTrain" : Y_train_t,
+                  "XYCapTminus1Train": XYCap_train_t_1,
+                  "XYCapTrain" : XYCap_train_t,
+                  "modTest": mod_test,
+                  "condTest" : cond_test,
+                  "XTest" : X_test,
+                  "Ytminus1Test": Y_test_t_1,
+                  "YTest" : Y_test_t,
+                  "XYCapTminus1Test": XYCap_test_t_1,
+                  "XYCapTrain":XYCap_test_t}
+    #test_sets = {mod_test, cond_test, X_test, Y_test_t_1, Y_test_t, XYCap_test_t_1, XYCap_test_t}
+
+    return traintest_sets_dict
+
+for key in [x for x in traintest_sets_dict.keys() if x.startswith("YT")]:
+    print("key:",key)
+    print(traintest_sets_dict[key].shape)
 
 
 
-
-
-
-def get_raw_train_test_data(moda_names = ['SBidx', 'zmicro', 'domestic', 'international'], quarter_ID = 0, cond_name = 'domestic',
-                            train_window = [1, 11], test_window = [11, 14]):
+def get_raw_train_test_data(moda_names = ['SBidx', 'zmicro', 'domestic', 'international', 'Sectidx'], quarter_ID = 0, cond_name = 'Sectidx',
+                            train_window = [0, 20], test_window = [21, 26]):
 
     #TODO: Set if condition to get synthetic modalities.
 
@@ -431,15 +469,11 @@ def get_raw_train_test_data(moda_names = ['SBidx', 'zmicro', 'domestic', 'intern
 
     print('build real modalities to evaluate')
     print("retrieving data...")
-    #TODO: Address Additional Modalities
-    #moda_names = ['SBidx', 'zmicro', 'domestic', 'international']
-
     #TODO: Address Quarter ID only taking first Quarter Issue
     #quarter_ID = 0
     print("Modalities to be loaded ", moda_names, "for quarter_ID ", str(quarter_ID))
 
 
-    #TODO:Address proper conditionality
     #cond_name = moda_names[2]  # this can be changed to see different conditional effects from differnt modalities
     print("setting conditional modality to ", cond_name)
 
@@ -450,7 +484,7 @@ def get_raw_train_test_data(moda_names = ['SBidx', 'zmicro', 'domestic', 'intern
 
     #TODO: Explore ways to extract the modalities properly as well as the X and Y and conditional
     print("Running Load Quarter Based Data Function")
-    X, Y, moda, cond = load_quarter_based_data(quarter_ID, cond_name, modality_names = moda_names)
+    X, Y, XYCap, moda, cond = load_quarter_based_data(quarter_ID, cond_name, modality_names = moda_names)
     t = Y.shape[0]
 
     # TODO: Try to use full historical Bank Data rather than just 10 years for testing and 3 for training.
@@ -458,24 +492,24 @@ def get_raw_train_test_data(moda_names = ['SBidx', 'zmicro', 'domestic', 'intern
     #train_window = [1, 11]  # indicating ten years
     #test_window = [11, 14]  # use three years to evaluate
     print("Running Train Eval Data Function")
-    train_sets, test_sets = build_train_eval_data(X, Y, moda, cond, train_window, test_window)
+    traintest_sets_dict= build_train_eval_data(X, Y, XYCap, moda, cond, train_window, test_window)
     print("Done!")
 
     #TODO: Address the Static aspect of the outputs
-    cond_train = train_sets[1]
-    cond_test = test_sets[1]
-    mod_train = train_sets[0]
-    mod_test = test_sets[0]
-    num_cond = cond_train.shape[1]
+#    cond_train = traintest_sets_dict["condTrain"] #train_sets[1]
+#    cond_test = traintest_sets_dict["condTest"]#test_sets[1]
+#    mod_train = traintest_sets_dict["modTrain"] #train_sets[0]
+#    mod_test = traintest_sets_dict["modTest"]  #test_sets[0]
+#    num_cond = traintest_sets_dict["condTrain"].shape[1]
 
-    return cond_train, cond_test, mod_train, mod_test, num_cond, cond_name, train_sets, test_sets
+    return traintest_sets_dict["condTrain"], traintest_sets_dict["condTest"], traintest_sets_dict["modTrain"] , traintest_sets_dict["modTest"], traintest_sets_dict["condTrain"].shape[1], cond_name, traintest_sets_dict
 
 os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/")
-cond_train, cond_test, mod_train, mod_test, num_cond, cond_name, train_sets, test_sets = get_raw_train_test_data(quarter_ID = 0, cond_name = "domestic")
 
 
-
-
+cond_train, cond_test, mod_train, mod_test, num_cond, cond_name,traintest_sets_dict  = get_raw_train_test_data(quarter_ID = 0, cond_name = "Sectidx"
+                                                                                                                 , moda_names = ['SBidx', 'zmicro', 'domestic', 'international', 'Sectidx'],
+                                                                                                               train_window = [0, 10], test_window = [11, 15])
 
 def GenerativeModelCompare(num_cond, cond_train, cond_test, mod_train, mod_test, cond_name, learning_rate = 1e-4, times = 3):
     print("Comparison on Generative models")
@@ -540,22 +574,22 @@ def GenerativeModelCompare(num_cond, cond_train, cond_test, mod_train, mod_test,
 results, pred_moda = GenerativeModelCompare(num_cond, cond_train, cond_test, mod_train, mod_test, cond_name, learning_rate = 1e-4, times = 1)
 
 
-def LSTM_BankPrediction(pred_moda, learn_types = ["Only_Y", "Y&X", "Y&X&moda"], lstm_lr = 1e-2, threshold = 1e-3 ):
+def LSTM_BankPrediction( pred_moda ,traintest_sets_dict,learn_types = ["Only_Y", "Y&X", "Y&X&moda"], lstm_lr = 1e-2, threshold = 1e-3):
     print("Comparison on LSTM models")
     #learn_types = ["Only_Y", "Y&X", "Y&X&moda"]
     rmse_train_list = []
     rmse_lst = []
+    #ids = 0
     #TODO: Iterate through learn types list rather than a range list counter.
-    for ids in range(0, 3):
+    for ids in range(0, len(learn_types)):
         m_learn_type = learn_types[ids]
-        #lstm_lr = 1e-2
-        #threshold = 1e-3
+
         print("Setting Raw Inputs and Raw Evaluation Inputs")
         #TODO: Address the Static nature of the learn type to raw inputs mapping
         if m_learn_type == learn_types[0]:
             print(learn_types[0])
-            raw_inputs = train_sets[3]
-            raw_eval_inputs = test_sets[3]
+            raw_inputs = traintest_sets_dict["Ytminus1Train"]#train_sets[3]
+            raw_eval_inputs = traintest_sets_dict["Ytminus1Test"]#test_sets[3]
         #TODO: Address the Static nature of the learn type to raw inputs mapping
         if m_learn_type == learn_types[1]:
             print(learn_types[1])
@@ -563,20 +597,20 @@ def LSTM_BankPrediction(pred_moda, learn_types = ["Only_Y", "Y&X", "Y&X&moda"], 
             # train_sets[3].shape
             # test_sets[3].shape
             # test_sets[2].shape
-            raw_inputs = torch.cat((train_sets[3], train_sets[2]), dim=2)
-            raw_eval_inputs = torch.cat((test_sets[3], test_sets[2]), dim=2)
+            raw_inputs = torch.cat((traintest_sets_dict["Ytminus1Train"], traintest_sets_dict["XTrain"]), dim=2)
+            raw_eval_inputs = torch.cat((traintest_sets_dict["Ytminus1Test"], traintest_sets_dict["XTrain"]), dim=2)
         #TODO: Address the Static nature of the learn type to raw inputs mapping
         if m_learn_type == learn_types[2]:
             print(learn_types[2])
-            raw_inputs = torch.cat((train_sets[3], train_sets[2]), dim=2)
-            raw_eval_inputs = torch.cat((test_sets[3], test_sets[2]), dim=2)
+            raw_inputs = torch.cat((traintest_sets_dict["Ytminus1Train"], traintest_sets_dict["XTrain"]), dim=2)
+            raw_eval_inputs = torch.cat((traintest_sets_dict["Ytminus1Test"], traintest_sets_dict["XTrain"]), dim=2)
             print("in testing stage the modality is applied from the predicted modality from previous stage")
             #TODO: May need to consider capturing other generative models predictions rather than just MCVAE
             temp_eval_moda = pred_moda[0]
-            temp_moda = train_sets[0][0]
+            temp_moda = traintest_sets_dict["modTrain"][0]#train_sets[0][0]
             #TODO: Need additional detail to this part to understand what exactly it is doing.
-            for i in range(1, len(train_sets[0])):
-                temp_moda = torch.cat((temp_moda, train_sets[0][i]), dim=1)
+            for i in range(1, len(traintest_sets_dict["modTrain"])):
+                temp_moda = torch.cat((temp_moda, traintest_sets_dict["modTrain"][i]), dim=1)
                 temp_eval_moda = torch.cat((temp_eval_moda, pred_moda[i]), dim=1)
             raw_moda = temp_moda.expand_as(torch.zeros([raw_inputs.shape[0], temp_moda.shape[0], temp_moda.shape[1]]))
             raw_eval_moda = temp_eval_moda.expand_as(torch.zeros([raw_eval_inputs.shape[0], temp_eval_moda.shape[0], temp_eval_moda.shape[1]]))
@@ -586,7 +620,8 @@ def LSTM_BankPrediction(pred_moda, learn_types = ["Only_Y", "Y&X", "Y&X&moda"], 
 
         print("Setting Inputs and Target Parameters for Training")
         # TODO: Investigate how to resolve the static nature of setting the target
-        raw_targets = train_sets[4]
+        # TODO: May need to add the Capital Ratios part as targets.
+        raw_targets = traintest_sets_dict["YTrain"]
         n, t, m1 = raw_inputs.shape
         m2 = raw_targets.shape[2]
         inputs = torch.zeros([t, m1, n]).float()
@@ -606,7 +641,7 @@ def LSTM_BankPrediction(pred_moda, learn_types = ["Only_Y", "Y&X", "Y&X&moda"], 
         print("Setting Inputs and Target Parameters for Testing")
         #raw_eval_inputs = raw_inputs = torch.cat((test_sets[3], test_sets[2]), dim=2)
         #TODO: Investigate how to resolve the static nature of setting the target
-        raw_eval_targets = test_sets[4]
+        raw_eval_targets = traintest_sets_dict["YTest"]#test_sets[4]
         n, t, m1 = raw_eval_inputs.shape
         m2 = raw_eval_targets.shape[2]
         inputs = torch.zeros([t, m1, n]).float()
@@ -632,7 +667,7 @@ def LSTM_BankPrediction(pred_moda, learn_types = ["Only_Y", "Y&X", "Y&X&moda"], 
     return(result_obj)
 
 
-BankPredEval = LSTM_BankPrediction(pred_moda, learn_types=["Only_Y", "Y&X", "Y&X&moda"], lstm_lr=1e-2, threshold=1e-3)
+BankPredEval = LSTM_BankPrediction(pred_moda, traintest_sets_dict, learn_types=["Only_Y", "Y&X", "Y&X&moda"], lstm_lr=1e-2, threshold=1e-3)
 
 #Graphical LSTM MSE representaiton.
 # with torch.no_grad():

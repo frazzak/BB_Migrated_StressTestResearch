@@ -93,20 +93,27 @@ class StressTestData():
         if Sectoridx_dir is None:
             Sectoridx_dir = self.Sectoridx_dir
 
+        #Sectoridx_dir = "Sector_Indices/"
+
         sectoridx_dict = self.file_dict_read(Sectoridx_dir, filetype=filetype)
+        #sectoridx_dict = file_dict_read(Sectoridx_dir, filetype=filetype)
+
         dfs = list()
         for keyname in sectoridx_dict.keys():
             print("Processing:", keyname)
             tmp_df = sectoridx_dict[keyname]
-            tmp_df["datadate"] = pd.to_datetime(tmp_df["datadate"], format="%Y%M%d").dt.date
+            tmp_df["datadate"] = pd.to_datetime(tmp_df["datadate"], format="%Y%m%d").dt.date
             tmp_df = tmp_df[["datadate", "tic", "prccm"]]
             tmp_df = tmp_df.pivot_table(index="datadate", columns="tic", values="prccm")
             tmp_df = tmp_df.reset_index()
             print(tmp_df.describe().transpose())
             dfs.append(tmp_df)
 
+
+
         print("Combine List with Left Merge")
         final_raw_df = reduce(lambda left, right: pd.merge(left, right, on="datadate", how="left"), dfs)
+        final_raw_df["datadate"]
         final_raw_df = final_raw_df.rename({"datadate": "Date"}, axis=1)
         print(final_raw_df.describe().transpose())
         sectoridx_dict["sectoridx"] = final_raw_df
@@ -167,13 +174,13 @@ class StressTestData():
             if "caldt" in Z_micro_raw_data_dict[keyname].keys():
                 print("Filter from 1970")
                 tmp_df = Z_micro_raw_data_dict[keyname][Z_micro_raw_data_dict[keyname]["caldt"] > 19691231]
-                tmp_df["caldt"] = pd.to_datetime(tmp_df["caldt"], format="%Y%M%d").dt.date
+                tmp_df["caldt"] = pd.to_datetime(tmp_df["caldt"], format="%Y%m%d").dt.date
                 dfs.append(tmp_df.rename({"caldt": "Date"}, axis=1))
 
             if "date" in Z_micro_raw_data_dict[keyname].keys():
                 print("Filter from 1970")
                 tmp_df = Z_micro_raw_data_dict[keyname][Z_micro_raw_data_dict[keyname]["date"] > 19691231]
-                tmp_df["date"] = pd.to_datetime(tmp_df["date"], format="%Y%M%d").dt.date
+                tmp_df["date"] = pd.to_datetime(tmp_df["date"], format="%Y%m%d").dt.date
                 dfs.append(tmp_df.rename({"date": "Date"}, axis=1))
 
         print("Combine List with Left Merge")
@@ -607,7 +614,7 @@ class StressTestData():
             print("Getting Merger Info from Dictionary")
             merger_info_df = BankPerf[merger_df_name]
             merger_info_df = merger_info_df[merger_df_subset]
-            merger_info_df[merger_df_datecol] = pd.to_datetime(merger_info_df[merger_df_datecol], format="%Y%M%d")
+            merger_info_df[merger_df_datecol] = pd.to_datetime(merger_info_df[merger_df_datecol], format="%Y%m%d")
             merger_info_df[merger_df_predecessor] = merger_info_df[merger_df_predecessor].astype(int)
         # print(merger_info_df.info())
         # print(merger_info_df.describe())
@@ -865,26 +872,38 @@ init_ST = StressTestData()
 Z_macro = init_ST.Z_macro_process()
 
 
-Z_macro.keys()
+Z_macro['Z_macro'].keys()
+
+Z_macro['Z_macro']['Date']
+
+Z_macro_out = Z_macro['Z_macro'][(pd.to_datetime(Z_macro['Z_macro']['Date']) <= "2017-12-31") & (pd.to_datetime(Z_macro['Z_macro']['Date']) >= "1990-01-01")]
+Z_macro_out["Date"] =  pd.to_datetime(Z_macro_out.Date).dt.year.astype(str) + " Q" + pd.to_datetime(Z_macro_out.Date).dt.quarter.astype(str)
+Z_macro_out.keys()
+Z_macro_out = Z_macro_out.drop("Scenario Name_x",axis = 1)
+Z_macro_out.to_csv("../Data_Output/Z_Macro.csv", sep = ",", index = False)
 
 #Z_macro["Historic_Domestic"].keys()
-pd.to_datetime(Z_macro["Historic_Domestic"]["Date"]).min()
+#pd.to_datetime(Z_macro["Historic_Domestic"]["Date"]).min()
 
 #Z_macro.keys()
 
 #Z_macro_Domestic_colsuse = [x for x in Z_macro["Historic_Domestic"].columns if x not in ["Scenario Name"]]
-Z_macro["Historic_Domestic"][Z_macro_Domestic_colsuse][pd.to_datetime(Z_macro["Historic_Domestic"]["Date"]) <= "2017-12-31"].describe().transpose()
+#Z_macro["Historic_Domestic"][Z_macro_Domestic_colsuse][pd.to_datetime(Z_macro["Historic_Domestic"]["Date"]) <= "2017-12-31"].describe().transpose()
 #Z_macro["Historic_Domestic"][Z_macro_Domestic_colsuse].to_csv("../Data_Output/Z_Macro_Domestic.csv", sep = ",", index = False)
 #Z_macro_International_colsuse = [x for x in Z_macro["Historic_International"].columns if x not in ["Scenario Name"]]
-Z_macro["Historic_International"][Z_macro_International_colsuse][pd.to_datetime(Z_macro["Historic_International"]["Date"]) <= "2017-12-31"].describe().transpose()
+#Z_macro["Historic_International"][Z_macro_International_colsuse][pd.to_datetime(Z_macro["Historic_International"]["Date"]) <= "2017-12-31"].describe().transpose()
 #Z_macro["Historic_International"][Z_macro_International_colsuse].to_csv("../Data_Output/Z_Macro_International.csv", sep = ",", index = False)
 #Z_macro_combined = Z_macro["Historic_Domestic"][Z_macro_Domestic_colsuse].merge(Z_macro["Historic_International"][Z_macro_International_colsuse], on = "pdDate")
-Z_macro_combined = Z_macro["Historic_Domestic"][Z_macro_Domestic_colsuse].merge(Z_macro["Historic_International"][Z_macro_International_colsuse], on = "Date")
+
+#Z_macro_combined = Z_macro["Historic_Domestic"][Z_macro_Domestic_colsuse].merge(Z_macro["Historic_International"][Z_macro_International_colsuse], on = "Date")
 
 #Z_macro_combined.columns
 
 #
-Z_macro_combined.to_csv("../Data_Output/Z_Macro.csv", sep = ",", index = False)
+#Z_macro_combined["Date"] =  pd.to_datetime(Z_macro_combined.Date).dt.year.astype(str) + " Q" + pd.to_datetime(Z_macro_combined.Date).dt.quarter.astype(str)
+
+
+#Z_macro_combined.to_csv("../Data_Output/Z_Macro.csv", sep = ",", index = False)
 
 #Shadow Banking Proxies
 SBidx = init_ST.SBidx_process()
@@ -900,7 +919,7 @@ SBidx["SB_idx_prox"] = SBidx["SB_idx_prox"][(pd.to_datetime(SBidx["SB_idx_prox"]
 
 
 #Trim Dates
-SBidx["SB_idx_prox"][(pd.to_datetime(SBidx["SB_idx_prox"]["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(SBidx["SB_idx_prox"]["ReportingDate"]) <= "2017-12-31")].describe().transpose()
+SBidx["SB_idx_prox"] = SBidx["SB_idx_prox"][(pd.to_datetime(SBidx["SB_idx_prox"]["ReportingDate"]) >= "1990-01-01") & (pd.to_datetime(SBidx["SB_idx_prox"]["ReportingDate"]) <= "2017-12-31")]
 
 
 SBidx["SB_idx_prox"]["ReportingDate"] =  pd.to_datetime(SBidx["SB_idx_prox"].ReportingDate).dt.year.astype(str) + " Q" + pd.to_datetime(SBidx["SB_idx_prox"].ReportingDate).dt.quarter.astype(str)
@@ -927,8 +946,12 @@ SectorIdx = init_ST.sectoridx_process()
 #We may have to average quarterly values or quarterly return values.
 SectorIdx["sectoridx"] = SectorIdx["sectoridx"].rename({"Date":"ReportingDate"},axis = 1)
 #Select only the Quarterly values
+
+SectorIdx["sectoridx"]["ReportingDate"]
+
 SectorIdx["sectoridx"] = SectorIdx["sectoridx"][(pd.to_datetime(SectorIdx["sectoridx"]["ReportingDate"]).dt.month.isin([3,6,9,12])) & (pd.to_datetime(SectorIdx["sectoridx"]["ReportingDate"]).dt.day.isin([30,31]))]
-SectorIdx["sectoridx"][(pd.to_datetime(SectorIdx["sectoridx"]["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(SectorIdx["sectoridx"]["ReportingDate"]) <= "2017-12-31")].describe().transpose()
+SectorIdx["sectoridx"] = SectorIdx["sectoridx"][(pd.to_datetime(SectorIdx["sectoridx"]["ReportingDate"]) >= "1990-01-01") & (pd.to_datetime(SectorIdx["sectoridx"]["ReportingDate"]) <= "2017-12-31")]#.describe().transpose()
+
 
 SectorIdx["sectoridx"]["ReportingDate"] =  pd.to_datetime(SectorIdx["sectoridx"].ReportingDate).dt.year.astype(str) + " Q" + pd.to_datetime(SectorIdx["sectoridx"].ReportingDate).dt.quarter.astype(str)
 SectorIdx["sectoridx"].to_csv("../Data_Output/Sectidx.csv", sep = ",", index = False)
@@ -938,7 +961,22 @@ SectorIdx["sectoridx"].to_csv("../Data_Output/Sectidx.csv", sep = ",", index = F
 #SectorIdx.keys()
 #Should pring out Summary Statistics
 
-
+def file_dict_read(rootdir, filetype=".csv", skip_prefix=" "):
+    print("Initializing Raw Data Frame Dict")
+    tmp_dict = {}
+    print("Searching path:", rootdir)
+    for dirName, subdirList, fileList in os.walk(rootdir):
+        print('Found directory: %s' % dirName)
+        for fname in fileList:
+            if not fname.startswith(skip_prefix):
+                if fname.endswith(filetype):
+                    print("Reading File and Adding to Dataframe Dictionary")
+                    print(os.path.join(dirName, fname))
+                    print('\t%s' % fname)
+                    print(fname.split(filetype)[0])
+                    exec('''tmp_dict[fname.split(filetype)[0]] = pd.read_csv("''' + os.path.join(dirName,
+                                                                                                 fname) + '''")''')
+    return (tmp_dict)
 
 
 Z_micro = init_ST.Z_micro_process()
@@ -951,11 +989,11 @@ Z_micro = init_ST.Z_micro_process()
 
 Z_micro["Z_Micro"] = Z_micro["Z_Micro"].rename({"Date":"ReportingDate"},axis = 1)
 Z_micro["Z_Micro"] = DateValues_Extractor(Z_micro["Z_Micro"])
-Z_micro["Z_Micro"][(pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) <= "2017-12-31")].describe().transpose()
+Z_micro["Z_Micro"] = Z_micro["Z_Micro"][(pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) >= "1990-01-01") & (pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) <= "2017-12-31")]
 #TODO:Remove all NAN columns
 Z_micro["Z_Micro"] = Z_micro["Z_Micro"].dropna(axis = 1 , how = 'all')
 
-Z_micro["Z_Micro"].keys()
+list(Z_micro["Z_Micro"].keys())
 
 
 
@@ -1049,7 +1087,7 @@ Z_micro["Z_Micro"].keys()
 
 
 
-Z_micro["Z_Micro"][(pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) <= "2017-12-31")].describe().transpose()
+#Z_micro["Z_Micro"][(pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) <= "2017-12-31")].describe().transpose()
 Z_micro["Z_Micro"]["ReportingDate"] =  pd.to_datetime(Z_micro["Z_Micro"].ReportingDate).dt.year.astype(str) + " Q" + pd.to_datetime(Z_micro["Z_Micro"].ReportingDate).dt.quarter.astype(str)
 
 #Foward fill, then backward fill
@@ -1073,8 +1111,8 @@ Z_micro["Z_Micro"].to_csv("../Data_Output/Z_micro.csv", sep = ",", index = False
 
 BankPerf = StressTestData().X_Y_bankingchar_perf_process(groupfunction=np.mean, groupby=["RSSD_ID", "ReportingDate"],
                                      groupagg_col='Other items:Total Assets',
-                                     RSSD_DateParam=["1990-03-30", "2018-01-01"],
-                                     ReportingDateParam=["1990-03-30", "2018-01-01"], RSSDList_len=1000, dropdup=False,
+                                     RSSD_DateParam=["1990-01-01", "2018-01-01"],
+                                     ReportingDateParam=["1990-01-01", "2018-01-01"], RSSDList_len=None, dropdup=False,
                                      replace_nan=False, combinecol=True, merge = True, reducedf = False,skip_prefix = "WRDS_Covas_BankPerf_CallReport",  replace_dict={"BankPerf_FR9YC_varlist": {
                                          "df_keyname": "WRDS_Covas_BankPerf",
                                          "calcol": "Report: FR Y-9C",
@@ -1111,11 +1149,14 @@ BankPerf = StressTestData().X_Y_bankingchar_perf_process(groupfunction=np.mean, 
 BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"].keys()
 
 #Workspace
-[v for v in BankPerf.keys() if v.startswith("BankPerf_ConsecutiveReduced_XYcalc_Subset")]
+[v for v in BankPerf.keys() if v.startswith("BankPerf_Mergered")]
 
-BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_DescriptiveStats"]
+
+
+BankPerf["BankPerf_Mergered_XYcalc_Subset_RSSD_List"]
 
 BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]["RSSD_ID"].unique().__len__()
+
 
 
 
@@ -1143,10 +1184,12 @@ Xi_tminus1.keys()
 
 
 
+BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"] = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].rename({"Other items:Dividends ":"Other items:Dividends"})
 
-XY_GT_labels = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","Chargeoffs","Recoveries","Net income(loss)","Less:Cash dividends on perp perf stock","Total Equity_1","Total Equity_2","Other items:Book equity","Other items:Dividends ","Other items:Stock purchases","Other items:Risk-weighted assets","Other items:Tier 1 common equity","Other items:T1CR"))]]
 
-XY_GT_labels.to_csv("../Data_Output/XY_GT_labels.csv", sep = ",", index= False)
+XY_GT_labels = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.endswith(("RSSD_ID","ReportingDate","Chargeoffs","Recoveries","Net income(loss)","Less:Cash dividends on perp perf stock","Total Equity_1","Total Equity_2","Other items:Book equity","Other items:Dividends","Other items:Stock purchases","Other items:Risk-weighted assets","Other items:Tier 1 common equity","Other items:T1CR"))]]
+
+XY_GT_labels.to_csv("../Data_Output/XYaltratios.csv", sep = ",", index= False)
 XY_GT_labels.describe().transpose()
 XY_GT_labels.keys()
 
@@ -1161,7 +1204,7 @@ XY_GT_labels_tminus1.keys()
 
 
 
-
+#BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]["ReportingDate"]
 
 Yi = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[(pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","ncoR:","ppnrRatio:"))) & (~pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.endswith("_t-1"))]]
 Yi.describe().transpose()
@@ -1175,6 +1218,22 @@ Yi_tminus1.to_csv("../Data_Output/Yij_tminus1.csv", sep = ",", index= False)
 
 
 
+
+#Load DF into Mysql from pandas.
+#import pymysql as msql
+#db = msql.connect(host = "localhost", db = 'STR', user = "root", passwd = "")
+
+from sqlalchemy import create_engine
+engine = create_engine("mysql+pymysql://{user}:{pw}@localhost/{db}"
+                       .format(user="root",
+                               pw="",
+                               db="STR"))
+Z_micro["Z_Micro"].to_sql(name='test_pymql', con=engine,  if_exists='append', index=False, index_label=None)
+
+#
+# >>> df1.to_sql('users', con=engine, if_exists='replace',
+# ...            index_label='id')
+# >>> engine.execute("SELECT * FROM users").fetchall()
 
 
 #Create TCR1 Column
