@@ -262,7 +262,10 @@ if __name__ == "__main__":
 
     print("X:", data_X.shape, "X_quarter:", data_X_quarter.shape)
     print("Y:",data_Y.shape, "Y_quarter:", data_Y_quarter.shape)
-    print("XY_Cap:", data_XYCap.shape, "Y_quarter:", data_XYCap_quarter.shape)
+    print("XY_Cap:", data_XYCap.shape, "XY_Cap:", data_XYCap_quarter.shape)
+
+
+
     print("Saving X and Y objects to file")
     np.save("./data_X.npy", data_X)
     np.save("./data_X_quarter.npy", data_X_quarter)

@@ -173,22 +173,20 @@ def inference_error(mod_real, mod_estimation):
 
 
 #TODO: Consolidate VAE, CVAE and MCVAE into one function for comparasion.
-def train_CVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rate, conditional):
+def train_CVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rate, conditional, use_cuda = False, epcho = 1000, layer_size = [128, 64, 32]):
 
     # build GAN/CGAN for each modality separately to evaluate the performance
     # for comparison
 
     # set parameters
-    use_cuda = False
-    epcho = 1000
+    #use_cuda = False
+    #epcho = 1000
     #learning_rate = 1e-3
-    latent_size = 10
+    #latent_size = 10
     modality_num = len(mod_train)
     #conditional = False
-    layer_size = [128, 64, 32]
+    #layer_size = [128, 64, 32]
     modality_size = 1 # here refers to single modality
-
-
     m_error = 0
     t_error = 0
     for i in range(0, modality_num):
@@ -236,23 +234,23 @@ def train_CVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_ra
     #print("Diag NAN for CGAN", m_error, modality_num, m_error / modality_num)
     #modality_num = modality_num - t_errornan
     m_error = m_error / modality_num
-    if conditional:
-        print("CVAE testing_error (mse):%.2f" % m_error)
-    else:
-        print("VAE testing_error (mse):%.2f" % m_error)
+    # if conditional:
+    #     print("CVAE testing_error (mse):%.2f" % m_error)
+    # else:
+    #     print("VAE testing_error (mse):%.2f" % m_error)
 
     return m_error
-def train_MCVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rate, conditional):
+def train_MCVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rate, conditional,use_cuda = False,epcho = 1000,layer_size = [128, 64, 32]):
     #conditional = True
     # parameters for mcvae
     print("Model parameter initialization")
-    use_cuda = False
-    epcho = 1000
-    learning_rate = 1e-6
-    latent_size = 10
+    #use_cuda = False
+    #epcho = 1000
+    #learning_rate = 1e-6
+    #latent_size = 10
     modality_size = len(mod_train)
     #conditional = True
-    layer_size = [128, 64, 32]
+    #layer_size = [128, 64, 32]
     mod_input_sizes = []
     for i in range(0, modality_size):
         print(mod_train[i].shape)
@@ -285,10 +283,10 @@ def train_MCVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_r
     estimations = mcvae.inference(n=batch_size, cond=cond_test)
     error_mse = inference_error(mod_test, estimations)
 
-    if conditional:
-        print("MCVAE testing_error (mse):%.2f" % error_mse)
-    else:
-        print("MVAE testing_error (mse):%.2f" % error_mse)
+    # if conditional:
+    #     print("MCVAE testing_error (mse):%.2f" % error_mse)
+    # else:
+    #     print("MVAE testing_error (mse):%.2f" % error_mse)
     print("Testing Ended")
 
     return error_mse, estimations
@@ -322,6 +320,7 @@ def reform_data(data):
 
 #TODO: make load_quarter_based_data more dynamic and able to load additional modalities.
 #TODO: Ensure all quarters and modalities are ingested.
+#TODO: Create format and design so all quarters are ingested and modelled properly.
 
 def load_quarter_based_data(quarter_ID, cond_name,
                             path_dict = {"path_root" : os.path.join(os.getcwd(),"data/quarter_based/"),
@@ -347,10 +346,13 @@ def load_quarter_based_data(quarter_ID, cond_name,
     #quarter_ID = 3
     print("Loading X Variable")
     data_X_quarter = np.load( path_dict["path_root"] + path_dict["X_qtr"])[quarter_ID]
+    data_X_quarter = np.nan_to_num(data_X_quarter)
     print("Loading Y Variable")
     data_Y_quarter = np.load( path_dict["path_root"] + path_dict["Y_qtr"])[quarter_ID]
+    data_Y_quarter = np.nan_to_num(data_Y_quarter)
     print("Loading XYCap Variable")
     data_XYCap_quarter = np.load(path_dict["path_root"] + path_dict["XYCap_qtr"])[quarter_ID]
+    data_XYCap_quarter = np.nan_to_num(data_XYCap_quarter)
 
     print("Converting to Torch format")
     data_X_quarter = torch.from_numpy(data_X_quarter)
@@ -369,11 +371,11 @@ def load_quarter_based_data(quarter_ID, cond_name,
     for names in modality_names:
         if names == cond_name:
             print("Loading Conditional Modality:", names)
-            data_moda_cond = np.load( path_dict["path_root"] +  path_dict["Moda_prefix"] + cond_name + path_dict["Moda_suffix"])[quarter_ID]
+            data_moda_cond_quarter = np.load( path_dict["path_root"] +  path_dict["Moda_prefix"] + cond_name + path_dict["Moda_suffix"])[quarter_ID]
             #data_moda_cond = reform_data(data_moda_cond)
-            data_moda_cond = np.nan_to_num(data_moda_cond)
-            data_moda_cond = torch.from_numpy(data_moda_cond).float()
-            print(data_moda_cond.shape)
+            data_moda_cond_quarter = np.nan_to_num(data_moda_cond_quarter)
+            data_moda_cond_quarter = torch.from_numpy(data_moda_cond_quarter).float()
+            print(data_moda_cond_quarter.shape)
         else:
             print("Loading Regular Modality:", names)
             temp_moda = np.load(path_dict["path_root"] +  path_dict["Moda_prefix"] + names + path_dict["Moda_suffix"])[quarter_ID]
@@ -381,10 +383,9 @@ def load_quarter_based_data(quarter_ID, cond_name,
             #temp_moda = reform_data(temp_moda)
             temp_moda = torch.from_numpy(temp_moda).float()
             print(temp_moda.shape)
-
             data_moda_quarter.extend([temp_moda])
 
-    return data_X_quarter, data_Y_quarter, data_XYCap_quarter, data_moda_quarter, data_moda_cond
+    return data_X_quarter, data_Y_quarter, data_XYCap_quarter, data_moda_quarter, data_moda_cond_quarter
 
 def build_train_eval_data(X, Y, XYCap, modality, cond, train_window, test_window):
     '''
@@ -450,7 +451,7 @@ for key in [x for x in traintest_sets_dict.keys() if x.startswith("YT")]:
 
 
 def get_raw_train_test_data(moda_names = ['SBidx', 'zmicro', 'domestic', 'international', 'Sectidx'], quarter_ID = 0, cond_name = 'Sectidx',
-                            train_window = [0, 20], test_window = [21, 26]):
+                            train_window = [1, 25], test_window = [26, 27]):
 
     #TODO: Set if condition to get synthetic modalities.
 
@@ -504,14 +505,9 @@ def get_raw_train_test_data(moda_names = ['SBidx', 'zmicro', 'domestic', 'intern
 
     return traintest_sets_dict["condTrain"], traintest_sets_dict["condTest"], traintest_sets_dict["modTrain"] , traintest_sets_dict["modTest"], traintest_sets_dict["condTrain"].shape[1], cond_name, traintest_sets_dict
 
-os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/")
 
 
-cond_train, cond_test, mod_train, mod_test, num_cond, cond_name,traintest_sets_dict  = get_raw_train_test_data(quarter_ID = 0, cond_name = "Sectidx"
-                                                                                                                 , moda_names = ['SBidx', 'zmicro', 'domestic', 'international', 'Sectidx'],
-                                                                                                               train_window = [0, 10], test_window = [11, 15])
-
-def GenerativeModelCompare(num_cond, cond_train, cond_test, mod_train, mod_test, cond_name, learning_rate = 1e-4, times = 3):
+def GenerativeModelCompare(num_cond, cond_train, cond_test, mod_train, mod_test, cond_name, learning_rate = 1e-4, times = 3, epcho = 1000):
     print("Comparison on Generative models")
     print("Iterations: ", times, "Learning Rate:", learning_rate, "Conditionality Name:", cond_name)
     print("Initializing Results Objects")
@@ -527,7 +523,7 @@ def GenerativeModelCompare(num_cond, cond_train, cond_test, mod_train, mod_test,
         print("iteration:", i)
         print("MCVAE Modelling")
         MCVAE_error, pred_moda = train_MCVAE(num_cond, cond_train, cond_test, mod_train,
-                                             mod_test, learning_rate, conditional=True)
+                                             mod_test, learning_rate, epcho = epcho, conditional=True)
 
         print("MCVAE testing_error (mse):%.2f" % MCVAE_error)
         #mcvae = mcvae + MCVAE_error
@@ -535,14 +531,14 @@ def GenerativeModelCompare(num_cond, cond_train, cond_test, mod_train, mod_test,
 
 
         print("CVAE Modelling")
-        CVAE_error = train_CVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rate, conditional=True)
+        CVAE_error = train_CVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rate,epcho = epcho, conditional=True)
         print("CVAE testing_error (mse):%.2f" % CVAE_error)
         #cvae = cvae + CVAE_error
         cvae.append(CVAE_error)
 
 
         print("VAE Modelling")
-        VAE_error = train_CVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rate, conditional=False)
+        VAE_error = train_CVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rate,epcho = epcho, conditional=False)
         #vae = vae + VAE_error
         print("VAE testing_error (mse):%.2f" % VAE_error)
         vae.append(VAE_error)
@@ -571,8 +567,6 @@ def GenerativeModelCompare(num_cond, cond_train, cond_test, mod_train, mod_test,
     print(results)
     return(results, pred_moda)
 
-results, pred_moda = GenerativeModelCompare(num_cond, cond_train, cond_test, mod_train, mod_test, cond_name, learning_rate = 1e-4, times = 1)
-
 
 def LSTM_BankPrediction( pred_moda ,traintest_sets_dict,learn_types = ["Only_Y", "Y&X", "Y&X&moda"], lstm_lr = 1e-2, threshold = 1e-3):
     print("Comparison on LSTM models")
@@ -598,12 +592,12 @@ def LSTM_BankPrediction( pred_moda ,traintest_sets_dict,learn_types = ["Only_Y",
             # test_sets[3].shape
             # test_sets[2].shape
             raw_inputs = torch.cat((traintest_sets_dict["Ytminus1Train"], traintest_sets_dict["XTrain"]), dim=2)
-            raw_eval_inputs = torch.cat((traintest_sets_dict["Ytminus1Test"], traintest_sets_dict["XTrain"]), dim=2)
+            raw_eval_inputs = torch.cat((traintest_sets_dict["Ytminus1Test"], traintest_sets_dict["XTest"]), dim=2)
         #TODO: Address the Static nature of the learn type to raw inputs mapping
         if m_learn_type == learn_types[2]:
             print(learn_types[2])
             raw_inputs = torch.cat((traintest_sets_dict["Ytminus1Train"], traintest_sets_dict["XTrain"]), dim=2)
-            raw_eval_inputs = torch.cat((traintest_sets_dict["Ytminus1Test"], traintest_sets_dict["XTrain"]), dim=2)
+            raw_eval_inputs = torch.cat((traintest_sets_dict["Ytminus1Test"], traintest_sets_dict["XTest"]), dim=2)
             print("in testing stage the modality is applied from the predicted modality from previous stage")
             #TODO: May need to consider capturing other generative models predictions rather than just MCVAE
             temp_eval_moda = pred_moda[0]
@@ -667,7 +661,24 @@ def LSTM_BankPrediction( pred_moda ,traintest_sets_dict,learn_types = ["Only_Y",
     return(result_obj)
 
 
-BankPredEval = LSTM_BankPrediction(pred_moda, traintest_sets_dict, learn_types=["Only_Y", "Y&X", "Y&X&moda"], lstm_lr=1e-2, threshold=1e-3)
+
+os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/")
+
+
+#TODO: fix so it checks for miniums and maxiums for the datasets so no error occurs at LSTM
+
+cond_train, cond_test, mod_train, mod_test, num_cond, cond_name,traintest_sets_dict  = get_raw_train_test_data(quarter_ID = 0, cond_name = "domestic"
+                                                                                                                 , moda_names = ['SBidx', 'zmicro', 'domestic', 'international', 'Sectidx'],
+                                                                                                               train_window = [0,21 ], test_window = [22,25])
+
+results, pred_moda = GenerativeModelCompare(num_cond, cond_train, cond_test, mod_train, mod_test, cond_name, learning_rate = 1e-6, times = 1, epcho = 1000)
+
+
+
+#TODO: Need to fix the handling of the different time slices.
+
+BankPredEval = LSTM_BankPrediction(pred_moda, traintest_sets_dict, learn_types=["Only_Y", "Y&X", "Y&X&moda"], lstm_lr=1e-4, threshold=1e-5)
+
 
 #Graphical LSTM MSE representaiton.
 # with torch.no_grad():
@@ -874,7 +885,14 @@ BankPredEval = LSTM_BankPrediction(pred_moda, traintest_sets_dict, learn_types=[
 
 
 
-
+# with torch.no_grad():
+#     prediction = model.forward(xtest).view(-1)
+#     loss = criterion(prediction, ytest)
+#     plt.title("MESLoss: {:.5f}".format(loss))
+#     plt.plot(prediction.detach().numpy(), label="pred")
+#     plt.plot(ytest.detach().numpy(), label="true")
+#     plt.legend()
+#     plt.show()
 
 
 
