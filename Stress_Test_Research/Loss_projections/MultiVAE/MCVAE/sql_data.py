@@ -9,6 +9,7 @@ import pymysql as msql
 import numpy as np
 import os
 
+#TODO: Get all partial data, not just banks with quarters that match window.
 def request_data(data_type):
     #data_type = "XY_Cap"
     db = msql.connect(host = "localhost", db = 'STR', user = "root", passwd = "")
@@ -16,14 +17,21 @@ def request_data(data_type):
 
     
     #sql = "select distinct RSSD_ID from xij_2 where RSSD_ID in (select distinct RSSD_ID from yij_2)"
+    if data_type in ["Y_full", "X_full","XYCap_full", "CapRatios_full"]:
+        sql = "select x.RSSD_ID" \
+              " FROM (SELECT DISTINCT (a.RSSD_ID) FROM" \
+              " (SELECT RSSD_ID, COUNT(*) FROM STR.xij_2" \
+              " GROUP BY RSSD_ID) a ) x" \
+              " join (SELECT DISTINCT RSSD_ID from STR.yij_2) y on x.RSSD_ID = y.RSSD_id"
+    else:
+        sql = "select x.RSSD_ID" \
+            " FROM (SELECT DISTINCT (a.RSSD_ID) FROM" \
+            " (SELECT RSSD_ID, COUNT(*) FROM STR.xij_2" \
+            " GROUP BY RSSD_ID HAVING COUNT(*) > 108) a ) x" \
+            " join (SELECT DISTINCT RSSD_ID from STR.yij_2) y on x.RSSD_ID = y.RSSD_id"
 
-    sql = "select x.RSSD_ID" \
-        " FROM (SELECT DISTINCT (a.RSSD_ID) FROM" \
-        " (SELECT RSSD_ID, COUNT(*) FROM STR.xij_2" \
-        " GROUP BY RSSD_ID HAVING COUNT(*) > 108) a ) x" \
-        " join (SELECT DISTINCT RSSD_ID from STR.yij_2) y on x.RSSD_ID = y.RSSD_id"
 
-    print("Executing Query for Banks that have over 108 quarters and exist in both X and Y")
+    print("Executing Query for Bank RSSD_IDS")
     t = cursor.execute(sql)
     print("Bank Count:", t)
     #print(t)
@@ -31,27 +39,57 @@ def request_data(data_type):
     
     # the temporal data starts from 1990 Q1 ends at 2016 Q4
     # that is totally 108 records per bank on each loan category
-    if data_type == "Y":
+    if data_type in ["Y", "Y_full"]:
         results = np.zeros([1, 108, 14])
-    elif data_type in ["X","XY_Cap"]:
+    elif data_type in ["X","XY_Cap", "X_full","XY_Cap_Full"]:
         results = np.zeros([1, 108, 8])
-#    elif data_type == "XY_Cap":
-#        results = np.zeros([1, 108, 8])
+    elif data_type in  ["CapitalRatios", "CapitalRatios_full"]:
+        results = np.zeros([1, 108, 2])
     else:
         print("No Data Type Found")
 
+    # sql = '''SELECT b.ReportingDate, a.*
+    #         FROM (SELECT DISTINCT ReportingDate from xij_2) b
+    #         LEFT JOIN STR.sbidx a on a.ReportingDate = b.ReportingDate
+    #         order by b.ReportingDate'''
 
     #data_type = "X"
     for bank_id in bank_ids:
         if data_type == "Y":
             # "`ppnrRatio:Net interest income`, `ppnrRatio:Noninterest income`,"
-            sql = "SELECT `ReportingDate`, `ncoR:Commercial & industrial`, `ncoR:Construction & land development`, `ncoR:Multifamily real estate`,`ncoR:(Nonfarm) nonresidential CRE`, `ncoR:Home equity lines of credit`, " \
+            sql = "SELECT `ReportingDate`, `ncoR:Commercial & industrial`, `ncoR:Construction & land development`, `ncoR:Multifamily real estate`," \
+                  "`ncoR:(Nonfarm) nonresidential CRE`, `ncoR:Home equity lines of credit`, " \
                   "`ncoR:Residential real estate (excl. HELOCs)`, `ncoR:Credit card`, `ncoR:Consumer (excl. credit card)`, `ppnrRatio:Net interest income`, `ppnrRatio:Noninterest income`, " \
                   "`ppnrRatio:Trading income`, `ppnrRatio:Compensation expense`, `ppnrRatio:Fixed assets expense`, `ppnrRatio:Noninterest expense`"
             #sql = sql + " `ppnrRatio:Compensation expense`, `ppnrRatio:Fixed assets expense` from y_ij where RSSD_ID='"
             sql = sql + "  from yij_2 where RSSD_ID='"
             sql = sql + str(bank_id[0]) + "'"
             temp_data = np.zeros([1, 108, 14])
+
+        elif data_type == "Y_full":
+            # "`ppnrRatio:Net interest income`, `ppnrRatio:Noninterest income`,"
+            sql = "SELECT b.ReportingDate, a.`ncoR:Commercial & industrial`, a.`ncoR:Construction & land development`, a.`ncoR:Multifamily real estate`," \
+                  "a.`ncoR:(Nonfarm) nonresidential CRE`, a.`ncoR:Home equity lines of credit`, " \
+                  "a.`ncoR:Residential real estate (excl. HELOCs)`, `a.ncoR:Credit card`, `a.ncoR:Consumer (excl. credit card)`, `a.ppnrRatio:Net interest income`, `a.ppnrRatio:Noninterest income`, " \
+                  "`ppnrRatio:Trading income`, `ppnrRatio:Compensation expense`, `ppnrRatio:Fixed assets expense`, `ppnrRatio:Noninterest expense`"
+            #sql = sql + " `ppnrRatio:Compensation expense`, `ppnrRatio:Fixed assets expense` from y_ij where RSSD_ID='"
+            sql = sql + " FROM (SELECT DISTINCT ReportingDate from xij_2) b LEFT JOIN STR.yij_2 a on a.ReportingDate = b.ReportingDate where a.RSSD_ID='"
+            sql = sql + str(bank_id[0]) + "'"
+            temp_data = np.zeros([1, 108, 14])
+
+
+        elif data_type == "X_full":
+            #bank_id[0] = 1020180
+            sql = "SELECT b.`ReportingDate`, "
+            #sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
+            sql = sql +  "a.`Loans categories:Commercial & industrial_Covas`,a.`Loans categories:Construction & land development`,a.`Loans categories:Multifamily real estate`," \
+                        "a.`Loans categories:Nonfarm nonresidential CRE_Covas`,a.`Loans categories:Home equity lines of credit`,a.`Loans categories:Residential real estate (excl. HELOCs)_Covas`," \
+                        "a.`Loans categories:Credit card`,a.`Loans categories:Consumer (excl. credit card)_Covas`"
+#            sql = sql + " from xij_2 where RSSD_ID='"
+            sql = sql + " FROM (SELECT DISTINCT ReportingDate from xij_2) b LEFT JOIN STR.xij_2 a on a.ReportingDate = b.ReportingDate where a.RSSD_ID='"
+            sql = sql + str(bank_id[0]) + "'"
+            temp_data = np.zeros([1, 108, 8])
+
         elif data_type == "X":
             #bank_id[0] = 1020180
             sql = "SELECT `ReportingDate`, "
@@ -62,6 +100,8 @@ def request_data(data_type):
             sql = sql + " from xij_2 where RSSD_ID='"
             sql = sql + str(bank_id[0]) + "'"
             temp_data = np.zeros([1, 108, 8])
+
+
         elif data_type == "XY_Cap":
             #bank_id[0] = 1020180
             sql = "SELECT `ReportingDate`, "
@@ -72,6 +112,37 @@ def request_data(data_type):
             sql = sql + " from xyaltratios_1 where RSSD_ID='"
             sql = sql + str(bank_id[0]) + "'"
             temp_data = np.zeros([1, 108, 8])
+
+        elif data_type == "XY_Cap_full":
+            #bank_id[0] = 1020180
+            sql = "SELECT b.`ReportingDate`, "
+            #sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
+            sql = sql +  "a.`Chargeoffs`,a.`Recoveries`,a.`Net income(loss)`," \
+                        "a.`Other items:Book equity`,a.`Other items:Risk-weighted assets`,a.`Other items:Stock purchases`," \
+                        "a.`Other items:Tier 1 common equity`,a.`Other items:T1CR`"
+#            sql = sql + " from xyaltratios_1 where RSSD_ID='"
+            sql = sql + " FROM (SELECT DISTINCT ReportingDate from xij_2) b LEFT JOIN STR.xyaltratios_1 a on a.ReportingDate = b.ReportingDate where a.RSSD_ID='"
+            sql = sql + str(bank_id[0]) + "'"
+            temp_data = np.zeros([1, 108, 8])
+
+        elif data_type == "CapRatios":
+            #bank_id[0] = 1020180
+            sql = "SELECT `ReportingDate`, "
+            #sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
+            sql = sql + "`Other items:Tier 1 common equity`,`Other items:T1CR`"
+            sql = sql + " from xyaltratios_1 where RSSD_ID='"
+            sql = sql + str(bank_id[0]) + "'"
+            temp_data = np.zeros([1, 108, 2])
+        elif data_type == "CapRatios_full":
+            # bank_id[0] = 1020180
+            sql = "SELECT b.`ReportingDate`, "
+            # sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
+            sql = sql + "a.`Other items:Tier 1 common equity`,a.`Other items:T1CR`"
+#            sql = sql + " from xyaltratios_1 where RSSD_ID='"
+            sql = sql + " FROM (SELECT DISTINCT ReportingDate from xij_2) b LEFT JOIN STR.xyaltratios_1 a on a.ReportingDate = b.ReportingDate where a.RSSD_ID='"
+            sql = sql + str(bank_id[0]) + "'"
+            temp_data = np.zeros([1, 108, 2])
+
 
         else:
             print("No Data Type Found")
@@ -114,10 +185,13 @@ def request_data(data_type):
     # the 4th axis is the dimension of attributes, which refers to the sql sentences
     n = results.shape[0] - 1
     results = results[1:n+1]
-    if data_type in ["X","XY_Cap"]:
+    if data_type in ["X","XY_Cap", "X_full", "XY_Cap_full"]:
         results_quarter = np.zeros([4, n, int(108/4), 8])
-    elif data_type == "Y":
+    elif data_type in  ["Y", "Y_full"]:
         results_quarter = np.zeros([4, n, int(108 / 4), 14])
+    elif data_type in  ["CapitalRatios", "CapitalRatios_full"]:
+        results_quarter = np.zeros([4, n, int(108 / 4), 2])
+
     else:
         print("No Data Type Found")
 
@@ -130,6 +204,8 @@ def request_data(data_type):
 
     return results, results_quarter
 
+
+#TODO: Get Data from 1976 onward if feasible.
 def preprocess_moda_data(tbl_name = "zmicro", tble_schema = "STR",host="localhost",
                          user="root", passwd="", time_dict = {'timeslices' : 108
                                                               ,'time_str_start' : "1990 Q1"
@@ -160,9 +236,9 @@ def preprocess_moda_data(tbl_name = "zmicro", tble_schema = "STR",host="localhos
     print("Rows:",row_count,"Dims:",dim_count)
     print("Get Data From Database")
     #Match to available time slices
-    sql = "SELECT b.ReportingDate, a.* " \
-          "FROM (SELECT DISTINCT ReportingDate from xij_2) b " \
-          "LEFT JOIN %s a on a.ReportingDate = b.ReportingDate order by b.ReportingDate" % (".".join([tble_schema,tbl_name]))
+    # sql = "SELECT b.ReportingDate, a.* " \
+    #       "FROM (SELECT DISTINCT ReportingDate from xij_2) b " \
+    #       "LEFT JOIN %s a on a.ReportingDate = b.ReportingDate order by b.ReportingDate" % (".".join([tble_schema,tbl_name]))
 
 
     #sql = "SELECT * from %s" % (".".join([tble_schema,tbl_name]))
@@ -250,30 +326,7 @@ if __name__ == "__main__":
 
     os.chdir("./Data_PP_Output/")
 
-    print("Querying MySQL Database for X variables")
-    data_X, data_X_quarter = request_data("X")
-
-
-    print("Querying MySQL Database for Y variables")
-    data_Y, data_Y_quarter = request_data("Y")
-
-    print("Querying MySQL Database for Y Capital Ratio variables")
-    data_XYCap, data_XYCap_quarter = request_data("XY_Cap")
-
-    print("X:", data_X.shape, "X_quarter:", data_X_quarter.shape)
-    print("Y:",data_Y.shape, "Y_quarter:", data_Y_quarter.shape)
-    print("XY_Cap:", data_XYCap.shape, "XY_Cap:", data_XYCap_quarter.shape)
-
-
-
-    print("Saving X and Y objects to file")
-    np.save("./data_X.npy", data_X)
-    np.save("./data_X_quarter.npy", data_X_quarter)
-    np.save("./data_Y.npy", data_Y)
-    np.save("./data_Y_quarter.npy", data_Y_quarter)
-    np.save("./data_XYCap.npy", data_XYCap)
-    np.save("./data_XYCap_quarter.npy", data_XYCap_quarter)
-
+#May need to consider creating a table with all the time slices, to save on join.
 
 
 #Fix Raw data and automate to upload into MySQL tables.
@@ -287,17 +340,14 @@ if __name__ == "__main__":
 
 #Should we consider data from 1976 onward?
 
-data_Sectidx, data_Sectidx_quarter = preprocess_moda_data(tbl_name = "sectidx", tble_schema = "STR")
-
-np.save("./modality_Sectidx.npy", data_Sectidx)
-np.save("./modality_Sectidx_quarter.npy", data_Sectidx_quarter)
-
-data_zmicro, data_zmicro_quarter = preprocess_moda_data(tbl_name = "zmicro", tble_schema = "STR")
-np.save("./modality_zmicro.npy", data_zmicro)
-np.save("./modality_zmicro_quarter.npy", data_zmicro_quarter)
 
 
-data_sbidx, data_sbidx_quarter = preprocess_moda_data(tbl_name = "sbidx", tble_schema = "STR")
-np.save("./modality_sbidx.npy", data_sbidx)
-np.save("./modality_sbidx_quarter.npy", data_sbidx_quarter)
+    for data_type in ['sectidx',"zmicro","sbidx"]:
+        print(data_type)
+        data, data_quarter = preprocess_moda_data(tbl_name= data_type, tble_schema = 'STR')
+        print(data_type,":", data.shape, data_type,"_quarter:", data_quarter.shape)
+        print("Saving objects to file")
+        np.save("./data_moda_" + data_type + ".npy", data)
+        np.save("./data_moda_" + data_type + "_quarter.npy", data_quarter)
+
 
