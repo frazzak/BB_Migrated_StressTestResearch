@@ -871,8 +871,8 @@ init_ST = StressTestData()
 #Z_Macro complate and distributions match to Malik 2018
 Z_macro = init_ST.Z_macro_process()
 
+Z_macro.keys()
 
-Z_macro['Z_macro'].keys()
 
 Z_macro['Z_macro']['Date']
 
@@ -881,6 +881,10 @@ Z_macro_out["Date"] =  pd.to_datetime(Z_macro_out.Date).dt.year.astype(str) + " 
 Z_macro_out.keys()
 Z_macro_out = Z_macro_out.drop("Scenario Name_x",axis = 1)
 Z_macro_out.to_csv("../Data_Output/Z_Macro.csv", sep = ",", index = False)
+
+
+
+
 
 #Z_macro["Historic_Domestic"].keys()
 #pd.to_datetime(Z_macro["Historic_Domestic"]["Date"]).min()
@@ -1229,6 +1233,21 @@ engine = create_engine("mysql+pymysql://{user}:{pw}@localhost/{db}"
                                pw="",
                                db="STR"))
 Z_micro["Z_Micro"].to_sql(name='test_pymql', con=engine,  if_exists='append', index=False, index_label=None)
+
+
+Z_macro_out = Z_macro['Historic_Domestic'][(pd.to_datetime(Z_macro['Historic_Domestic']['Date']) <= "2017-12-31") & (pd.to_datetime(Z_macro['Historic_Domestic']['Date']) >= "1990-01-01")]
+Z_macro_out["Date"] =  pd.to_datetime(Z_macro_out.Date).dt.year.astype(str) + " Q" + pd.to_datetime(Z_macro_out.Date).dt.quarter.astype(str)
+Z_macro_out = Z_macro_out.drop("Scenario Name",axis = 1)
+Z_macro_out.to_csv("./Data_Output/Z_Macro_Domestic.csv", sep = ",", index = False)
+Z_macro_out.to_sql(name='zmacro_domestic', con=engine,  if_exists='append', index=False, index_label=None)
+
+
+Z_macro_out = Z_macro['Historic_International'][(pd.to_datetime(Z_macro['Historic_International']['Date']) <= "2017-12-31") & (pd.to_datetime(Z_macro['Historic_International']['Date']) >= "1990-01-01")]
+Z_macro_out["Date"] =  pd.to_datetime(Z_macro_out.Date).dt.year.astype(str) + " Q" + pd.to_datetime(Z_macro_out.Date).dt.quarter.astype(str)
+Z_macro_out = Z_macro_out.drop("Scenario Name",axis = 1)
+Z_macro_out.to_csv("./Data_Output/Z_Macro_International.csv", sep = ",", index = False)
+Z_macro_out.to_sql(name='zmacro_international', con=engine,  if_exists='append', index=False, index_label=None)
+
 
 #
 # >>> df1.to_sql('users', con=engine, if_exists='replace',

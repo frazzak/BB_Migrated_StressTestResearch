@@ -342,7 +342,7 @@ if __name__ == "__main__":
 
 
 
-    for data_type in ['sectidx',"zmicro","sbidx"]:
+    for data_type in ['sectidx',"zmicro","sbidx", "zmacro_domestic","zmacro_international"]:
         print(data_type)
         data, data_quarter = preprocess_moda_data(tbl_name= data_type, tble_schema = 'STR')
         print(data_type,":", data.shape, data_type,"_quarter:", data_quarter.shape)
