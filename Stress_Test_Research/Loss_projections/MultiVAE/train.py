@@ -957,9 +957,7 @@ def LSTM_BankPrediction( pred_moda ,traintest_sets_dict,learn_types = ["Only_Ymi
 
 
 
-def LSTM_BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict,learn_types = ["Only_Yminus1", "Only_Xminus1","Yminus1&Xminus1","Yminus1&X",
-                                                                       "Yminus1&Xminus1&moda","Yminus1&X&moda","Yminus1&Xminus1&XYCapminus1",
-                                                                       "Yminus1&X&XYCapminus1","Yminus1&Xminus1&XYCapminus1&moda","Yminus1&X&XYCapminus1&moda"]
+def LSTM_BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativemodel = "mcvae"
                       , lstm_lr = 1e-2, threshold = 1e-3, modelTarget = "Y"):
     print("Comparison on LSTM models")
     rmse_train_list = []
@@ -973,132 +971,81 @@ def LSTM_BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict,learn_types 
     for key in [x for x in traintest_sets_dict.keys() if x.startswith("trainset_data") if not x.endswith(modelTarget)]:
         print("".join(key.split("_")[2:]))
 
-    trainsets = list(filter(None,["".join(x.split("_")[2:]) for x in traintest_sets_dict.keys() if x.startswith(("trainset_data","trainset_mod")) if not x.endswith(modelTarget) if not x.startswith("trainset_data_cond")]))
-    for L in range(0, len(stuff) + 1):
-        for subset in itertools.combinations(stuff, L):
-            print(list(subset))
+    trainsets = list(filter(None,[x for x in traintest_sets_dict.keys() if x.startswith(("trainset_data","trainset_mod")) if not x.endswith(modelTarget) if not x.startswith("trainset_data_cond")]))
+    dataset_subsets = list()
+    for L in range(0, len(trainsets) + 1):
+        for subset in itertools.combinations(trainsets, L):
+            dataset_subsets.append(list(subset))
+    dataset_subsets = [x for x in dataset_subsets if x !=[]]
+
+    #Loop through combinations and create appropirate inputs and evals
 
 
+    for subset in dataset_subsets:
+        tmp_dict_name = "&".join(["_".join(x.split("_")[2:]) for x in subset])
+        print("Features to be used:", tmp_dict_name)
+        print("Current Subset:", subset)
+        subset_test_tmp = [x.replace("trainset", "testset") for x in subset]
+        print("Create testset names from subset", subset_test_tmp)
 
-    testsets = list(filter(None,["".join(x.split("_")[2:]) for x in traintest_sets_dict.keys() if x.startswith(("testset_data","testset_mod")) if not x.endswith(modelTarget) if not x.startswith(
-    "testset_data_cond")]))
+        print("Set Raw Inputs")
+        print("Setting Training Input")
+        if len(subset) == 1 and not any("data_mod" in x for x in subset):
+            raw_inputs  = traintest_sets_dict[subset[0]]
+            print("Raw Training Set Input Shape:", raw_inputs.shape)
+            print("Setting Testing\Eval Input")
+            raw_eval_inputs = traintest_sets_dict[subset_test_tmp[0]]
+        elif len(subset) > 1 and not any("data_mod" in x for x in subset):
+            print("Setting Initial Training Input")
+            raw_inputs  = traintest_sets_dict[subset[0]]
+            print("Setting Initial Testing\Eval Input")
+            raw_eval_inputs = traintest_sets_dict[subset_test_tmp[0]]
+            for subcnt in range(1,len(subset)):
+                print("Setting Training Input:", subcnt)
+                raw_inputs = torch.cat((raw_inputs, traintest_sets_dict[subset[subcnt]]), dim=2)
+                print("Setting Testing\Eval Input:", subcnt)
+                raw_eval_inputs = torch.cat((raw_eval_inputs, traintest_sets_dict[subset_test_tmp[subcnt]]), dim=2)
+        elif len(subset) > 1 and any("data_mod" in x for x in subset):
 
+            print("Create subset without modality dataset")
+            subset_train_tmp = [x for x in subset if not x.endswith("data_mod")]
+            print("Setting Initial Training Input")
+            raw_inputs = traintest_sets_dict[subset_train_tmp[0]]
+            print("Setting Initial Testing\Eval Input")
+            subset_test_tmp = [x.replace("trainset", "testset") for x in subset_train_tmp]
+            raw_eval_inputs = traintest_sets_dict[subset_test_tmp[0]]
+            for subcnt in range(1, len(subset_train_tmp)):
+                print("Setting Training Input:", subcnt)
+                raw_inputs = torch.cat((raw_inputs, traintest_sets_dict[subset_train_tmp[subcnt]]), dim=2)
+                print("Setting Testing\Eval Input:", subcnt)
+                raw_eval_inputs = torch.cat((raw_eval_inputs, traintest_sets_dict[subset_test_tmp[subcnt]]), dim=2)
 
-
-    for learn in learn_types:
-        print("Learn Type: ", learn)
-        m_learn_type = learn
-
-        print("Setting Raw Inputs and Raw Evaluation Inputs")
-        #TODO: Address the Static nature of the learn type to raw inputs mapping
-        if m_learn_type == "Only_Yminus1":
-            print(m_learn_type)
-            raw_inputs = traintest_sets_dict["Ytminus1Train"]#train_sets[3]
-            print(raw_inputs.shape)
-            raw_eval_inputs = traintest_sets_dict["Ytminus1Test"]#test_sets[3]
-            print(raw_eval_inputs.shape)
-
-        if m_learn_type == "Only_Xminus1":
-            print(m_learn_type)
-            raw_inputs = traintest_sets_dict["Xtminus1Train"]#train_sets[3]
-            print(raw_inputs.shape)
-            raw_eval_inputs = traintest_sets_dict["Xtminus1Test"]#test_sets[3]
-            print(raw_eval_inputs.shape)
-        #TODO: Address the Static nature of the learn type to raw inputs mapping
-        if m_learn_type == "Yminus1&Xminus1":
-            print(m_learn_type)
-            raw_inputs = torch.cat((traintest_sets_dict["Ytminus1Train"], traintest_sets_dict["Xtminus1Train"]), dim=2)
-            raw_eval_inputs = torch.cat((traintest_sets_dict["Ytminus1Test"], traintest_sets_dict["Xtminus1Test"]), dim=2)
-
-        if m_learn_type == "Yminus1&X":
-            print(m_learn_type)
-            raw_inputs = torch.cat((traintest_sets_dict["Ytminus1Train"], traintest_sets_dict["XTrain"]), dim=2)
-            raw_eval_inputs = torch.cat((traintest_sets_dict["Ytminus1Test"], traintest_sets_dict["XTest"]), dim=2)
-
-        #TODO: Address the Static nature of the learn type to raw inputs mapping
-        if m_learn_type == "Yminus1&Xminus1&moda":
-            print(m_learn_type)
-            raw_inputs = torch.cat((traintest_sets_dict["Ytminus1Train"], traintest_sets_dict["Xtminus1Train"]), dim=2)
-            raw_eval_inputs = torch.cat((traintest_sets_dict["Ytminus1Test"], traintest_sets_dict["Xtminus1Test"]), dim=2)
-            print("in testing stage the modality is applied from the predicted modality from previous stage")
-            #TODO: May need to consider capturing other generative models predictions rather than just MCVAE
+            print("Append Modality Data to Tensor")
+            #Maybe consider running with all different gen models at once
+            print("Assigning Predicted Modality Estimates")
+            pred_moda = ScenarioGenResults_dict["_".join([generativemodel,"pred","moda"])]
+            print("Assigning Modality Training and Testing Key names")
+            modTrain = [x for x in subset if x.endswith("data_mod")][0]
+            modTest = [x.replace("trainset","testset") for x in subset if x.endswith("data_mod")][0]
             temp_eval_moda = pred_moda[0]
-            temp_moda = traintest_sets_dict["modTrain"][0]#train_sets[0][0]
-            #TODO: Need additional detail to this part to understand what exactly it is doing.
-            for i in range(1, len(traintest_sets_dict["modTrain"])):
-                temp_moda = torch.cat((temp_moda, traintest_sets_dict["modTrain"][i]), dim=1)
+            temp_moda = traintest_sets_dict[modTrain][0]  # train_sets[0][0]
+            print("Iterating Modalities and adding to Tensor")
+            for i in range(1, len(traintest_sets_dict[modTrain])):
+                temp_moda = torch.cat((temp_moda, traintest_sets_dict[modTrain][i]), dim=1)
                 temp_eval_moda = torch.cat((temp_eval_moda, pred_moda[i]), dim=1)
             raw_moda = temp_moda.expand_as(torch.zeros([raw_inputs.shape[0], temp_moda.shape[0], temp_moda.shape[1]]))
-            raw_eval_moda = temp_eval_moda.expand_as(torch.zeros([raw_eval_inputs.shape[0], temp_eval_moda.shape[0], temp_eval_moda.shape[1]]))
-            raw_inputs = torch.cat((raw_inputs, raw_moda.double()), dim=2)
-            raw_eval_inputs = torch.cat((raw_eval_inputs, raw_eval_moda.double()), dim=2)
-        if m_learn_type == "Yminus1&X&moda":
-            print(m_learn_type)
-            raw_inputs = torch.cat((traintest_sets_dict["Ytminus1Train"], traintest_sets_dict["XTrain"]), dim=2)
-            raw_eval_inputs = torch.cat((traintest_sets_dict["Ytminus1Test"], traintest_sets_dict["XTest"]), dim=2)
-            print("in testing stage the modality is applied from the predicted modality from previous stage")
-            #TODO: May need to consider capturing other generative models predictions rather than just MCVAE
-            temp_eval_moda = pred_moda[0]
-            temp_moda = traintest_sets_dict["modTrain"][0]#train_sets[0][0]
-            #TODO: Need additional detail to this part to understand what exactly it is doing.
-            for i in range(1, len(traintest_sets_dict["modTrain"])):
-                temp_moda = torch.cat((temp_moda, traintest_sets_dict["modTrain"][i]), dim=1)
-                temp_eval_moda = torch.cat((temp_eval_moda, pred_moda[i]), dim=1)
-            raw_moda = temp_moda.expand_as(torch.zeros([raw_inputs.shape[0], temp_moda.shape[0], temp_moda.shape[1]]))
-            raw_eval_moda = temp_eval_moda.expand_as(torch.zeros([raw_eval_inputs.shape[0], temp_eval_moda.shape[0], temp_eval_moda.shape[1]]))
+            raw_eval_moda = temp_eval_moda.expand_as(
+                torch.zeros([raw_eval_inputs.shape[0], temp_eval_moda.shape[0], temp_eval_moda.shape[1]]))
             raw_inputs = torch.cat((raw_inputs, raw_moda.double()), dim=2)
             raw_eval_inputs = torch.cat((raw_eval_inputs, raw_eval_moda.double()), dim=2)
 
-        if m_learn_type == "Yminus1&Xminus1&XYCapminus1":
-            print(m_learn_type)
-            raw_inputs = torch.cat((traintest_sets_dict["Ytminus1Train"], traintest_sets_dict["Xtminus1Train"]), dim=2)
-            raw_inputs = torch.cat((raw_inputs, traintest_sets_dict["XYCapTminus1Train"]), dim=2)
-            raw_eval_inputs = torch.cat((traintest_sets_dict["Ytminus1Test"], traintest_sets_dict["Xtminus1Test"]), dim=2)
-            raw_eval_inputs = torch.cat((raw_eval_inputs , traintest_sets_dict["XYCapTminus1Test"]), dim=2)
-
-
-
-        if m_learn_type == "Yminus1&X&XYCapminus1":
-            print(m_learn_type)
-            raw_inputs = torch.cat((traintest_sets_dict["Ytminus1Train"], traintest_sets_dict["XTrain"]), dim=2)
-            raw_inputs = torch.cat((raw_inputs, traintest_sets_dict["XYCapTminus1Train"]), dim=2)
-            raw_eval_inputs = torch.cat((traintest_sets_dict["Ytminus1Test"], traintest_sets_dict["XTest"]), dim=2)
-            raw_eval_inputs = torch.cat((raw_eval_inputs , traintest_sets_dict["XYCapTminus1Test"]), dim=2)
-
-
-        if m_learn_type == "Yminus1&Xminus1&XYCapminus1&moda":
-            print(m_learn_type)
-            raw_inputs = torch.cat((traintest_sets_dict["Ytminus1Train"], traintest_sets_dict["Xtminus1Train"]), dim=2)
-            raw_inputs = torch.cat((raw_inputs, traintest_sets_dict["XYCapTminus1Train"]), dim=2)
-            raw_eval_inputs = torch.cat((traintest_sets_dict["Ytminus1Test"], traintest_sets_dict["Xtminus1Test"]), dim=2)
-            raw_eval_inputs = torch.cat((raw_eval_inputs , traintest_sets_dict["XYCapTminus1Test"]), dim=2)
-            for i in range(1, len(traintest_sets_dict["modTrain"])):
-                temp_moda = torch.cat((temp_moda, traintest_sets_dict["modTrain"][i]), dim=1)
-                temp_eval_moda = torch.cat((temp_eval_moda, pred_moda[i]), dim=1)
-            raw_moda = temp_moda.expand_as(torch.zeros([raw_inputs.shape[0], temp_moda.shape[0], temp_moda.shape[1]]))
-            raw_eval_moda = temp_eval_moda.expand_as(torch.zeros([raw_eval_inputs.shape[0], temp_eval_moda.shape[0], temp_eval_moda.shape[1]]))
-            raw_inputs = torch.cat((raw_inputs, raw_moda.double()), dim=2)
-            raw_eval_inputs = torch.cat((raw_eval_inputs, raw_eval_moda.double()), dim=2)
-
-
-        if m_learn_type == "Yminus1&X&XYCapminus1&moda":
-            print(m_learn_type)
-            raw_inputs = torch.cat((traintest_sets_dict["Ytminus1Train"], traintest_sets_dict["XTrain"]), dim=2)
-            raw_inputs = torch.cat((raw_inputs, traintest_sets_dict["XYCapTminus1Train"]), dim=2)
-            raw_eval_inputs = torch.cat((traintest_sets_dict["Ytminus1Test"], traintest_sets_dict["XTest"]), dim=2)
-            raw_eval_inputs = torch.cat((raw_eval_inputs , traintest_sets_dict["XYCapTminus1Test"]), dim=2)
-            for i in range(1, len(traintest_sets_dict["modTrain"])):
-                temp_moda = torch.cat((temp_moda, traintest_sets_dict["modTrain"][i]), dim=1)
-                temp_eval_moda = torch.cat((temp_eval_moda, pred_moda[i]), dim=1)
-            raw_moda = temp_moda.expand_as(torch.zeros([raw_inputs.shape[0], temp_moda.shape[0], temp_moda.shape[1]]))
-            raw_eval_moda = temp_eval_moda.expand_as(torch.zeros([raw_eval_inputs.shape[0], temp_eval_moda.shape[0], temp_eval_moda.shape[1]]))
-            raw_inputs = torch.cat((raw_inputs, raw_moda.double()), dim=2)
-            raw_eval_inputs = torch.cat((raw_eval_inputs, raw_eval_moda.double()), dim=2)
 
 
         print("Setting Inputs and Target Parameters for Training")
         # TODO: Investigate how to resolve the static nature of setting the target
         # TODO: May need to add the Capital Ratios part as targets.
+
+        #make the targets part more efficient.
 
         if modelTarget == "Y":
             raw_targets = traintest_sets_dict["YTrain"]
