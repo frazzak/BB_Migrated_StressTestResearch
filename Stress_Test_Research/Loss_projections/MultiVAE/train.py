@@ -4,9 +4,11 @@ Created on Thu Mar  7 18:07:34 2019
 
 @author: yifei
 """
-import os, sys
+import os
 import numpy as np
 import pandas as pd
+import itertools
+import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
@@ -390,7 +392,8 @@ def load_all_quarter_data(cond_name,
                             path_dict = {"path_root" : os.path.join(os.getcwd(),"data/"),
                                          "X" : "data_X.npy",
                                          "Y" : "data_Y.npy",
-                                         "XYCap" : "data_XYCap.npy",
+                                         #"XYCap" : "data_XYCap.npy",
+                                         "CapRatios":"data_CapRatios.npy",
                                          "Moda_prefix":"data_moda_",
                                          "Moda_suffix":".npy"
 
@@ -398,12 +401,17 @@ def load_all_quarter_data(cond_name,
                             path_qtr_dict = {"path_root" : os.path.join(os.getcwd(),"data/quarter_based/"),
                                          "X" : "data_X_quarter.npy",
                                          "Y" : "data_Y_quarter.npy",
-                                         "XYCap" : "data_XYCap_quarter.npy",
+                                         #"XYCap" : "data_XYCap_quarter.npy",
+                                         "CapRatios":"data_CapRatios_quarter.npy",
                                          "Moda_prefix":"data_moda_",
                                          "Moda_suffix":"_quarter.npy"
 
                                          }
-                            , modality_names = ['sbidx', 'zmicro', 'zmacro_domestic', 'zmacro_international', 'Sectidx'], data_names = ["X","Y","XYCap"], quarter_ID = None):
+                            , modality_names = ['sbidx', 'zmicro', 'zmacro_domestic', 'zmacro_international', 'Sectidx'], data_names = ["X","Y","CapRatios"], quarter_ID = None):
+
+    print("Setting Path Directories")
+    path_dict["path_root"] = os.path.join(os.getcwd(), "data/")
+    path_qtr_dict["path_root"] = os.path.join(os.getcwd(), "data/quarter_based/")
     print("Initialize Result Dict")
     data_dict = dict()
     for data in data_names:
@@ -463,7 +471,7 @@ def load_all_quarter_data(cond_name,
 
 def get_raw_train_test_data(moda_names=['sbidx', 'zmicro', 'zmacro_domestic', 'z_macrointernational', 'Sectidx'], quarter_ID=0,
                             cond_name='Sectidx',
-                            train_window=[1, 19], test_window=[20, 26]):
+                            train_window=[1, 19], test_window=[20, 26], data_names = ["X","Y","CapRatios"]):
     # TODO: Set if condition to get synthetic modalities.
 
     #    '''
@@ -496,9 +504,11 @@ def get_raw_train_test_data(moda_names=['sbidx', 'zmicro', 'zmacro_domestic', 'z
         print("Running Load Quarter Based Data Function")
         # X, Y, XYCap, moda, cond = load_quarter_based_data(quarter_ID, cond_name, modality_names = moda_names)
         data_dict = load_all_quarter_data(quarter_ID=quarter_ID, cond_name=cond_name, modality_names=moda_names)
+        #TODO: Need Model Target Feature
         t = data_dict["data_Y_quarter_" + str(quarter_ID)].shape[0]
     else:
-        data_dict = load_all_quarter_data(quarter_ID=None, cond_name=cond_name, modality_names=moda_names)
+        #TODO: Need model target for t shape.
+        data_dict = load_all_quarter_data(quarter_ID=None, cond_name=cond_name, modality_names=moda_names, data_names = data_names)
         t = data_dict["data_Y"].shape[0]
 
 
@@ -959,18 +969,14 @@ def LSTM_BankPrediction( pred_moda ,traintest_sets_dict,learn_types = ["Only_Ymi
 
 def LSTM_BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativemodel = "mcvae"
                       , lstm_lr = 1e-2, threshold = 1e-3, modelTarget = "Y"):
+    # traintest_sets_dict = traintest_sets_dict_qtr_0
+    # ScenarioGenResults_dict = ScenarioGenResults_dict_qtr
     print("Comparison on LSTM models")
     rmse_train_list = []
     rmse_lst = []
+    learn_types_list = []
 
-    #TODO: Iterate through learn types list rather than a range list counter.
-    #for key in traintest_sets_dict.keys()
-    #Create learn Type combinations list
-    #Make sure target variable is not included.
-    import itertools
-    for key in [x for x in traintest_sets_dict.keys() if x.startswith("trainset_data") if not x.endswith(modelTarget)]:
-        print("".join(key.split("_")[2:]))
-
+    print("Getting All combinations of Data for LSTM")
     trainsets = list(filter(None,[x for x in traintest_sets_dict.keys() if x.startswith(("trainset_data","trainset_mod")) if not x.endswith(modelTarget) if not x.startswith("trainset_data_cond")]))
     dataset_subsets = list()
     for L in range(0, len(trainsets) + 1):
@@ -978,7 +984,6 @@ def LSTM_BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativem
             dataset_subsets.append(list(subset))
     dataset_subsets = [x for x in dataset_subsets if x !=[]]
 
-    #Loop through combinations and create appropirate inputs and evals
 
 
     for subset in dataset_subsets:
@@ -1030,6 +1035,7 @@ def LSTM_BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativem
             temp_eval_moda = pred_moda[0]
             temp_moda = traintest_sets_dict[modTrain][0]  # train_sets[0][0]
             print("Iterating Modalities and adding to Tensor")
+            #IF other generative models, may have to run each modality seperately.
             for i in range(1, len(traintest_sets_dict[modTrain])):
                 temp_moda = torch.cat((temp_moda, traintest_sets_dict[modTrain][i]), dim=1)
                 temp_eval_moda = torch.cat((temp_eval_moda, pred_moda[i]), dim=1)
@@ -1038,133 +1044,125 @@ def LSTM_BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativem
                 torch.zeros([raw_eval_inputs.shape[0], temp_eval_moda.shape[0], temp_eval_moda.shape[1]]))
             raw_inputs = torch.cat((raw_inputs, raw_moda.double()), dim=2)
             raw_eval_inputs = torch.cat((raw_eval_inputs, raw_eval_moda.double()), dim=2)
-
-
-
-        print("Setting Inputs and Target Parameters for Training")
-        # TODO: Investigate how to resolve the static nature of setting the target
-        # TODO: May need to add the Capital Ratios part as targets.
-
-        #make the targets part more efficient.
-
-        if modelTarget == "Y":
-            raw_targets = traintest_sets_dict["YTrain"]
-            raw_eval_targets = traintest_sets_dict["YTest"]
-        elif modelTarget == "XYCap":
-            raw_targets = traintest_sets_dict["XYCapTrain"]
-            raw_eval_targets = traintest_sets_dict["XYCapTest"]
-        elif modelTarget == "X":
-            raw_targets = traintest_sets_dict["XTrain"]
-            raw_eval_targets = traintest_sets_dict["XTest"]
         else:
-            print("Setting Default Target as Y")
-            raw_targets = traintest_sets_dict["YTrain"]
-            raw_eval_targets = traintest_sets_dict["YTest"]
+            print("Skipping this scenario")
+            continue
+        print("Setting Inputs and Target Parameters for Training")
+        model_raw_target_keyname = [x for x in traintest_sets_dict.keys() if x.startswith("trainset") if x.endswith(modelTarget)][0]
+        model_raw_eval_target_keyname = [x for x in traintest_sets_dict.keys() if x.startswith("testset") if x.endswith(modelTarget)][0]
+        raw_targets = traintest_sets_dict[model_raw_target_keyname]
+        raw_eval_targets = traintest_sets_dict[model_raw_eval_target_keyname]
 
+        print("Setting up Dimensions for inputs and targets for Training LSTM model")
         n, t, m1 = raw_inputs.shape
         m2 = raw_targets.shape[2]
-        inputs = torch.zeros([t, m1, n]).float()
-        targets = torch.zeros([t, n, m2]).float()
+        inputs_train = torch.zeros([t, m1, n]).float()
+        targets_train = torch.zeros([t, n, m2]).float()
         for i in range(0, n):
-            inputs[:, :, i] = raw_inputs[i, :, :]
-            targets[:, i, :] = raw_targets[i, :, :]
+            inputs_train[:, :, i] = raw_inputs[i, :, :]
+            targets_train[:, i, :] = raw_targets[i, :, :]
 
 
         print("Training LSTM model")
-        m_lstm, train_loss = m_LSTM.train(inputs, targets, 50, lstm_lr, threshold)
+        m_lstm, train_loss = m_LSTM.train(inputs_train, targets_train, 100, lstm_lr, threshold)
 
-        # # Graphical LSTM MSE representaiton.
-        # with torch.no_grad():
-        #      prediction = m_lstm.forward(xtest).view(-1)
-        #      loss = criterion(prediction, ytest)
-        #      plt.title("MESLoss: {:.5f}".format(loss))
-        #      plt.plot(prediction.detach().numpy(), label="pred")
-        #      plt.plot(ytest.detach().numpy(), label="true")
-        #      plt.legend()
-        #      plt.show()
+
 
         print("Calculating Training RMSE")
         rmse_train_list.append(train_loss)
-        print("%s\terror:\t%.5f" % (m_learn_type, train_loss))
+        print("%s\terror:\t%.5f" % (tmp_dict_name, train_loss))
 
-        print("Setting Inputs and Target Parameters for Testing")
-        #raw_eval_inputs = raw_inputs = torch.cat((test_sets[3], test_sets[2]), dim=2)
-        #TODO: Investigate how to resolve the static nature of setting the target
-        #raw_eval_targets = traintest_sets_dict["YTest"] #test_sets[4]
+        print("Setting up Dimensions for inputs and targets for Training LSTM model")
         n, t, m1 = raw_eval_inputs.shape
         m2 = raw_eval_targets.shape[2]
-        inputs = torch.zeros([t, m1, n]).float()
-        targets = torch.zeros([t, n, m2]).float()
+        inputs_test = torch.zeros([t, m1, n]).float()
+        targets_test = torch.zeros([t, n, m2]).float()
         for i in range(0, n):
-            inputs[:, :, i] = raw_eval_inputs[i, :, :]
-            targets[:, i, :] = raw_eval_targets[i, :, :]
-
+            inputs_test[:, :, i] = raw_eval_inputs[i, :, :]
+            targets_test[:, i, :] = raw_eval_targets[i, :, :]
 
         print("Running Predictions on Inputs using Trained Model: Testing Error")
-        pred = m_LSTM.predict(m_lstm, inputs)
-
+        pred = m_LSTM.predict(m_lstm, inputs_test)
 
         print("Calculating Testing RMSE")
-        rmse = torch.nn.functional.mse_loss(pred, targets)
+        rmse = torch.nn.functional.mse_loss(pred, targets_test)
         rmse_lst.append(rmse)
-        print("%s\terror:\t%.5f" % (m_learn_type, rmse))
+        learn_types_list.append(tmp_dict_name)
+        print("%s\terror:\t%.5f" % (tmp_dict_name, rmse))
+
+        # print("Graphical Visualization")
+        # # # Graphical LSTM MSE representaiton.
+        # with torch.no_grad():
+        #     prediction = m_lstm.forward(targets_test).view(-1)
+        #     loss = nn.MSELoss(prediction, targets_test)
+        #     plt.title("MESLoss: {:.5f}".format(loss))
+        #     plt.plot(prediction.detach().numpy(), label="pred")
+        #     plt.plot(targets_test.detach().numpy(), label="true")
+        #     plt.legend()
+        #     plt.show()
 
     rmse_train_lst_sk = torch.stack(rmse_train_list)
     rmse_lst_sk = torch.stack(rmse_lst)
     rmse_list_final = [rmse_train_lst_sk, rmse_lst_sk.data]
-    result_obj = pd.DataFrame(rmse_list_final, columns = learn_types, index = ["TrainErr","TestErr"])
+    result_obj = pd.DataFrame(rmse_list_final, columns = learn_types_list, index = ["TrainErr","TestErr"])
+    print("Minimum Train Error:",result_obj.astype(float).idxmin(axis = 1)[0], result_obj.min(axis=1)[0], "Minimum Training Error:",result_obj.astype(float).idxmin(axis = 1)[0], result_obj.min(axis=1)[1])
     return(result_obj)
 
 
 
 
-os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/")
-
-
-#TODO: fix so it checks for miniums and maxiums for the datasets so no error occurs at LSTM
-#TODO:Train window must be above 0. Add logic to get min and max for the window.
 #'SBidx'
 #'Sectidx'
-train_window = [1,98]
-test_window = [99,102]
-
-traintest_sets_dict  = get_raw_train_test_data(quarter_ID = None, cond_name = "zmicro", moda_names = ['zmicro', 'zmacro_domestic', 'zmacro_international']
-                                               ,train_window = train_window, test_window = test_window)
 
 
-ScenarioGenResults_dict = GenerativeModels_ScenarioGen(traintest_sets_dict, learning_rate = 1e-4 , iterations = 1, epoch = 1000)
 
-quarter_ID = 0
-train_window_qtr = [1,24]
-test_window_qtr = [25,26]
+#TODO: Add more bank data by either using the merger dataset.
+#TODO: consider using partial banks by joining to time slices
 
-traintest_sets_dict_qtr_0  = get_raw_train_test_data(quarter_ID = quarter_ID, cond_name = "zmicro", moda_names = ['zmicro', 'zmacro_domestic', 'zmacro_international']
-                                                    ,train_window = train_window_qtr, test_window = test_window_qtr)
+#Running in full data basis.
+
+#TODO: fix so it checks for minimums andmaximumss for the datasets so no error occurs at LSTM
+#TODO:Train window must be above 0. Add logic to get min and max for the window.
+#Set Training and Testing Windows
+train_window = [1,103]
+test_window = [104,108]
 
 
-ScenarioGenResults_dict_qtr = GenerativeModels_ScenarioGen(traintest_sets_dict_qtr_0, learning_rate = 1e-4 , iterations = 1, epoch = 1000)
+os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/")
+
+#Generate testing, training data sets from modalities, banking data, conditional modality for Scenario Modeling and Bank Prediction
+traintest_sets_dict  = get_raw_train_test_data(quarter_ID = None, cond_name = "zmacro_domestic", moda_names = ['zmicro', 'zmacro_domestic', 'zmacro_international']
+                                               ,train_window = train_window, test_window = test_window, data_names = ["X","Y","CapRatios"])
+
+#Model using Generative MOdels for Scenario Prediction and Generation.
+#TODO: Add CGAN modeling for comparasion
+ScenarioGenResults_dict = GenerativeModels_ScenarioGen(traintest_sets_dict, learning_rate = 1e-4 , iterations = 1, epoch = 1000, models=["cvae"])
+
+#LSTM Bank Performance Prediction based on modality estimations and Banking data features.
+#TODO: Add visualizations
+BankPredEval = LSTM_BankPerfPred(ScenarioGenResults_dict,traintest_sets_dict, generativemodel = "mcvae", modelTarget= "Y")
+
+
+
+#Running on Quarter basis
+quarter_ID = 1
+train_window_qtr = [1,25]
+test_window_qtr = [26,27]
+pred = "Y"
+modelTarget = "_".join([pred,"quarter",str(quarter_ID)])
+traintest_sets_dict_qtr  = get_raw_train_test_data(quarter_ID = quarter_ID, cond_name = "zmacro_domestic", moda_names = ['zmicro', 'zmacro_domestic', 'zmacro_international']
+                                                    ,train_window = train_window_qtr, test_window = test_window_qtr,data_names = ["X","Y","CapRatios"])
+ScenarioGenResults_dict_qtr = GenerativeModels_ScenarioGen(traintest_sets_dict_qtr, learning_rate = 1e-4 , iterations = 1, epoch = 1000, models=["mcvae"])
+
+BankPredEval_qtr = LSTM_BankPerfPred(ScenarioGenResults_dict_qtr,traintest_sets_dict_qtr, generativemodel = "mcvae", modelTarget= modelTarget)
+
+
+
+
 
 #results, pred_moda = GenerativeModelCompare(num_cond, cond_train, cond_test, mod_train, mod_test, cond_name, learning_rate = 1e-3 , times = 1, epcho = 1000)
 
-
-
-#TODO: Need to fix the handling of the different time slices.
-#TODO: Add Capital ratio features as well.
-#TODO: Add Model Target Target variable for Testing
-BankPredEval = LSTM_BankPrediction(pred_moda, traintest_sets_dict, lstm_lr=1e-2, threshold=1e-3, modelTarget= "Y")
-
-
-#Graphical LSTM MSE representaiton.
-# with torch.no_grad():
-#     prediction = model.forward(xtest).view(-1)
-#     loss = criterion(prediction, ytest)
-#     plt.title("MESLoss: {:.5f}".format(loss))
-#     plt.plot(prediction.detach().numpy(), label="pred")
-#     plt.plot(ytest.detach().numpy(), label="true")
-#     plt.legend()
-#     plt.show()
-
-
+#BankPredEval = LSTM_BankPrediction(pred_moda, traintest_sets_dict, lstm_lr=1e-2, threshold=1e-3, modelTarget= "Y")
 
 
 
@@ -1174,7 +1172,7 @@ BankPredEval = LSTM_BankPrediction(pred_moda, traintest_sets_dict, lstm_lr=1e-2,
 
 
 #Previous Code.
-0
+
 
 #if __name__=="__main__":
 
@@ -1357,16 +1355,6 @@ BankPredEval = LSTM_BankPrediction(pred_moda, traintest_sets_dict, lstm_lr=1e-2,
 
 
 
-
-
-# with torch.no_grad():
-#     prediction = model.forward(xtest).view(-1)
-#     loss = criterion(prediction, ytest)
-#     plt.title("MESLoss: {:.5f}".format(loss))
-#     plt.plot(prediction.detach().numpy(), label="pred")
-#     plt.plot(ytest.detach().numpy(), label="true")
-#     plt.legend()
-#     plt.show()
 
 
 

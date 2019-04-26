@@ -7,6 +7,7 @@ Created on Thu Apr  4 21:21:26 2019
 
 import torch
 import numpy as np
+import matplotlib.pyplot as plt
 import torch.nn as nn
 import torch.nn.init as Init
 
@@ -74,6 +75,17 @@ def train(inputs, targets, epcho, lstm_lr, threshold):
             break
     
     return m_LSTM, loss.data
+
+
+# def plot(m_lstm,inputs_eval, targets_eval):
+#     with torch.no_grad():
+#         prediction = m_lstm.forward(inputs_eval).view(-1)
+#         loss = nn.MSELoss(prediction, targets_eval)
+#         plt.title("MESLoss: {:.5f}".format(loss))
+#         plt.plot(prediction.detach().numpy(), label="pred")
+#         plt.plot(targets_eval.detach().numpy(), label="true")
+#         plt.legend()
+#         plt.show()
 
 def predict(model, inputs):
     

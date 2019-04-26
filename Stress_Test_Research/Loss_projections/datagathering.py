@@ -3,6 +3,7 @@ import numpy as np
 import os
 import gc
 from functools import reduce
+from sqlalchemy import create_engine
 
 '''
         for key in Z_micro_raw_data_dict.keys():
@@ -1149,116 +1150,177 @@ BankPerf = StressTestData().X_Y_bankingchar_perf_process(groupfunction=np.mean, 
 
                                      }, RSSD_Subset = True, Y_calc= True)
 
-#TODO: Verify that the RSSID in X and Y match out.
-BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"].keys()
-
 #Workspace
-[v for v in BankPerf.keys() if v.startswith("BankPerf_Mergered")]
-
-
-
-BankPerf["BankPerf_Mergered_XYcalc_Subset_RSSD_List"]
-
-BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]["RSSD_ID"].unique().__len__()
-
-
-
-
-[v for v in BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns if v.endswith("t-1")]
-
-list(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns)
-
-BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].ReportingDate =  BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].ReportingDate.dt.year.astype(str) + " Q" + BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].ReportingDate.dt.quarter.astype(str)
-
-
-Xi = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.endswith(("RSSD_ID","ReportingDate","Loans categories:Commercial & industrial_Covas","Loans categories:Construction & land development","Loans categories:Multifamily real estate","Loans categories:Nonfarm nonresidential CRE_Covas","Loans categories:Home equity lines of credit","Loans categories:Residential real estate (excl. HELOCs)_Covas","Loans categories:Credit card","Loans categories:Consumer (excl. credit card)_Covas"))]]
-
-
-Xi.to_csv("../Data_Output/Xij.csv", sep = ",", index= False)
-Xi.describe().transpose()
-Xi.keys()
-
-
-Xi_tminus1 = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","Loans categories:Commercial & industrial_Covas_t-1","Loans categories:Construction & land development_t-1","Loans categories:Multifamily real estate_t-1","Loans categories:Nonfarm nonresidential CRE_Covas_t-1","Loans categories:Home equity lines of credit_t-1","Loans categories:Residential real estate (excl. HELOCs)_Covas_t-1","Loans categories:Credit card_t-1","Loans categories:Consumer (excl. credit card)_Covas_t-1"))]]
-
-
-Xi_tminus1.to_csv("../Data_Output/Xij_tminus1.csv", sep = ",", index= False)
-Xi_tminus1.describe().transpose()
-Xi_tminus1.keys()
-
-
-
-BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"] = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].rename({"Other items:Dividends ":"Other items:Dividends"})
-
-
-XY_GT_labels = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.endswith(("RSSD_ID","ReportingDate","Chargeoffs","Recoveries","Net income(loss)","Less:Cash dividends on perp perf stock","Total Equity_1","Total Equity_2","Other items:Book equity","Other items:Dividends","Other items:Stock purchases","Other items:Risk-weighted assets","Other items:Tier 1 common equity","Other items:T1CR"))]]
-
-XY_GT_labels.to_csv("../Data_Output/XYaltratios.csv", sep = ",", index= False)
-XY_GT_labels.describe().transpose()
-XY_GT_labels.keys()
 
 
 
 XY_GT_labels_tminus1 = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","Chargeoffs_t-1","Recoveries_t-1","Net income(loss)_t-1","Less:Cash dividends on perp perf stock_t-1","Total Equity_1_t-1","Total Equity_2_t-1","Other items:Book equity_t-1","Other items:Dividends _t-1","Other items:Stock purchases_t-1","Other items:Risk-weighted assets_t-1","Other items:Tier 1 common equity_t-1","Other items:T1CR_t-1"))]]
 
 
-XY_GT_labels_tminus1.to_csv("../Data_Output/XY_GT_labels_tminus1.csv", sep = ",", index= False)
-XY_GT_labels_tminus1.describe().transpose()
-XY_GT_labels_tminus1.keys()
 
 
 
-#BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]["ReportingDate"]
-
-Yi = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[(pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","ncoR:","ppnrRatio:"))) & (~pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.endswith("_t-1"))]]
-Yi.describe().transpose()
-Yi.to_csv("../Data_Output/Yij.csv", sep = ",", index= False)
-Yi.keys()
-
-
-Yi_tminus1 = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[(pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","ncoR:","ppnrRatio:"))) & (pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.endswith("_t-1"))]]
-Yi_tminus1.describe().transpose()
-Yi_tminus1.to_csv("../Data_Output/Yij_tminus1.csv", sep = ",", index= False)
+#Load Merged Data to MySQL
+#CReate Function to the post processing and load to mysql
 
 
 
+X_merged = preprocess_loadMySQL(BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"], datatype = "X"
+                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+                         , tbl_name = "X_merged", if_exists = "replace")
 
-#Load DF into Mysql from pandas.
-#import pymysql as msql
-#db = msql.connect(host = "localhost", db = 'STR', user = "root", passwd = "")
+Y_merged = preprocess_loadMySQL(BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"], datatype = "Y"
+                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+                         , tbl_name = "Y_merged", if_exists = "replace")
 
-from sqlalchemy import create_engine
-engine = create_engine("mysql+pymysql://{user}:{pw}@localhost/{db}"
-                       .format(user="root",
-                               pw="",
-                               db="STR"))
-Z_micro["Z_Micro"].to_sql(name='test_pymql', con=engine,  if_exists='append', index=False, index_label=None)
+CapitalRatios_merged = preprocess_loadMySQL(BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"], datatype = "XYCap"
+                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+                         , tbl_name = "CapitalRatio_merged", if_exists = "replace")
 
+Z_macro_domestic = Z_macro['Historic_Domestic'][(pd.to_datetime(Z_macro['Historic_Domestic']['Date']) <= "2017-12-31") & (pd.to_datetime(Z_macro['Historic_Domestic']['Date']) >= "1990-01-01")]
 
-Z_macro_out = Z_macro['Historic_Domestic'][(pd.to_datetime(Z_macro['Historic_Domestic']['Date']) <= "2017-12-31") & (pd.to_datetime(Z_macro['Historic_Domestic']['Date']) >= "1990-01-01")]
-Z_macro_out["Date"] =  pd.to_datetime(Z_macro_out.Date).dt.year.astype(str) + " Q" + pd.to_datetime(Z_macro_out.Date).dt.quarter.astype(str)
-Z_macro_out = Z_macro_out.drop("Scenario Name",axis = 1)
-Z_macro_out.to_csv("./Data_Output/Z_Macro_Domestic.csv", sep = ",", index = False)
-Z_macro_out.to_sql(name='zmacro_domestic', con=engine,  if_exists='append', index=False, index_label=None)
-
-
-Z_macro_out = Z_macro['Historic_International'][(pd.to_datetime(Z_macro['Historic_International']['Date']) <= "2017-12-31") & (pd.to_datetime(Z_macro['Historic_International']['Date']) >= "1990-01-01")]
-Z_macro_out["Date"] =  pd.to_datetime(Z_macro_out.Date).dt.year.astype(str) + " Q" + pd.to_datetime(Z_macro_out.Date).dt.quarter.astype(str)
-Z_macro_out = Z_macro_out.drop("Scenario Name",axis = 1)
-Z_macro_out.to_csv("./Data_Output/Z_Macro_International.csv", sep = ",", index = False)
-Z_macro_out.to_sql(name='zmacro_international', con=engine,  if_exists='append', index=False, index_label=None)
+Z_macro_domestic_mysql = preprocess_loadMySQL(Z_macro_domestic, datatype = "zmacro_Domestic"
+                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+                         , tbl_name = "Zmacro_domestic_1", if_exists = "replace")
 
 
-#
-# >>> df1.to_sql('users', con=engine, if_exists='replace',
-# ...            index_label='id')
-# >>> engine.execute("SELECT * FROM users").fetchall()
+Z_macro_international = Z_macro['Historic_International'][(pd.to_datetime(Z_macro['Historic_International']['Date']) <= "2017-12-31") & (pd.to_datetime(Z_macro['Historic_International']['Date']) >= "1990-01-01")]
+
+Z_macro_international_mysql = preprocess_loadMySQL(Z_macro_international, datatype = "ZMacro_International"
+                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+                         , tbl_name = "ZMacro_International_1", if_exists = "replace")
 
 
-#Create TCR1 Column
-identifiers = ["RSSD_ID","ReportingDate"]
 
-loans = ["Loans categories:Commercial & industrial_Covas"
+
+def preprocess_loadMySQL(BankPerf, datatype = "X"
+                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+                         , tbl_name = "TempDF", if_exists = "replace"):
+
+        if datatype in ["X","X_tminus1","Y","Y_tminus1","CapRatios","CapRatios_tminus1","XYCap", "XYCap_tminus1"]:
+            if not BankPerf.ReportingDate.apply(lambda x: x.split(" ")[1][0]).unique() == "Q":
+                print("Converting Date to YYYY Q# format")
+                BankPerf.ReportingDate = BankPerf.ReportingDate.dt.year.astype(str) + " Q" + BankPerf.ReportingDate.dt.quarter.astype(str)
+
+            if "Other items:Dividends " in BankPerf.keys():
+                print("Renmaing Column Other items:Dividends ")
+                BankPerf = BankPerf.rename({"Other items:Dividends ": "Other items:Dividends"})
+            print("Subsetting Columns for ", datatype)
+
+            if datatype == "X":
+                BankPerf = BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.endswith(("RSSD_ID",
+                                                               "ReportingDate",
+                                                               "Loans categories:Commercial & industrial_Covas",
+                                                               "Loans categories:Construction & land development",
+                                                               "Loans categories:Multifamily real estate",
+                                                               "Loans categories:Nonfarm nonresidential CRE_Covas",
+                                                               "Loans categories:Home equity lines of credit",
+                                                               "Loans categories:Residential real estate (excl. HELOCs)_Covas",
+                                                               "Loans categories:Credit card",
+                                                               "Loans categories:Consumer (excl. credit card)_Covas"))]]
+
+            elif datatype == "X_tminus1":
+                BankPerf = BankPerf[
+                    BankPerf.columns[
+                        pd.Series(BankPerf.columns).str.startswith((
+                                                                     "RSSD_ID",
+                                                                     "ReportingDate",
+                                                                     "Loans categories:Commercial & industrial_Covas_t-1",
+                                                                     "Loans categories:Construction & land development_t-1",
+                                                                     "Loans categories:Multifamily real estate_t-1",
+                                                                     "Loans categories:Nonfarm nonresidential CRE_Covas_t-1",
+                                                                     "Loans categories:Home equity lines of credit_t-1",
+                                                                     "Loans categories:Residential real estate (excl. HELOCs)_Covas_t-1",
+                                                                     "Loans categories:Credit card_t-1",
+                                                                             "Loans categories:Consumer (excl. credit card)_Covas_t-1"))]]
+            elif datatype == "XYCap":
+                BankPerf = BankPerf[
+                    BankPerf.columns[
+                        pd.Series(BankPerf.columns).str.endswith((
+                                                                                           "RSSD_ID",
+                                                                                           "ReportingDate",
+                                                                                           "Chargeoffs",
+                                                                                           "Recoveries",
+                                                                                           "Net income(loss)",
+                                                                                           "Less:Cash dividends on perp perf stock",
+                                                                                           "Total Equity_1",
+                                                                                           "Total Equity_2",
+                                                                                           "Other items:Book equity",
+                                                                                           "Other items:Dividends",
+                                                                                           "Other items:Stock purchases",
+                                                                                           "Other items:Risk-weighted assets",
+                                                                                           "Other items:Tier 1 common equity",
+                                                                                           "Other items:T1CR"))]]
+            elif datatype == "XYCap_tminus1":
+                BankPerf = BankPerf[
+                    BankPerf.columns[pd.Series(
+                        BankPerf.columns).str.startswith((
+                                                           "RSSD_ID",
+                                                           "ReportingDate",
+                                                           "Chargeoffs_t-1",
+                                                           "Recoveries_t-1",
+                                                           "Net income(loss)_t-1",
+                                                           "Less:Cash dividends on perp perf stock_t-1",
+                                                           "Total Equity_1_t-1",
+                                                           "Total Equity_2_t-1",
+                                                           "Other items:Book equity_t-1",
+                                                           "Other items:Dividends _t-1",
+                                                           "Other items:Stock purchases_t-1",
+                                                           "Other items:Risk-weighted assets_t-1",
+                                                           "Other items:Tier 1 common equity_t-1",
+                                                           "Other items:T1CR_t-1"))]]
+
+            elif datatype == "Y":
+                BankPerf = BankPerf[BankPerf.columns[(pd.Series(BankPerf.columns).str.startswith(
+                    ("RSSD_ID", "ReportingDate", "ncoR:", "ppnrRatio:"))) & (~pd.Series(BankPerf.columns).str.endswith("_t-1"))]]
+            elif datatype == "Y_minus1":
+                BankPerf = BankPerf[BankPerf.columns[(pd.Series(BankPerf.columns).str.startswith(
+                    ("RSSD_ID", "ReportingDate", "ncoR:", "ppnrRatio:"))) & (pd.Series(BankPerf.columns).str.endswith("_t-1"))]]
+        else:
+
+            if datatype.lower() in ["zmacro_domestic", "zmacro_international"]:
+                if "Scenario Name" in BankPerf.keys():
+                    BankPerf = BankPerf.drop("Scenario Name", axis=1)
+                if "Scenario Name_x" in BankPerf.keys():
+                    BankPerf = BankPerf.drop("Scenario Name_x", axis=1)
+                if "Date" in BankPerf.keys():
+                    # if not BankPerf.Date.apply(lambda x: x.str.split(" ")[1][0]).unique() == "Q":
+                    BankPerf["Date"] = pd.to_datetime(BankPerf.Date).dt.year.astype(str) + " Q" + pd.to_datetime(
+                        BankPerf.Date).dt.quarter.astype(str)
+
+
+
+        print("Saving Object to file")
+        BankPerf.to_csv("./" + datatype +".csv" , sep=",", index=False)
+        print(BankPerf.describe().transpose())
+        print(BankPerf.keys())
+        tmp_df = BankPerf
+        print("Creating Connection to MySQL server")
+        engine = create_engine(server
+                               .format(user=user,
+                                       pw=pw,
+                                       db=db))
+        print("Upload dataframe to Database")
+        tmp_df.to_sql(name=tbl_name, con=engine,  if_exists= if_exists, index=False, index_label=None)
+        return("Complete")
+
+
+
+    #Create TCR1 Column
+
+
+
+
+
+
+
+
+
+
+
+    identifiers = ["RSSD_ID","ReportingDate"]
+
+    loans = ["Loans categories:Commercial & industrial_Covas"
         ,"Loans categories:Construction & land development"
         ,"Loans categories:Multifamily real estate"
 
@@ -1268,90 +1330,90 @@ loans = ["Loans categories:Commercial & industrial_Covas"
         ,"Loans categories:Credit card"
         ,"Loans categories:Consumer (excl. credit card)_Covas"]
 
-loans_t1 = [v + "_t-1" for v in loans]
+    loans_t1 = [v + "_t-1" for v in loans]
 
-#Need to re-run
-lossrates = [v for v in BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith("Net charge-offs by type of loan:")] if not v.endswith("_t-1")]
+    #Need to re-run
+    lossrates = [v for v in BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith("Net charge-offs by type of loan:")] if not v.endswith("_t-1")]
 
-df_tmp = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]
-for i,y in zip(loans_t1,lossrates):
-    print(i,y)
+    df_tmp = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]
+    for i,y in zip(loans_t1,lossrates):
+        print(i,y)
     df_tmp[] = df_tmp[i] * df_tmp[y]
 
 
 
-#Conditional Vector
-#Net charge offs.
-#
-list(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns)
-collist = ["RSSD_ID","ReportingDate","Chargeoffs","Recoveries"]
+    #Conditional Vector
+    #Net charge offs.
+    #
+    list(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns)
+    collist = ["RSSD_ID","ReportingDate","Chargeoffs","Recoveries"]
 
-Conditional_ij = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][collist]
-Conditional_ij["NetChargeOffs"] = Conditional_ij["Chargeoffs"] - Conditional_ij["Recoveries"]
-
-
-Conditional_ij["ReportingDate"] =  Conditional_ij.ReportingDate.dt.year.astype(str) + " Q" + Conditional_ij.ReportingDate.dt.quarter.astype(str)
-Conditional_ij.to_csv("../Data_Output/Conditional_ij.csv", sep = ",", index= False)
+    Conditional_ij = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][collist]
+    Conditional_ij["NetChargeOffs"] = Conditional_ij["Chargeoffs"] - Conditional_ij["Recoveries"]
 
 
-#['RSSD_ID',"ReportingDate','Other items:T1CR','Other items:T1CR_t-1']
-BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"][['RSSD_ID','ReportingDate','Other items:T1CR','Other items:T1CR_t-1']]
-
-X_i.ReportingDate.dt.year.astype(str) + " Q" + X_i.ReportingDate.dt.quarter.astype(str)
-
-list(BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"].columns)
+    Conditional_ij["ReportingDate"] =  Conditional_ij.ReportingDate.dt.year.astype(str) + " Q" + Conditional_ij.ReportingDate.dt.quarter.astype(str)
+    Conditional_ij.to_csv("../Data_Output/Conditional_ij.csv", sep = ",", index= False)
 
 
-#Create calculated Net Charge Off and Book Equity.
-#Create calculated Capital Ratio.
-#Get Net Charge off amount via Data Source
-#Get PPNR
+    #['RSSD_ID',"ReportingDate','Other items:T1CR','Other items:T1CR_t-1']
+    BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"][['RSSD_ID','ReportingDate','Other items:T1CR','Other items:T1CR_t-1']]
+
+    X_i.ReportingDate.dt.year.astype(str) + " Q" + X_i.ReportingDate.dt.quarter.astype(str)
+
+    list(BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"].columns)
 
 
-
-
-#Calc NCO
+    #Create calculated Net Charge Off and Book Equity.
+    #Create calculated Capital Ratio.
+    #Get Net Charge off amount via Data Source
+    #Get PPNR
 
 
 
 
-
-#Need to develop a Capital Ratio Calculator.
-
-#This will be needed for the predicted values to compare with the Ground Truth.
-
-#Need to calculate the measured CR_t,i
-#Other items:Book equity #t
-#Other items:Risk-weighted assets #t-1
-
-#May need to calculate  the Net Charge Off, Book Equirty and CRi.
-#Have to get time period lags.
-
-
-#Calculate PPNR as PPNR componet ratio * consolidated assets of previous period.
-
-#calculate net charge off
-#Sum of associated loan of previous period * current period charge off rate.
-#Book Equity
-#Book Equity of previous period + .65 * (ppnr - nco) - dividends_t-1 - Stock Repurchases t-1
-#CR - Book Equity - Reg Capital Deductions of previous period/ Risk weighted Assets
-
-
-#Should we just update each row with columns with t-1
+    #Calc NCO
 
 
 
 
-#Discrimitative to Macro-Economic and Bank.
-#Get from source data,
-#Charge-offs : BHCK4635
-#Total Equity : BHCK310
-#Net Charge-offs : BHCK4635 - BHCK4605
-#Return on Equity : BHCK4340-BHCK4598/Average(BHCK310)
+
+    #Need to develop a Capital Ratio Calculator.
+
+    #This will be needed for the predicted values to compare with the Ground Truth.
+
+    #Need to calculate the measured CR_t,i
+    #Other items:Book equity #t
+    #Other items:Risk-weighted assets #t-1
+
+    #May need to calculate  the Net Charge Off, Book Equirty and CRi.
+    #Have to get time period lags.
+
+
+    #Calculate PPNR as PPNR componet ratio * consolidated assets of previous period.
+
+    #calculate net charge off
+    #Sum of associated loan of previous period * current period charge off rate.
+    #Book Equity
+    #Book Equity of previous period + .65 * (ppnr - nco) - dividends_t-1 - Stock Repurchases t-1
+    #CR - Book Equity - Reg Capital Deductions of previous period/ Risk weighted Assets
+
+
+    #Should we just update each row with columns with t-1
 
 
 
-#VAE-CVAE=MNIST
-#import utils, models, train
+
+    #Discrimitative to Macro-Economic and Bank.
+    #Get from source data,
+    #Charge-offs : BHCK4635
+    #Total Equity : BHCK310
+    #Net Charge-offs : BHCK4635 - BHCK4605
+    #Return on Equity : BHCK4340-BHCK4598/Average(BHCK310)
+
+
+
+    #VAE-CVAE=MNIST
+    #import utils, models, train
 
 
