@@ -11,6 +11,7 @@ import os
 
 #TODO: Get all partial data, not just banks with quarters that match window.
 #TODO: Load Merged Bank Data.
+#TODO: May not need to transform RSSD by RSSD for all banks. find way to transform whole fetched cursor at once
 def request_data(data_type):
     #data_type = "XY_Cap"
     db = msql.connect(host = "localhost", db = 'STR', user = "root", passwd = "")
@@ -57,7 +58,7 @@ def request_data(data_type):
     elif data_type in ["X","XY_Cap", "X_full","XY_Cap_Full","CapRatios_full", "X_mergered", "X_full_mergered"]:
         results = np.zeros([1, 108, 8])
     elif data_type in  ["CapRatios","CapRatios_mergered", "CapRatios_full","CapRatios_full_mergered"]:
-        results = np.zeros([1, 108, 2])
+        results = np.zeros([1, 108, 1])
     else:
         print("No Data Type Found")
 
@@ -214,35 +215,35 @@ def request_data(data_type):
             #bank_id[0] = 1020180
             sql = "SELECT `ReportingDate`, "
             #sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
-            sql = sql + "`Other items:Tier 1 common equity`,`Other items:T1CR`"
-            sql = sql + " from CapitalRatio where RSSD_ID='"
+            sql = sql + "a.`Other items:T1CR`"  # a.`Other items:Tier 1 common equity`,
+            sql = sql + " from CapitalRatio a where RSSD_ID='"
             sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 2])
+            temp_data = np.zeros([1, 108, 1])
 
         elif data_type == "CapRatios_mergered":
             #bank_id[0] = 1020180
             sql = "SELECT `ReportingDate`, "
             #sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
-            sql = sql + "`Other items:Tier 1 common equity`,`Other items:T1CR`"
-            sql = sql + " from CapitalRatio_merged where RSSD_ID='"
+            sql = sql + "a.`Other items:T1CR` "  # a.`Other items:Tier 1 common equity`,
+            sql = sql + " from CapitalRatio_merged a where RSSD_ID='"
             sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 2])
+            temp_data = np.zeros([1, 108, 1])
 
         elif data_type == "CapRatios_full":
             # bank_id[0] = 1020180
             sql = "SELECT b.`ReportingDate`, "
             # sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
-            sql = sql + "a.`Other items:Tier 1 common equity`,a.`Other items:T1CR`"
+            sql = sql + "a.`Other items:T1CR`" #a.`Other items:Tier 1 common equity`,
 #            sql = sql + " from xyaltratios_1 where RSSD_ID='"
             sql = sql + " FROM (SELECT DISTINCT ReportingDate from xij_2) b LEFT JOIN STR.CapitalRatio a on a.ReportingDate = b.ReportingDate where a.RSSD_ID='"
             sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 2])
+            temp_data = np.zeros([1, 108, 1])
 
         elif data_type == "CapRatios_full_mergered":
             # bank_id[0] = 1020180
             sql = "SELECT b.`ReportingDate`, "
             # sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
-            sql = sql + "a.`Other items:Tier 1 common equity`,a.`Other items:T1CR`"
+            sql = sql + "a.`Other items:T1CR`" #a.`Other items:Tier 1 common equity`,
             #            sql = sql + " from xyaltratios_1 where RSSD_ID='"
             sql = sql + " FROM (SELECT DISTINCT ReportingDate from X_merged) b LEFT JOIN STR.CapitalRatio_merged a on a.ReportingDate = b.ReportingDate where a.RSSD_ID='"
             sql = sql + str(bank_id[0]) + "'"
@@ -257,7 +258,8 @@ def request_data(data_type):
         records = cursor.fetchall()
 
 
-        #We may need to consider the merged data.  We may also need to consider banks with missing data.
+        #TODO: We may also need to consider banks with missing data.
+        #TODO: Improve to take all the cursor records into npy array at once. and then into the temp data array
         if int(t) >= 108 and records[0][0] == "1990 Q1" and records[107][0] == "2016 Q4":
             print("BankID:%s\tNum:%d" % (bank_id[0], int(t)))
             print("Bank has 108 Quarters from 1990 to 2016")
@@ -289,12 +291,12 @@ def request_data(data_type):
     # the 4th axis is the dimension of attributes, which refers to the sql sentences
     n = results.shape[0] - 1
     results = results[1:n+1]
-    if data_type in ["X","XY_Cap", "X_full", "XY_Cap_full"]:
+    if data_type in ["X","X_mergered","XY_Cap","XY_Cap_mergered","X_full","X_full_mergered" ,"XY_Cap_full","XY_Cap_full_mergered"]:
         results_quarter = np.zeros([4, n, int(108/4), 8])
-    elif data_type in  ["Y", "Y_full"]:
+    elif data_type in  ["Y", "Y_mergered","Y_full","Y_full_mergered"]:
         results_quarter = np.zeros([4, n, int(108 / 4), 14])
-    elif data_type in  ["CapRatios", "CapRatios_full"]:
-        results_quarter = np.zeros([4, n, int(108 / 4), 2])
+    elif data_type in  ["CapRatios", "CapRatios_full","CapRatios_mergered", "CapRatios_full_mergered"]:
+        results_quarter = np.zeros([4, n, int(108 / 4), 1])
 
     else:
         print("No Data Type Found")
@@ -429,14 +431,15 @@ if __name__ == "__main__":
 
 
     os.chdir("./Data_PP_Output/")
-
-    for data_type in ['X_mergered','Y_mergered', "CapRatios_mergered"]:
+    #data_types_list = ['X_mergered', 'Y_mergered', "CapRatios_mergered"]
+    data_types_list = ["CapRatios_mergered"]
+    for data_type in data_types_list:
         print(data_type)
         data, data_quarter = request_data(data_type)
         print(data_type,":", data.shape, data_type,"_quarter:", data_quarter.shape)
         print("Saving objects to file")
-        np.save("./data_moda_" + data_type + ".npy", data)
-        np.save("./data_moda_" + data_type + "_quarter.npy", data_quarter)
+        np.save("./data_" + data_type + ".npy", data)
+        np.save("./data_" + data_type + "_quarter.npy", data_quarter)
 
 
 #May need to consider creating a table with all the time slices, to save on join.

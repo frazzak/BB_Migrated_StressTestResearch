@@ -407,10 +407,10 @@ def load_all_quarter_data(cond_name,
                                          "Moda_suffix":"_quarter.npy"
 
                                          }
-                            , modality_names = ['sbidx', 'zmicro', 'zmacro_domestic', 'zmacro_international', 'Sectidx'], data_names = ["X","Y","CapRatios"], quarter_ID = None):
+                            , modality_names = ['sbidx', 'zmicro', 'zmacro_domestic', 'zmacro_international', 'Sectidx'], data_names = ["X","Y","CapRatios"], quarter_ID = None, datadir = "data/"):
 
     print("Setting Path Directories")
-    path_dict["path_root"] = os.path.join(os.getcwd(), "data/")
+    path_dict["path_root"] = os.path.join(os.getcwd(), datadir)
     path_qtr_dict["path_root"] = os.path.join(os.getcwd(), "data/quarter_based/")
     print("Initialize Result Dict")
     data_dict = dict()
@@ -471,7 +471,26 @@ def load_all_quarter_data(cond_name,
 
 def get_raw_train_test_data(moda_names=['sbidx', 'zmicro', 'zmacro_domestic', 'z_macrointernational', 'Sectidx'], quarter_ID=0,
                             cond_name='Sectidx',
-                            train_window=[1, 19], test_window=[20, 26], data_names = ["X","Y","CapRatios"]):
+                            train_window=[1, 19], test_window=[20, 26], data_names = ["X","Y","CapRatios"],
+                            path_dict = {"path_root" : os.path.join(os.getcwd(),"data/"),
+                                         "X" : "data_X.npy",
+                                         "Y" : "data_Y.npy",
+                                         #"XYCap" : "data_XYCap.npy",
+                                         "CapRatios":"data_CapRatios.npy",
+                                         "Moda_prefix":"data_moda_",
+                                         "Moda_suffix":".npy"
+
+                                         },
+                            path_qtr_dict = {"path_root" : os.path.join(os.getcwd(),"data/quarter_based/"),
+                                         "X" : "data_X_quarter.npy",
+                                         "Y" : "data_Y_quarter.npy",
+                                         #"XYCap" : "data_XYCap_quarter.npy",
+                                         "CapRatios":"data_CapRatios_quarter.npy",
+                                         "Moda_prefix":"data_moda_",
+                                         "Moda_suffix":"_quarter.npy"
+
+                                         }
+):
     # TODO: Set if condition to get synthetic modalities.
 
     #    '''
@@ -503,12 +522,12 @@ def get_raw_train_test_data(moda_names=['sbidx', 'zmicro', 'zmacro_domestic', 'z
     if quarter_ID is not None:
         print("Running Load Quarter Based Data Function")
         # X, Y, XYCap, moda, cond = load_quarter_based_data(quarter_ID, cond_name, modality_names = moda_names)
-        data_dict = load_all_quarter_data(quarter_ID=quarter_ID, cond_name=cond_name, modality_names=moda_names)
+        data_dict = load_all_quarter_data(quarter_ID=quarter_ID, cond_name=cond_name, modality_names=moda_names, path_dict = path_dict, path_qtr_dict = path_qtr_dict)
         #TODO: Need Model Target Feature
         t = data_dict["data_Y_quarter_" + str(quarter_ID)].shape[0]
     else:
         #TODO: Need model target for t shape.
-        data_dict = load_all_quarter_data(quarter_ID=None, cond_name=cond_name, modality_names=moda_names, data_names = data_names)
+        data_dict = load_all_quarter_data(quarter_ID=None, cond_name=cond_name, modality_names=moda_names, data_names = data_names,path_dict = path_dict, path_qtr_dict = path_qtr_dict)
         t = data_dict["data_Y"].shape[0]
 
 
@@ -572,16 +591,17 @@ def GenerativeModels_ScenarioGen(traintest_sets_dict,cond_name = None,learning_r
             print("Model:", model,"Iteration:", i + 1,  " of ",
                   iterations, "Learning Rate:", learning_rate, "Epochs:", epoch,
                   "Conditionality Name:", cond_name)
+            print(model, " Modeling")
 
             if model.lower() == "mcvae":
-                print(model, " Modeling")
+                #print(model, " Modeling")
                 error, pred_moda = train_MCVAE(num_cond, cond_train, cond_test, mod_train,mod_test,
                                                learning_rate = learning_rate, epoch = epoch, conditional=True)
-                print(model," testing_error (mse):%.2f" % error)
-                tmp_error_obj.append(error)
+                #print(model," testing_error (mse):%.2f" % error)
+                #tmp_error_obj.append(error)
 
             if model.lower() in ["cvae", "vae"]:
-                print(model, " Modeling")
+                #print(model, " Modeling")
                 if model.lower() == "cvae":
                     conditional_tmp = True
                 elif model.lower() == "vae":
@@ -589,13 +609,20 @@ def GenerativeModels_ScenarioGen(traintest_sets_dict,cond_name = None,learning_r
                 else:
                     print("Setting Conditional to False")
                     conditional_tmp = False
-
                 error, pred_moda = train_CVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rate,epoch = epoch, conditional=conditional_tmp)
-                print(model," testing_error (mse):%.2f" % error)
-                tmp_error_obj.append(error)
-        print("Saving Estimations")
-        result_dict["_".join([model.lower(),"pred_moda"])] = pred_moda
-        print("Adding to Results List")
+
+
+            print(model," testing_error (mse):%.2f" % error)
+            print("Saving Error from iteration")
+            tmp_error_obj.append(error)
+
+            print("Saving Estimations")
+            # if type(pred_moda) is dict:
+            #     for y, j in enumerate(pred_moda.keys()):
+            #         result_dict["_".join([model.lower(), "pred_moda",str(y)])] = pred_moda[j]
+            # else:
+            result_dict["_".join([model.lower(),"pred_moda"])] = pred_moda
+            print("Adding to Results List")
         tmp_result_obj = torch.stack(tmp_error_obj)
         results_lst.append(tmp_result_obj)
 
@@ -697,9 +724,10 @@ def train_CVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_ra
     # build GAN/CGAN for each modality separately to evaluate the performance
     # for comparison
     modality_num = len(mod_train)
-
     modality_size = 1 # here refers to single modality
+    estimations_lst = list()
     m_error = 0
+
     print("Training Started!")
     for i in range(0, modality_num):
         # training procedure
@@ -727,11 +755,17 @@ def train_CVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_ra
         estimations = mVAE.inference(n=batch_size, cond=cond_test)[0] # select the only one result
         t_error = torch.nn.functional.mse_loss(estimations, mod_test[i])
         m_error = m_error + t_error
+        #Return Estimations per modalitiy.
+        #Save so it can be used correspondingly in LSTM part.
         print("Testing Done!")
+        print("Saving Modality:",i,"Estimations")
+        estimations_lst.append(estimations)
     print("Calculating Testing Error")
     print("m_error:", m_error)
     m_error = m_error / modality_num
-    return m_error, estimations
+    return m_error, estimations_lst
+
+
 
 def train_MCVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rate, conditional,use_cuda = False,epoch = 1000,layer_size = [128, 64, 32]):
     print("Model parameter initialization")
@@ -967,8 +1001,8 @@ def LSTM_BankPrediction( pred_moda ,traintest_sets_dict,learn_types = ["Only_Ymi
 
 
 
-def LSTM_BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativemodel = "mcvae"
-                      , lstm_lr = 1e-2, threshold = 1e-3, modelTarget = "Y"):
+def LSTM_BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativemodel = ["mcvae"]
+                      , lstm_lr = 1e-2, threshold = 1e-3, modelTarget = "Y", epoch = 1000):
     # traintest_sets_dict = traintest_sets_dict_qtr_0
     # ScenarioGenResults_dict = ScenarioGenResults_dict_qtr
     print("Comparison on LSTM models")
@@ -985,121 +1019,127 @@ def LSTM_BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativem
     dataset_subsets = [x for x in dataset_subsets if x !=[]]
 
 
+    for genmodel in generativemodel:
+        for subset in dataset_subsets:
+            tmp_dict_name = "&".join(["_".join(x.split("_")[2:]) for x in subset])
+            tmp_dict_name = tmp_dict_name + "&GenModel_" + genmodel
+            print("Features to be used:", tmp_dict_name)
+            print("Current Subset:", subset)
+            subset_test_tmp = [x.replace("trainset", "testset") for x in subset]
+            print("Create testset names from subset", subset_test_tmp)
 
-    for subset in dataset_subsets:
-        tmp_dict_name = "&".join(["_".join(x.split("_")[2:]) for x in subset])
-        print("Features to be used:", tmp_dict_name)
-        print("Current Subset:", subset)
-        subset_test_tmp = [x.replace("trainset", "testset") for x in subset]
-        print("Create testset names from subset", subset_test_tmp)
+            print("Set Raw Inputs")
+            print("Setting Training Input")
+            if len(subset) == 1 and not any("data_mod" in x for x in subset):
+                raw_inputs  = traintest_sets_dict[subset[0]]
+                print("Raw Training Set Input Shape:", raw_inputs.shape)
+                print("Setting Testing\Eval Input")
+                raw_eval_inputs = traintest_sets_dict[subset_test_tmp[0]]
+            elif len(subset) > 1 and not any("data_mod" in x for x in subset):
+                print("Setting Initial Training Input")
+                raw_inputs  = traintest_sets_dict[subset[0]]
+                print("Setting Initial Testing\Eval Input")
+                raw_eval_inputs = traintest_sets_dict[subset_test_tmp[0]]
+                for subcnt in range(1,len(subset)):
+                    print("Setting Training Input:", subcnt)
+                    raw_inputs = torch.cat((raw_inputs, traintest_sets_dict[subset[subcnt]]), dim=2)
+                    print("Setting Testing\Eval Input:", subcnt)
+                    raw_eval_inputs = torch.cat((raw_eval_inputs, traintest_sets_dict[subset_test_tmp[subcnt]]), dim=2)
+            elif len(subset) > 1 and any("data_mod" in x for x in subset):
 
-        print("Set Raw Inputs")
-        print("Setting Training Input")
-        if len(subset) == 1 and not any("data_mod" in x for x in subset):
-            raw_inputs  = traintest_sets_dict[subset[0]]
-            print("Raw Training Set Input Shape:", raw_inputs.shape)
-            print("Setting Testing\Eval Input")
-            raw_eval_inputs = traintest_sets_dict[subset_test_tmp[0]]
-        elif len(subset) > 1 and not any("data_mod" in x for x in subset):
-            print("Setting Initial Training Input")
-            raw_inputs  = traintest_sets_dict[subset[0]]
-            print("Setting Initial Testing\Eval Input")
-            raw_eval_inputs = traintest_sets_dict[subset_test_tmp[0]]
-            for subcnt in range(1,len(subset)):
-                print("Setting Training Input:", subcnt)
-                raw_inputs = torch.cat((raw_inputs, traintest_sets_dict[subset[subcnt]]), dim=2)
-                print("Setting Testing\Eval Input:", subcnt)
-                raw_eval_inputs = torch.cat((raw_eval_inputs, traintest_sets_dict[subset_test_tmp[subcnt]]), dim=2)
-        elif len(subset) > 1 and any("data_mod" in x for x in subset):
+                print("Create subset without modality dataset")
+                subset_train_tmp = [x for x in subset if not x.endswith("data_mod")]
+                print("Setting Initial Training Input")
+                raw_inputs = traintest_sets_dict[subset_train_tmp[0]]
+                print("Setting Initial Testing\Eval Input")
+                subset_test_tmp = [x.replace("trainset", "testset") for x in subset_train_tmp]
+                raw_eval_inputs = traintest_sets_dict[subset_test_tmp[0]]
+                for subcnt in range(1, len(subset_train_tmp)):
+                    print("Setting Training Input:", subcnt)
+                    raw_inputs = torch.cat((raw_inputs, traintest_sets_dict[subset_train_tmp[subcnt]]), dim=2)
+                    print("Setting Testing\Eval Input:", subcnt)
+                    raw_eval_inputs = torch.cat((raw_eval_inputs, traintest_sets_dict[subset_test_tmp[subcnt]]), dim=2)
 
-            print("Create subset without modality dataset")
-            subset_train_tmp = [x for x in subset if not x.endswith("data_mod")]
-            print("Setting Initial Training Input")
-            raw_inputs = traintest_sets_dict[subset_train_tmp[0]]
-            print("Setting Initial Testing\Eval Input")
-            subset_test_tmp = [x.replace("trainset", "testset") for x in subset_train_tmp]
-            raw_eval_inputs = traintest_sets_dict[subset_test_tmp[0]]
-            for subcnt in range(1, len(subset_train_tmp)):
-                print("Setting Training Input:", subcnt)
-                raw_inputs = torch.cat((raw_inputs, traintest_sets_dict[subset_train_tmp[subcnt]]), dim=2)
-                print("Setting Testing\Eval Input:", subcnt)
-                raw_eval_inputs = torch.cat((raw_eval_inputs, traintest_sets_dict[subset_test_tmp[subcnt]]), dim=2)
+                print("Append Modality Data to Tensor")
+                #Maybe consider running with all different gen models at once
+                print("Assigning Predicted Modality Estimates")
+                # if generativemodel in ["cvae","vae"]:
+                #
+                # else:
+                pred_moda = ScenarioGenResults_dict["_".join([generativemodel,"pred","moda"])]
+                print("Assigning Modality Training and Testing Key names")
+                modTrain = [x for x in subset if x.endswith("data_mod")][0]
+                modTest = [x.replace("trainset","testset") for x in subset if x.endswith("data_mod")][0]
+                temp_eval_moda = pred_moda[0]
+                temp_moda = traintest_sets_dict[modTrain][0]  # train_sets[0][0]
+                print("Iterating Modalities and adding to Tensor")
+                #TODO:IF other generative models, may have to run each modality seperately.
+                #TODO:For single modality models, have to match pred moda to equivalent modality.
+                #TODO:Have to evaluate model per modality.
+                for i in range(1, len(traintest_sets_dict[modTrain])):
+                    temp_moda = torch.cat((temp_moda, traintest_sets_dict[modTrain][i]), dim=1)
+                    temp_eval_moda = torch.cat((temp_eval_moda, pred_moda[i]), dim=1)
+                raw_moda = temp_moda.expand_as(torch.zeros([raw_inputs.shape[0], temp_moda.shape[0], temp_moda.shape[1]]))
+                raw_eval_moda = temp_eval_moda.expand_as(
+                    torch.zeros([raw_eval_inputs.shape[0], temp_eval_moda.shape[0], temp_eval_moda.shape[1]]))
+                raw_inputs = torch.cat((raw_inputs, raw_moda.double()), dim=2)
+                raw_eval_inputs = torch.cat((raw_eval_inputs, raw_eval_moda.double()), dim=2)
+            else:
+                print("Skipping this scenario")
+                continue
+            print("Setting Inputs and Target Parameters for Training")
+            model_raw_target_keyname = [x for x in traintest_sets_dict.keys() if x.startswith("trainset") if x.endswith(modelTarget)][0]
+            model_raw_eval_target_keyname = [x for x in traintest_sets_dict.keys() if x.startswith("testset") if x.endswith(modelTarget)][0]
+            raw_targets = traintest_sets_dict[model_raw_target_keyname]
+            raw_eval_targets = traintest_sets_dict[model_raw_eval_target_keyname]
 
-            print("Append Modality Data to Tensor")
-            #Maybe consider running with all different gen models at once
-            print("Assigning Predicted Modality Estimates")
-            pred_moda = ScenarioGenResults_dict["_".join([generativemodel,"pred","moda"])]
-            print("Assigning Modality Training and Testing Key names")
-            modTrain = [x for x in subset if x.endswith("data_mod")][0]
-            modTest = [x.replace("trainset","testset") for x in subset if x.endswith("data_mod")][0]
-            temp_eval_moda = pred_moda[0]
-            temp_moda = traintest_sets_dict[modTrain][0]  # train_sets[0][0]
-            print("Iterating Modalities and adding to Tensor")
-            #IF other generative models, may have to run each modality seperately.
-            for i in range(1, len(traintest_sets_dict[modTrain])):
-                temp_moda = torch.cat((temp_moda, traintest_sets_dict[modTrain][i]), dim=1)
-                temp_eval_moda = torch.cat((temp_eval_moda, pred_moda[i]), dim=1)
-            raw_moda = temp_moda.expand_as(torch.zeros([raw_inputs.shape[0], temp_moda.shape[0], temp_moda.shape[1]]))
-            raw_eval_moda = temp_eval_moda.expand_as(
-                torch.zeros([raw_eval_inputs.shape[0], temp_eval_moda.shape[0], temp_eval_moda.shape[1]]))
-            raw_inputs = torch.cat((raw_inputs, raw_moda.double()), dim=2)
-            raw_eval_inputs = torch.cat((raw_eval_inputs, raw_eval_moda.double()), dim=2)
-        else:
-            print("Skipping this scenario")
-            continue
-        print("Setting Inputs and Target Parameters for Training")
-        model_raw_target_keyname = [x for x in traintest_sets_dict.keys() if x.startswith("trainset") if x.endswith(modelTarget)][0]
-        model_raw_eval_target_keyname = [x for x in traintest_sets_dict.keys() if x.startswith("testset") if x.endswith(modelTarget)][0]
-        raw_targets = traintest_sets_dict[model_raw_target_keyname]
-        raw_eval_targets = traintest_sets_dict[model_raw_eval_target_keyname]
-
-        print("Setting up Dimensions for inputs and targets for Training LSTM model")
-        n, t, m1 = raw_inputs.shape
-        m2 = raw_targets.shape[2]
-        inputs_train = torch.zeros([t, m1, n]).float()
-        targets_train = torch.zeros([t, n, m2]).float()
-        for i in range(0, n):
-            inputs_train[:, :, i] = raw_inputs[i, :, :]
-            targets_train[:, i, :] = raw_targets[i, :, :]
+            print("Setting up Dimensions for inputs and targets for Training LSTM model")
+            n, t, m1 = raw_inputs.shape
+            m2 = raw_targets.shape[2]
+            inputs_train = torch.zeros([t, m1, n]).float()
+            targets_train = torch.zeros([t, n, m2]).float()
+            for i in range(0, n):
+                inputs_train[:, :, i] = raw_inputs[i, :, :]
+                targets_train[:, i, :] = raw_targets[i, :, :]
 
 
-        print("Training LSTM model")
-        m_lstm, train_loss = m_LSTM.train(inputs_train, targets_train, 100, lstm_lr, threshold)
+            print("Training LSTM model")
+            m_lstm, train_loss = m_LSTM.train(inputs_train, targets_train, epoch, lstm_lr, threshold)
 
 
 
-        print("Calculating Training RMSE")
-        rmse_train_list.append(train_loss)
-        print("%s\terror:\t%.5f" % (tmp_dict_name, train_loss))
+            print("Calculating Training RMSE")
+            rmse_train_list.append(train_loss)
+            print("%s\terror:\t%.5f" % (tmp_dict_name, train_loss))
 
-        print("Setting up Dimensions for inputs and targets for Training LSTM model")
-        n, t, m1 = raw_eval_inputs.shape
-        m2 = raw_eval_targets.shape[2]
-        inputs_test = torch.zeros([t, m1, n]).float()
-        targets_test = torch.zeros([t, n, m2]).float()
-        for i in range(0, n):
-            inputs_test[:, :, i] = raw_eval_inputs[i, :, :]
-            targets_test[:, i, :] = raw_eval_targets[i, :, :]
+            print("Setting up Dimensions for inputs and targets for Training LSTM model")
+            n, t, m1 = raw_eval_inputs.shape
+            m2 = raw_eval_targets.shape[2]
+            inputs_test = torch.zeros([t, m1, n]).float()
+            targets_test = torch.zeros([t, n, m2]).float()
+            for i in range(0, n):
+                inputs_test[:, :, i] = raw_eval_inputs[i, :, :]
+                targets_test[:, i, :] = raw_eval_targets[i, :, :]
 
-        print("Running Predictions on Inputs using Trained Model: Testing Error")
-        pred = m_LSTM.predict(m_lstm, inputs_test)
+            print("Running Predictions on Inputs using Trained Model: Testing Error")
+            pred = m_LSTM.predict(m_lstm, inputs_test)
 
-        print("Calculating Testing RMSE")
-        rmse = torch.nn.functional.mse_loss(pred, targets_test)
-        rmse_lst.append(rmse)
-        learn_types_list.append(tmp_dict_name)
-        print("%s\terror:\t%.5f" % (tmp_dict_name, rmse))
+            print("Calculating Testing RMSE")
+            rmse = torch.nn.functional.mse_loss(pred, targets_test)
+            rmse_lst.append(rmse)
+            learn_types_list.append(tmp_dict_name)
+            print("%s\terror:\t%.5f" % (tmp_dict_name, rmse))
 
-        # print("Graphical Visualization")
-        # # # Graphical LSTM MSE representaiton.
-        # with torch.no_grad():
-        #     prediction = m_lstm.forward(targets_test).view(-1)
-        #     loss = nn.MSELoss(prediction, targets_test)
-        #     plt.title("MESLoss: {:.5f}".format(loss))
-        #     plt.plot(prediction.detach().numpy(), label="pred")
-        #     plt.plot(targets_test.detach().numpy(), label="true")
-        #     plt.legend()
-        #     plt.show()
+            # print("Graphical Visualization")
+            # # # Graphical LSTM MSE representaiton.
+            # with torch.no_grad():
+            #     prediction = m_lstm.forward(targets_test).view(-1)
+            #     loss = nn.MSELoss(prediction, targets_test)
+            #     plt.title("MESLoss: {:.5f}".format(loss))
+            #     plt.plot(prediction.detach().numpy(), label="pred")
+            #     plt.plot(targets_test.detach().numpy(), label="true")
+            #     plt.legend()
+            #     plt.show()
 
     rmse_train_lst_sk = torch.stack(rmse_train_list)
     rmse_lst_sk = torch.stack(rmse_lst)
@@ -1140,6 +1180,7 @@ ScenarioGenResults_dict = GenerativeModels_ScenarioGen(traintest_sets_dict, lear
 
 #LSTM Bank Performance Prediction based on modality estimations and Banking data features.
 #TODO: Add visualizations
+#TODO: Fix so the results of other generative models can be shown
 BankPredEval = LSTM_BankPerfPred(ScenarioGenResults_dict,traintest_sets_dict, generativemodel = "mcvae", modelTarget= "Y")
 
 
@@ -1155,6 +1196,93 @@ traintest_sets_dict_qtr  = get_raw_train_test_data(quarter_ID = quarter_ID, cond
 ScenarioGenResults_dict_qtr = GenerativeModels_ScenarioGen(traintest_sets_dict_qtr, learning_rate = 1e-4 , iterations = 1, epoch = 1000, models=["mcvae"])
 
 BankPredEval_qtr = LSTM_BankPerfPred(ScenarioGenResults_dict_qtr,traintest_sets_dict_qtr, generativemodel = "mcvae", modelTarget= modelTarget)
+
+
+
+#Try with merged data.
+#Merged full
+path_dict = {"path_root": os.path.join(os.getcwd(), "data/"),
+             "X": "data_X_mergered.npy",
+             "Y": "data_Y_mergered.npy",
+             "CapRatios": "data_CapRatios_mergered.npy",
+             "Moda_prefix": "data_moda_",
+             "Moda_suffix": ".npy"
+
+             }
+path_qtr_dict = {"path_root": os.path.join(os.getcwd(), "data/quarter_based/"),
+                 "X": "data_X_quarter_mergered.npy",
+                 "Y": "data_Y_quarter_mergered.npy",
+                 "CapRatios": "data_CapRatios_quarter_mergered.npy",
+                 "Moda_prefix": "data_moda_",
+                 "Moda_suffix": "_quarter.npy"
+
+                 }
+
+
+#Set Training and Testing Windows
+
+#Time Split
+train_window = [1,88]
+test_window = [89,107]
+
+#TODO: Should Consider Bank Split training and testing sets.
+#TODO: The paper predicts for Loss Loss Rate as a combined aggregate
+#TODO: They are able to get a capital ratio for case study part per scenario per year.
+#TODO: May need to run for all scenarios, then join to ground truth data based on proximity from prediction to bank.
+os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/")
+
+traintest_sets_dict  = get_raw_train_test_data(quarter_ID = None, cond_name = "zmicro", moda_names = ['zmicro', 'zmacro_domestic', 'zmacro_international']
+                                               ,train_window = train_window, test_window = test_window
+                                               , data_names = ["X","Y","CapRatios"], path_dict= path_dict, path_qtr_dict= path_qtr_dict)
+
+ScenarioGenResults_dict = GenerativeModels_ScenarioGen(traintest_sets_dict, learning_rate = 1e-4 , iterations = 1, epoch = 1000, models=["mcvae","cvae","vae"])
+
+#TODO: If predicting Y or Capital Ration, cannot use Capital Ratios or Y at time T
+#TODO: Add exclusions logic of features.
+#Fix bug with generative model iteration of pred_modality
+BankPredEval = LSTM_BankPerfPred(ScenarioGenResults_dict,traintest_sets_dict, generativemodel = ["vae"], modelTarget= "Y", epoch = 50)
+BankPredEval = LSTM_BankPerfPred(ScenarioGenResults_dict,traintest_sets_dict, generativemodel = "mcvae", modelTarget= "CapRatios", epoch = 50)
+
+
+
+
+#Try with merged data.
+#Merged , quarterly.
+
+
+quarter_ID = 0
+path_qtr_dict = {"path_root": os.path.join(os.getcwd(), "data/quarter_based/"),
+                 "X": "data_X_mergered_quarter.npy",
+                 "Y": "data_Y_mergered_quarter.npy",
+                 "CapRatios": "data_CapRatios_mergered_quarter.npy",
+                 "Moda_prefix": "data_moda_",
+                 "Moda_suffix": "_quarter.npy"
+
+                 }
+
+
+
+#Set Training and Testing Windows
+
+#Time Split
+train_window = [1,24]
+test_window = [25,26]
+
+#TODO: Should Consider Bank Split training and testing sets.
+
+os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/")
+
+traintest_sets_dict  = get_raw_train_test_data(quarter_ID = quarter_ID, cond_name = "zmicro", moda_names = ['zmicro', 'zmacro_domestic', 'zmacro_international']
+                                               ,train_window = train_window, test_window = test_window
+                                               , data_names = ["X","Y","CapRatios"], path_dict= path_dict, path_qtr_dict= path_qtr_dict)
+
+ScenarioGenResults_dict = GenerativeModels_ScenarioGen(traintest_sets_dict, learning_rate = 1e-4 , iterations = 1, epoch = 1000, models=["mcvae"])
+
+ScenarioGenResults_dict.keys()
+
+BankPredEval = LSTM_BankPerfPred(ScenarioGenResults_dict,traintest_sets_dict, generativemodel = "mcvae", modelTarget= "Y_quarter_" + str(quarter_ID))
+
+BankPredEval = LSTM_BankPerfPred(ScenarioGenResults_dict,traintest_sets_dict, generativemodel = "mcvae", modelTarget=  "CapRatios_quarter_" + str(quarter_ID), epoch = 50)
 
 
 
