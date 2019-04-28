@@ -20,9 +20,10 @@ from torch.autograd import Variable
 #from GAN import GAN .
 from MultiVAE import m_MCVAE
 from MultiVAE import m_LSTM
+from GAN_CGAN import m_CGAN
 
-
-
+import importlib
+importlib.reload(m_CGAN)
 
 def elbo_loss(output_modalities, output_estimations, mu, logvar):
 
@@ -559,32 +560,29 @@ def GenerativeModels_ScenarioGen(traintest_sets_dict,cond_name = None,learning_r
     elif cond_name is None and "cond_name" not in traintest_sets_dict:
         print("Missing Conditional Modality name parameter.")
 
-
-
-    print("Initializing  Objects")
-    print("Setting number of conditional dimensions")
-    num_cond = traintest_sets_dict['cond_num']
-
-    print("Assigning conditional modality training set")
-    for key in [x for x in traintest_sets_dict.keys() if x.startswith("trainset_data_cond")]:
-        cond_train = traintest_sets_dict[key]
-    print("Assigning conditional modality testing set")
-    for key in [x for x in traintest_sets_dict.keys() if x.startswith("testset_data_cond")]:
-        cond_test = traintest_sets_dict[key]
-    print("Assigning modality training set")
-    for key in [x for x in traintest_sets_dict.keys() if x.startswith("trainset_data_mod")]:
-        mod_train = traintest_sets_dict[key]
-    print("Assigning conditional modality testing set")
-    for key in [x for x in traintest_sets_dict.keys() if x.startswith("testset_data_mod")]:
-        mod_test = traintest_sets_dict[key]
-
-
     print("Running Iterative Loop of the Models")
     print("Initalize Results List")
     result_dict = dict()
     results_lst = list()
 
     for model in models:
+        print("Initializing  Objects")
+        print("Setting number of conditional dimensions")
+        num_cond = traintest_sets_dict['cond_num']
+
+        print("Assigning conditional modality training set")
+        for key in [x for x in traintest_sets_dict.keys() if x.startswith("trainset_data_cond")]:
+            cond_train = traintest_sets_dict[key]
+        print("Assigning conditional modality testing set")
+        for key in [x for x in traintest_sets_dict.keys() if x.startswith("testset_data_cond")]:
+            cond_test = traintest_sets_dict[key]
+        print("Assigning modality training set")
+        for key in [x for x in traintest_sets_dict.keys() if x.startswith("trainset_data_mod")]:
+            mod_train = traintest_sets_dict[key]
+        print("Assigning conditional modality testing set")
+        for key in [x for x in traintest_sets_dict.keys() if x.startswith("testset_data_mod")]:
+            mod_test = traintest_sets_dict[key]
+
         tmp_result_obj = []
         tmp_error_obj = []
         for i in range(0, iterations):
@@ -594,14 +592,10 @@ def GenerativeModels_ScenarioGen(traintest_sets_dict,cond_name = None,learning_r
             print(model, " Modeling")
 
             if model.lower() == "mcvae":
-                #print(model, " Modeling")
-                error, pred_moda = train_MCVAE(num_cond, cond_train, cond_test, mod_train,mod_test,
-                                               learning_rate = learning_rate, epoch = epoch, conditional=True)
-                #print(model," testing_error (mse):%.2f" % error)
-                #tmp_error_obj.append(error)
+
+                error, pred_moda = train_MCVAE(num_cond, cond_train, cond_test, mod_train,mod_test, learning_rate = learning_rate, epoch = epoch, conditional=True)
 
             if model.lower() in ["cvae", "vae"]:
-                #print(model, " Modeling")
                 if model.lower() == "cvae":
                     conditional_tmp = True
                 elif model.lower() == "vae":
@@ -610,17 +604,24 @@ def GenerativeModels_ScenarioGen(traintest_sets_dict,cond_name = None,learning_r
                     print("Setting Conditional to False")
                     conditional_tmp = False
                 error, pred_moda = train_CVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rate,epoch = epoch, conditional=conditional_tmp)
+                #TODO: May need to fix the way the errors are averaged and modalities are saved
+            if model.lower() in ["gan", "cgan"]:
+                error = 0
+                estmimation_lst = []
+                if model.lower() == "cgan":
+                    conditional_tmp = True
+                elif model.lower() == "gan":
+                    conditional_tmp = False
 
-
+                for j in range(0,len(mod_train)):
+                    tmp_error, pred_moda = m_CGAN.train_GAN(num_cond, cond_train, cond_test, mod_train[j], mod_test[j], learning_rate, epoch=epoch, conditional=conditional_tmp)
+                    error = error + tmp_error
+                    estmimation_lst.append(pred_moda)
             print(model," testing_error (mse):%.2f" % error)
             print("Saving Error from iteration")
             tmp_error_obj.append(error)
 
             print("Saving Estimations")
-            # if type(pred_moda) is dict:
-            #     for y, j in enumerate(pred_moda.keys()):
-            #         result_dict["_".join([model.lower(), "pred_moda",str(y)])] = pred_moda[j]
-            # else:
             result_dict["_".join([model.lower(),"pred_moda"])] = pred_moda
             print("Adding to Results List")
         tmp_result_obj = torch.stack(tmp_error_obj)
@@ -1235,7 +1236,7 @@ traintest_sets_dict  = get_raw_train_test_data(quarter_ID = None, cond_name = "z
                                                ,train_window = train_window, test_window = test_window
                                                , data_names = ["X","Y","CapRatios"], path_dict= path_dict, path_qtr_dict= path_qtr_dict)
 
-ScenarioGenResults_dict = GenerativeModels_ScenarioGen(traintest_sets_dict, learning_rate = 1e-4 , iterations = 1, epoch = 1000, models=["mcvae","cvae","vae"])
+ScenarioGenResults_dict = GenerativeModels_ScenarioGen(traintest_sets_dict, learning_rate = 1e-4 , iterations = 1, epoch = 1000, models=["mcvae","gan", "cgan"])
 
 #TODO: If predicting Y or Capital Ration, cannot use Capital Ratios or Y at time T
 #TODO: Add exclusions logic of features.
