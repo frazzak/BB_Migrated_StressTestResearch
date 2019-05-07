@@ -1177,27 +1177,88 @@ CapitalRatios_merged = preprocess_loadMySQL(BankPerf["BankPerf_Mergered_XYcalc_S
                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
                          , tbl_name = "CapitalRatio_merged", if_exists = "replace")
 
+
+X_Y_Cap_merged = preprocess_loadMySQL(BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"], datatype = "X_Y_Cap"
+                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+                         , tbl_name = "X_Y_Cap_merged", if_exists = "replace")
+
+#Need to add logic to show partials
+
 Z_macro_domestic = Z_macro['Historic_Domestic'][(pd.to_datetime(Z_macro['Historic_Domestic']['Date']) <= "2017-12-31") & (pd.to_datetime(Z_macro['Historic_Domestic']['Date']) >= "1990-01-01")]
 
 Z_macro_domestic_mysql = preprocess_loadMySQL(Z_macro_domestic, datatype = "zmacro_Domestic"
                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "Zmacro_domestic_1", if_exists = "replace")
+                         , tbl_name = "Zmacro_domestic", if_exists = "replace")
 
 
 Z_macro_international = Z_macro['Historic_International'][(pd.to_datetime(Z_macro['Historic_International']['Date']) <= "2017-12-31") & (pd.to_datetime(Z_macro['Historic_International']['Date']) >= "1990-01-01")]
 
 Z_macro_international_mysql = preprocess_loadMySQL(Z_macro_international, datatype = "ZMacro_International"
                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "ZMacro_International_1", if_exists = "replace")
+                         , tbl_name = "ZMacro_International", if_exists = "replace")
+
+#BankPerf_bckp = BankPerf
+#BankPerf = BankPerf_bckp
+# BankPerf = BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"]
+#
+# #Merge with Dates
+#
+# RepordingDate_Df = pd.DataFrame(BankPerf["BankPerf_ConsecutiveReduced_XYcalc"]["ReportingDate"].unique())
+# RepordingDate_Df = RepordingDate_Df.rename({0:"ReportingDate"}, axis = 1)
+# RepordingDate_Df["key"] = 0
+#
+# BankIds_Df = pd.DataFrame(BankPerf["BankPerf_ConsecutiveReduced_XYcalc"]["RSSD_ID"].unique())
+# BankIds_Df = BankIds_Df.rename({0:"RSSD_ID"}, axis = 1)
+# BankIds_Df["key"] = 0
+#
+# BankID_Date_Ref = RepordingDate_Df.assign(foo=1).merge(BankIds_Df.assign(foo=1), on = "foo",how = "outer" ).drop(["foo","key_x","key_y"],1)
+#
+#
+#
+#
+#
+# list(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].keys())
+# #Creating Frame Joined to Dates.
+# BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"] = BankID_Date_Ref.merge(BankPerf["BankPerf_ConsecutiveReduced_XYcalc"], left_on = ["ReportingDate","RSSD_ID"], right_on = ["ReportingDate","RSSD_ID"], how = "left")
+# #BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].sort_values(["RSSD_ID",0])
+# #BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"] = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].drop("ReportingDate", axis = 1)
+# #BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"] = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].rename({0:"ReportingDate"}, axis = 1)
+# BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"]["ReportingDate"] =  pd.to_datetime(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].ReportingDate).dt.year.astype(str) + " Q" + pd.to_datetime(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].ReportingDate).dt.quarter.astype(str)
+#
 
 
 
 
+
+#BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].sort_values(["RSSD_ID", "ReportingDate"])
+
+Preprocess_Dict = dict()
+Preprocess_Dict['X'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "X"
+                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+                         , tbl_name = "X", if_exists = "replace")
+
+Preprocess_Dict['Y'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "Y"
+                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+                         , tbl_name = "Y", if_exists = "replace")
+
+Preprocess_Dict['CapitalRatios']= preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "XYCap"
+                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+                         , tbl_name = "CapitalRatio", if_exists = "replace")
+
+
+Preprocess_Dict['X_Y_Cap'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "X_Y_Cap"
+                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+                         , tbl_name = "X_Y_Cap", if_exists = "replace")
+
+Preprocess_Dict['CapRatios'] = Preprocess_Dict['X_Y_Cap'][["RSSD_ID", "ReportingDate","Other items:T1CR"]]
+Preprocess_Dict['NCO'] = Preprocess_Dict['X_Y_Cap'][["RSSD_ID", "ReportingDate", "Other items:Net Charge Offs"]]
+
+#May have to create the join to the dates so all RSSD_IDS have date info. rather than partials.
 def preprocess_loadMySQL(BankPerf, datatype = "X"
                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "TempDF", if_exists = "replace"):
+                         , tbl_name = "TempDF", if_exists = "replace", upload_df_db = False):
 
-        if datatype in ["X","X_tminus1","Y","Y_tminus1","CapRatios","CapRatios_tminus1","XYCap", "XYCap_tminus1"]:
+        if datatype in ["X","X_tminus1","Y","Y_tminus1","CapRatios","CapRatios_tminus1","XYCap", "XYCap_tminus1", "X_Y_Cap"]:
             if not BankPerf.ReportingDate.apply(lambda x: x.split(" ")[1][0]).unique() == "Q":
                 print("Converting Date to YYYY Q# format")
                 BankPerf.ReportingDate = BankPerf.ReportingDate.dt.year.astype(str) + " Q" + BankPerf.ReportingDate.dt.quarter.astype(str)
@@ -1276,6 +1337,36 @@ def preprocess_loadMySQL(BankPerf, datatype = "X"
             elif datatype == "Y_minus1":
                 BankPerf = BankPerf[BankPerf.columns[(pd.Series(BankPerf.columns).str.startswith(
                     ("RSSD_ID", "ReportingDate", "ncoR:", "ppnrRatio:"))) & (pd.Series(BankPerf.columns).str.endswith("_t-1"))]]
+
+            elif datatype == "X_Y_Cap":
+                BankPerf =BankPerf[BankPerf.columns[pd.Series(BankPerf.columns).str.endswith(("RSSD_ID",
+                                                                                               "ReportingDate",
+                                                                                               "Loans categories:Commercial & industrial_Covas",
+                                                                                               "Loans categories:Construction & land development",
+                                                                                               "Loans categories:Multifamily real estate",
+                                                                                               "Loans categories:Nonfarm nonresidential CRE_Covas",
+                                                                                               "Loans categories:Home equity lines of credit",
+                                                                                               "Loans categories:Residential real estate (excl. HELOCs)_Covas",
+                                                                                               "Loans categories:Credit card",
+                                                                                               "Loans categories:Consumer (excl. credit card)_Covas"))]
+                                                                                            | BankPerf.columns[(pd.Series(BankPerf.columns).str.startswith(
+                                                                                            ("RSSD_ID", "ReportingDate", "ncoR:", "ppnrRatio:"))) & (~pd.Series(BankPerf.columns).str.endswith("_t-1"))]
+
+                                                                                            | BankPerf.columns[pd.Series(BankPerf.columns).str.endswith(("Chargeoffs",
+                                                                                                                                                       "Recoveries",
+                                                                                                                                                       "Net income(loss)",
+                                                                                                                                                       "Less:Cash dividends on perp perf stock",
+                                                                                                                                                       "Total Equity_1",
+                                                                                                                                                       "Total Equity_2",
+                                                                                                                                                       "Other items:Book equity",
+                                                                                                                                                       "Other items:Dividends",
+                                                                                                                                                       "Other items:Stock purchases",
+                                                                                                                                                       "Other items:Risk-weighted assets",
+                                                                                                                                                       "Other items:Tier 1 common equity",
+                                                                                                                                                          "Other items:T1CR"))]]
+                print("Calculation Net Charge Offs")
+                BankPerf["Other items:Net Charge Offs"] = BankPerf["Chargeoffs"] - BankPerf["Recoveries"]
+
         else:
 
             if datatype.lower() in ["zmacro_domestic", "zmacro_international"]:
@@ -1290,19 +1381,22 @@ def preprocess_loadMySQL(BankPerf, datatype = "X"
 
 
 
+
         print("Saving Object to file")
         BankPerf.to_csv("./" + datatype +".csv" , sep=",", index=False)
         print(BankPerf.describe().transpose())
         print(BankPerf.keys())
-        tmp_df = BankPerf
-        print("Creating Connection to MySQL server")
-        engine = create_engine(server
-                               .format(user=user,
-                                       pw=pw,
-                                       db=db))
-        print("Upload dataframe to Database")
-        tmp_df.to_sql(name=tbl_name, con=engine,  if_exists= if_exists, index=False, index_label=None)
-        return("Complete")
+
+        if upload_df_db:
+            tmp_df = BankPerf
+            print("Creating Connection to MySQL server")
+            engine = create_engine(server
+                                   .format(user=user,
+                                           pw=pw,
+                                           db=db))
+            print("Upload dataframe to Database")
+            tmp_df.to_sql(name=tbl_name, con=engine,  if_exists= if_exists, index=False, index_label=None)
+        return(BankPerf)
 
 
 

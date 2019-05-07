@@ -12,63 +12,67 @@ import os
 #TODO: Get all partial data, not just banks with quarters that match window.
 #TODO: Load Merged Bank Data.
 #TODO: May not need to transform RSSD by RSSD for all banks. find way to transform whole fetched cursor at once
-def request_data(data_type):
+def request_data(data_type = "X", rssd_reportingdate_base_tble = "X_Y_Cap", ReportingDate_Start = "1990 Q1", ReportingDate_End = "2016 Q4" , qtr_count_val =108,
+                 host = "localhost", db = 'STR', user = "root", passwd = "",
+                 Y_tble = "X_Y_Cap", X_tble = "X_Y_Cap", XYCap_tble = "X_Y_Cap", CreateNewRefTable = False, BankLimit = 50):
     #data_type = "XY_Cap"
-    db = msql.connect(host = "localhost", db = 'STR', user = "root", passwd = "")
+    db = msql.connect(host = host , db =db , user = user , passwd = passwd )
     cursor = db.cursor()
+    #Create temp cross joined table for Reporting Dates and RSSD_IDs to consider all data
+    #
+    # if CreateNewRefTable:
+    #     sql = "DROP TABLE IF EXISTS TEMPREF_ID_DATES; "
+    #     t = cursor.execute(sql)
+    # else:
+    #     print("Using Previously Existing Ref Table")
+    #
+    #
+    # sql = "CREATE TABLE IF NOT EXISTS TEMPREF_ID_DATES AS select * from (SELECT DISTINCT ReportingDate from %s where ReportingDate >= '%s' and ReportingDate <= '%s' ) a  CROSS JOIN (SELECT DISTINCT RSSD_ID from %s) b;" % (
+    # rssd_reportingdate_base_tble, ReportingDate_Start, ReportingDate_End, rssd_reportingdate_base_tble)
+    #
+    # print("Executing Query to Create Ref list for RSSD_ID and Dates")
+    # t = cursor.execute(sql)
+    # print("TempRef_ID_Dates:", t)
+    #Update to get from 1 table.
 
-    
-    #sql = "select distinct RSSD_ID from xij_2 where RSSD_ID in (select distinct RSSD_ID from yij_2)"
-    if data_type in ["Y_full", "X_full","XYCap_full", "CapRatios_full"]:
-        sql = "select x.RSSD_ID" \
-              " FROM (SELECT DISTINCT (a.RSSD_ID) FROM" \
-              " (SELECT RSSD_ID, COUNT(*) FROM STR.xij_2" \
-              " GROUP BY RSSD_ID) a ) x" \
-              " join (SELECT DISTINCT RSSD_ID from STR.yij_2) y on x.RSSD_ID = y.RSSD_id"
-    elif data_type in ["Y_full_mergered", "X_full_mergered","XYCap_full_mergered", "CapRatios_full_mergered"]:
-        sql = "select x.RSSD_ID" \
-              " FROM (SELECT DISTINCT (a.RSSD_ID) FROM" \
-              " (SELECT RSSD_ID, COUNT(*) FROM STR.X_merged" \
-              " GROUP BY RSSD_ID) a ) x" \
-              " join (SELECT DISTINCT RSSD_ID from STR.Y_merged) y on x.RSSD_ID = y.RSSD_id"
-    elif data_type in ["X_mergered", "Y_mergered","CapRatios_mergered", "XYCap_mergered"]:
-        sql = "select x.RSSD_ID" \
-              " FROM (SELECT DISTINCT (a.RSSD_ID) FROM" \
-              " (SELECT RSSD_ID, COUNT(*) FROM STR.X_merged" \
-              " GROUP BY RSSD_ID HAVING COUNT(*) > 108) a ) x" \
-              " join (SELECT DISTINCT RSSD_ID from STR.Y_merged) y on x.RSSD_ID = y.RSSD_id"
-    else:
-        sql = "select x.RSSD_ID" \
-            " FROM (SELECT DISTINCT (a.RSSD_ID) FROM" \
-            " (SELECT RSSD_ID, COUNT(*) FROM STR.xij_2" \
-            " GROUP BY RSSD_ID HAVING COUNT(*) > 108) a ) x" \
-            " join (SELECT DISTINCT RSSD_ID from STR.yij_2) y on x.RSSD_ID = y.RSSD_id"
 
+    sql = "select DISTINCT ReportingDate" \
+          " FROM %s where ReportingDate >= '%s' and ReportingDate <= '%s'" % (rssd_reportingdate_base_tble, ReportingDate_Start, ReportingDate_End)
+    print("Executing Query for ReportingDate Counts")
+    t = cursor.execute(sql)
+
+    print("ReportingDate Quarters:", t)
+    qtr_count = t
+
+
+    sql = "select DISTINCT RSSD_ID" \
+        " FROM %s limit %s" % (rssd_reportingdate_base_tble, BankLimit)
 
     print("Executing Query for Bank RSSD_IDs")
     t = cursor.execute(sql)
     print("Bank Count:", t)
-    #print(t)
+    bank_count = t
+
     bank_ids = cursor.fetchall()
     
-    # the temporal data starts from 1990 Q1 ends at 2016 Q4
-    # that is totally 108 records per bank on each loan category
-    if data_type in ["Y", "Y_full", "Y_mergered", "Y_full_mergered"]:
-        results = np.zeros([1, 108, 14])
-    elif data_type in ["X","XY_Cap", "X_full","XY_Cap_Full","CapRatios_full", "X_mergered", "X_full_mergered"]:
-        results = np.zeros([1, 108, 8])
-    elif data_type in  ["CapRatios","CapRatios_mergered", "CapRatios_full","CapRatios_full_mergered"]:
-        results = np.zeros([1, 108, 1])
+
+    #TODO: Make dimensions part dynamic
+    #TODO: Make pivot to numpy array faster
+    if data_type in ["Y",]:
+        print(data_type)
+        results = np.zeros([1, qtr_count, 14])
+    elif data_type in ["X"]:
+        print(data_type)
+        results = np.zeros([1, qtr_count, 8])
+    elif data_type in  ["CapRatios"]:
+        print(data_type)
+        results = np.zeros([1, qtr_count, 2])
     else:
         print("No Data Type Found")
 
-    # sql = '''SELECT b.ReportingDate, a.*
-    #         FROM (SELECT DISTINCT ReportingDate from xij_2) b
-    #         LEFT JOIN STR.sbidx a on a.ReportingDate = b.ReportingDate
-    #         order by b.ReportingDate'''
-
-    #data_type = "X"
+    bank_id_count = 1
     for bank_id in bank_ids:
+        print(str(bank_id_count), "of",str(bank_count))
         if data_type == "Y":
             # "`ppnrRatio:Net interest income`, `ppnrRatio:Noninterest income`,"
             sql = "SELECT `ReportingDate`, `ncoR:Commercial & industrial`, `ncoR:Construction & land development`, `ncoR:Multifamily real estate`," \
@@ -76,178 +80,31 @@ def request_data(data_type):
                   "`ncoR:Residential real estate (excl. HELOCs)`, `ncoR:Credit card`, `ncoR:Consumer (excl. credit card)`, `ppnrRatio:Net interest income`, `ppnrRatio:Noninterest income`, " \
                   "`ppnrRatio:Trading income`, `ppnrRatio:Compensation expense`, `ppnrRatio:Fixed assets expense`, `ppnrRatio:Noninterest expense`"
             #sql = sql + " `ppnrRatio:Compensation expense`, `ppnrRatio:Fixed assets expense` from y_ij where RSSD_ID='"
-            sql = sql + "  from yij_2 where RSSD_ID='"
+            sql = sql + " FROM  %s where ReportingDate >= '%s' and ReportingDate <= '%s' and  RSSD_ID='" % (Y_tble, ReportingDate_Start, ReportingDate_End)
             sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 14])
-
-        elif data_type == "Y_mergered":
-            # "`ppnrRatio:Net interest income`, `ppnrRatio:Noninterest income`,"
-            sql = "SELECT `ReportingDate`, `ncoR:Commercial & industrial`, `ncoR:Construction & land development`, `ncoR:Multifamily real estate`," \
-                  "`ncoR:(Nonfarm) nonresidential CRE`, `ncoR:Home equity lines of credit`, " \
-                  "`ncoR:Residential real estate (excl. HELOCs)`, `ncoR:Credit card`, `ncoR:Consumer (excl. credit card)`, `ppnrRatio:Net interest income`, `ppnrRatio:Noninterest income`, " \
-                  "`ppnrRatio:Trading income`, `ppnrRatio:Compensation expense`, `ppnrRatio:Fixed assets expense`, `ppnrRatio:Noninterest expense`"
-            #sql = sql + " `ppnrRatio:Compensation expense`, `ppnrRatio:Fixed assets expense` from y_ij where RSSD_ID='"
-            sql = sql + "  from Y_merged where RSSD_ID='"
-            sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 14])
-
-
-        elif data_type == "Y_full":
-            # "`ppnrRatio:Net interest income`, `ppnrRatio:Noninterest income`,"
-            sql = "SELECT b.ReportingDate, a.`ncoR:Commercial & industrial`, a.`ncoR:Construction & land development`, a.`ncoR:Multifamily real estate`," \
-                  "a.`ncoR:(Nonfarm) nonresidential CRE`, a.`ncoR:Home equity lines of credit`, " \
-                  "a.`ncoR:Residential real estate (excl. HELOCs)`, `a.ncoR:Credit card`, `a.ncoR:Consumer (excl. credit card)`, `a.ppnrRatio:Net interest income`, `a.ppnrRatio:Noninterest income`, " \
-                  "`ppnrRatio:Trading income`, `ppnrRatio:Compensation expense`, `ppnrRatio:Fixed assets expense`, `ppnrRatio:Noninterest expense`"
-            #sql = sql + " `ppnrRatio:Compensation expense`, `ppnrRatio:Fixed assets expense` from y_ij where RSSD_ID='"
-            sql = sql + " FROM (SELECT DISTINCT ReportingDate from xij_2) b LEFT JOIN STR.yij_2 a on a.ReportingDate = b.ReportingDate where a.RSSD_ID='"
-            sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 14])
-
-        elif data_type == "Y_full_mergered":
-            # "`ppnrRatio:Net interest income`, `ppnrRatio:Noninterest income`,"
-            sql = "SELECT b.ReportingDate, a.`ncoR:Commercial & industrial`, a.`ncoR:Construction & land development`, a.`ncoR:Multifamily real estate`," \
-                  "a.`ncoR:(Nonfarm) nonresidential CRE`, a.`ncoR:Home equity lines of credit`, " \
-                  "a.`ncoR:Residential real estate (excl. HELOCs)`, `a.ncoR:Credit card`, `a.ncoR:Consumer (excl. credit card)`, `a.ppnrRatio:Net interest income`, `a.ppnrRatio:Noninterest income`, " \
-                  "`ppnrRatio:Trading income`, `ppnrRatio:Compensation expense`, `ppnrRatio:Fixed assets expense`, `ppnrRatio:Noninterest expense`"
-            #sql = sql + " `ppnrRatio:Compensation expense`, `ppnrRatio:Fixed assets expense` from y_ij where RSSD_ID='"
-            sql = sql + " FROM (SELECT DISTINCT ReportingDate from X_merged) b LEFT JOIN STR.Y_merged a on a.ReportingDate = b.ReportingDate where a.RSSD_ID='"
-            sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 14])
-
-        elif data_type == "X_full":
-            #bank_id[0] = 1020180
-            sql = "SELECT b.`ReportingDate`, "
-            #sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
-            sql = sql +  "a.`Loans categories:Commercial & industrial_Covas`,a.`Loans categories:Construction & land development`,a.`Loans categories:Multifamily real estate`," \
-                        "a.`Loans categories:Nonfarm nonresidential CRE_Covas`,a.`Loans categories:Home equity lines of credit`,a.`Loans categories:Residential real estate (excl. HELOCs)_Covas`," \
-                        "a.`Loans categories:Credit card`,a.`Loans categories:Consumer (excl. credit card)_Covas`"
-#            sql = sql + " from xij_2 where RSSD_ID='"
-            sql = sql + " FROM (SELECT DISTINCT ReportingDate from xij_2) b LEFT JOIN STR.xij_2 a on a.ReportingDate = b.ReportingDate where a.RSSD_ID='"
-            sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 8])
-
-        elif data_type == "X_full_mergered":
-            # bank_id[0] = 1020180
-            sql = "SELECT b.`ReportingDate`, "
-            # sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
-            sql = sql + "a.`Loans categories:Commercial & industrial_Covas`,a.`Loans categories:Construction & land development`,a.`Loans categories:Multifamily real estate`," \
-                        "a.`Loans categories:Nonfarm nonresidential CRE_Covas`,a.`Loans categories:Home equity lines of credit`,a.`Loans categories:Residential real estate (excl. HELOCs)_Covas`," \
-                        "a.`Loans categories:Credit card`,a.`Loans categories:Consumer (excl. credit card)_Covas`"
-            #            sql = sql + " from xij_2 where RSSD_ID='"
-            sql = sql + " FROM (SELECT DISTINCT ReportingDate from X_merged) b LEFT JOIN STR.X_merged a on a.ReportingDate = b.ReportingDate where a.RSSD_ID='"
-            sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 8])
+            temp_data = np.zeros([1, qtr_count, 14])
 
 
         elif data_type == "X":
             #bank_id[0] = 1020180
-            sql = "SELECT `ReportingDate`, "
+            sql = "SELECT a.`ReportingDate`, "
             #sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
-            sql = sql +  "`Loans categories:Commercial & industrial_Covas`,`Loans categories:Construction & land development`,`Loans categories:Multifamily real estate`," \
-                        "`Loans categories:Nonfarm nonresidential CRE_Covas`,`Loans categories:Home equity lines of credit`,`Loans categories:Residential real estate (excl. HELOCs)_Covas`," \
-                        "`Loans categories:Credit card`,`Loans categories:Consumer (excl. credit card)_Covas`"
-            sql = sql + " from xij_2 where RSSD_ID='"
+            sql = sql +  "a.`Loans categories:Commercial & industrial_Covas`,a.`Loans categories:Construction & land development`,a.`Loans categories:Multifamily real estate`," \
+                        "a.`Loans categories:Nonfarm nonresidential CRE_Covas`,a.`Loans categories:Home equity lines of credit`,a.`Loans categories:Residential real estate (excl. HELOCs)_Covas`," \
+                        "a.`Loans categories:Credit card`,a.`Loans categories:Consumer (excl. credit card)_Covas`"
+
+            sql = sql + " FROM  %s a where a.ReportingDate >= '%s' and a.ReportingDate <= '%s' and  RSSD_ID='" % (X_tble, ReportingDate_Start, ReportingDate_End)
             sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 8])
-
-        elif data_type == "X_mergered":
-            #bank_id[0] = 1020180
-            sql = "SELECT `ReportingDate`, "
-            #sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
-            sql = sql +  "`Loans categories:Commercial & industrial_Covas`,`Loans categories:Construction & land development`,`Loans categories:Multifamily real estate`," \
-                        "`Loans categories:Nonfarm nonresidential CRE_Covas`,`Loans categories:Home equity lines of credit`,`Loans categories:Residential real estate (excl. HELOCs)_Covas`," \
-                        "`Loans categories:Credit card`,`Loans categories:Consumer (excl. credit card)_Covas`"
-            sql = sql + " from X_merged where RSSD_ID='"
-            sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 8])
-
-
-
-        elif data_type == "XY_Cap":
-            #bank_id[0] = 1020180
-            sql = "SELECT `ReportingDate`, "
-            #sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
-            sql = sql +  "`Chargeoffs`,`Recoveries`,`Net income(loss)`," \
-                        "`Other items:Book equity`,`Other items:Risk-weighted assets`,`Other items:Stock purchases`," \
-                        "`Other items:Tier 1 common equity`,`Other items:T1CR`"
-            sql = sql + " from xyaltratios_1 where RSSD_ID='"
-            sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 8])
-
-        elif data_type == "XY_Cap_mergered":
-            #bank_id[0] = 1020180
-            sql = "SELECT `ReportingDate`, "
-            #sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
-            sql = sql +  "`Chargeoffs`,`Recoveries`,`Net income(loss)`," \
-                        "`Other items:Book equity`,`Other items:Risk-weighted assets`,`Other items:Stock purchases`," \
-                        "`Other items:Tier 1 common equity`,`Other items:T1CR`"
-            sql = sql + " from xyaltratios_mergered where RSSD_ID='"
-            sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 8])
-
-
-        elif data_type == "XY_Cap_full":
-            #bank_id[0] = 1020180
-            sql = "SELECT b.`ReportingDate`, "
-            #sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
-            sql = sql +  "a.`Chargeoffs`,a.`Recoveries`,a.`Net income(loss)`," \
-                        "a.`Other items:Book equity`,a.`Other items:Risk-weighted assets`,a.`Other items:Stock purchases`," \
-                        "a.`Other items:Tier 1 common equity`,a.`Other items:T1CR`"
-#            sql = sql + " from xyaltratios_1 where RSSD_ID='"
-            sql = sql + " FROM (SELECT DISTINCT ReportingDate from xij_2) b LEFT JOIN STR.xyaltratios_1 a on a.ReportingDate = b.ReportingDate where a.RSSD_ID='"
-            sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 8])
-
-        elif data_type == "XY_Cap_full_mergered":
-            # bank_id[0] = 1020180
-            sql = "SELECT b.`ReportingDate`, "
-            # sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
-            sql = sql + "a.`Chargeoffs`,a.`Recoveries`,a.`Net income(loss)`," \
-                        "a.`Other items:Book equity`,a.`Other items:Risk-weighted assets`,a.`Other items:Stock purchases`," \
-                        "a.`Other items:Tier 1 common equity`,a.`Other items:T1CR`"
-            #            sql = sql + " from xyaltratios_1 where RSSD_ID='"
-            sql = sql + " FROM (SELECT DISTINCT ReportingDate from X_merged) b LEFT JOIN STR.CapitalRatio_merged a on a.ReportingDate = b.ReportingDate where a.RSSD_ID='"
-            sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 8])
+            temp_data = np.zeros([1, qtr_count, 8])
 
 
         elif data_type == "CapRatios":
             #bank_id[0] = 1020180
-            sql = "SELECT `ReportingDate`, "
-            #sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
-            sql = sql + "a.`Other items:T1CR`"  # a.`Other items:Tier 1 common equity`,
-            sql = sql + " from CapitalRatio a where RSSD_ID='"
+            sql = "SELECT a.`ReportingDate`, "
+            sql = sql + "a.`Other items:Net Charge Offs`, a.`Other items:T1CR`"  # a.`Other items:Tier 1 common equity`,
+            sql = sql + " FROM  %s a where a.ReportingDate >= '%s' and a.ReportingDate <= '%s' and  RSSD_ID='" % (XYCap_tble, ReportingDate_Start, ReportingDate_End)
             sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 1])
-
-        elif data_type == "CapRatios_mergered":
-            #bank_id[0] = 1020180
-            sql = "SELECT `ReportingDate`, "
-            #sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
-            sql = sql + "a.`Other items:T1CR` "  # a.`Other items:Tier 1 common equity`,
-            sql = sql + " from CapitalRatio_merged a where RSSD_ID='"
-            sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 1])
-
-        elif data_type == "CapRatios_full":
-            # bank_id[0] = 1020180
-            sql = "SELECT b.`ReportingDate`, "
-            # sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
-            sql = sql + "a.`Other items:T1CR`" #a.`Other items:Tier 1 common equity`,
-#            sql = sql + " from xyaltratios_1 where RSSD_ID='"
-            sql = sql + " FROM (SELECT DISTINCT ReportingDate from xij_2) b LEFT JOIN STR.CapitalRatio a on a.ReportingDate = b.ReportingDate where a.RSSD_ID='"
-            sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 1])
-
-        elif data_type == "CapRatios_full_mergered":
-            # bank_id[0] = 1020180
-            sql = "SELECT b.`ReportingDate`, "
-            # sql = sql + "`Nonfarm nonresidential CRE_2006Q4_on`, `Home equity lines of credit`, `Residential real estate (excl. HELOCs)_Covas`"
-            sql = sql + "a.`Other items:T1CR`" #a.`Other items:Tier 1 common equity`,
-            #            sql = sql + " from xyaltratios_1 where RSSD_ID='"
-            sql = sql + " FROM (SELECT DISTINCT ReportingDate from X_merged) b LEFT JOIN STR.CapitalRatio_merged a on a.ReportingDate = b.ReportingDate where a.RSSD_ID='"
-            sql = sql + str(bank_id[0]) + "'"
-            temp_data = np.zeros([1, 108, 2])
+            temp_data = np.zeros([1, qtr_count, 1])
 
         else:
             print("No Data Type Found")
@@ -260,16 +117,16 @@ def request_data(data_type):
 
         #TODO: We may also need to consider banks with missing data.
         #TODO: Improve to take all the cursor records into npy array at once. and then into the temp data array
-        if int(t) >= 108 and records[0][0] == "1990 Q1" and records[107][0] == "2016 Q4":
+        if int(t) >= qtr_count_val and records[0][0] == ReportingDate_Start and records[qtr_count_val - 1][0] == ReportingDate_End:
             print("BankID:%s\tNum:%d" % (bank_id[0], int(t)))
-            print("Bank has 108 Quarters from 1990 to 2016")
+            print("Bank has",qtr_count_val," Quarters from", ReportingDate_Start," to ",ReportingDate_End)
             #print("Trimming Data Accordingly")
             i = 0
             for record in records:
                 #print(record)
                 #print("Replacing Blank Values with NAN")
                 record = tuple([np.nan if x is '' else x for x in list(record)])
-                if i == 108:
+                if i == qtr_count_val:
                     #print("Break Loop since i = 108")
                     break
                 else:
@@ -278,36 +135,43 @@ def request_data(data_type):
                         #print(dim, record_dim, i)
                         temp_data[0, i, dim] = record[record_dim]
                         i = i + 1
-                        if i == 108:
+                        if i == qtr_count_val:
                             #print("Break Loop since i = 108")
                             break
             results = np.append(results, temp_data, axis=0)
-
+            transform_qtr = True
+        else:
+            print("Did not match Transformation Criteria")
+            transform_qtr = False
+        bank_id_count = bank_id_count + 1
     #results.shape
     # quarter based records
     # in quarter based data, the 1st axis is the index of Q1,2,3,4,
     # the 2nd axis represents the number of different banks
     # and the 3nd axis is the temporal sequece, such as 1990 Q1 -> 1991 Q1 -> 1992 Q1 
     # the 4th axis is the dimension of attributes, which refers to the sql sentences
-    n = results.shape[0] - 1
-    results = results[1:n+1]
-    if data_type in ["X","X_mergered","XY_Cap","XY_Cap_mergered","X_full","X_full_mergered" ,"XY_Cap_full","XY_Cap_full_mergered"]:
-        results_quarter = np.zeros([4, n, int(108/4), 8])
-    elif data_type in  ["Y", "Y_mergered","Y_full","Y_full_mergered"]:
-        results_quarter = np.zeros([4, n, int(108 / 4), 14])
-    elif data_type in  ["CapRatios", "CapRatios_full","CapRatios_mergered", "CapRatios_full_mergered"]:
-        results_quarter = np.zeros([4, n, int(108 / 4), 1])
+    if transform_qtr:
+        n = results.shape[0] - 1
+        results = results[1:n+1]
+        if data_type in ["X"]:
+            results_quarter = np.zeros([4, n, int(qtr_count/4), 8])
+        elif data_type in  ["Y"]:
+            results_quarter = np.zeros([4, n, int(qtr_count / 4), 14])
+        elif data_type in  ["CapRatios"]:
+            results_quarter = np.zeros([4, n, int(qtr_count / 4), 1])
 
+        else:
+            print("No Data Type Found")
+
+        print("Transformation for Quarterly Data")
+        for i in range(0, 4):
+            ids = [x for x in range(i, qtr_count, 4)]
+            results_quarter[i, :, :, :] = results[:, ids, :]
     else:
-        print("No Data Type Found")
-
-    print("Transformation for Quarterly Data")
-    for i in range(0, 4):
-        ids = [x for x in range(i, 108, 4)]
-        results_quarter[i, :, :, :] = results[:, ids, :]
+        "No Transformations Occured for Quarterly Transform"
 
         #results_quarter.shape
-
+    print("Completed")
     return results, results_quarter
 
 
@@ -427,20 +291,79 @@ def preprocess_moda_data(tbl_name = "zmicro", tble_schema = "STR",host="localhos
     return data_moda_tmp, data_moda_tmp_quarter
 
 
+
+def pd_raw_to_numpy_data(df, fulldatescombine = True, ReportingDate_Start = "1990 Q1", ReportingDate_End = "2016 Q4"):
+    if fulldatescombine:
+        print("Generating Full Mesh RSSD_ID and Reporting Date to left join to.")
+        RepordingDate_Df = pd.DataFrame(df["ReportingDate"].unique())
+        RepordingDate_Df = RepordingDate_Df.rename({0: "ReportingDate"}, axis=1)
+        RepordingDate_Df["key"] = 0
+
+        BankIds_Df = pd.DataFrame(df["RSSD_ID"].unique())
+        BankIds_Df = BankIds_Df.rename({0: "RSSD_ID"}, axis=1)
+        BankIds_Df["key"] = 0
+
+        BankID_Date_Ref = RepordingDate_Df.assign(foo=1).merge(BankIds_Df.assign(foo=1), on="foo", how="outer").drop(
+            ["foo", "key_x", "key_y"], 1)
+
+        df_pd = BankID_Date_Ref.merge(df, left_on=["ReportingDate", "RSSD_ID"],
+                                        right_on=["ReportingDate", "RSSD_ID"], how="left")
+    else:
+        df_pd = df
+
+    print(df_pd.shape)
+    print("Subsetting Dates from Dataframe")
+    df_pd = df_pd[(df_pd["ReportingDate"] >= ReportingDate_Start) & (df_pd["ReportingDate"] <= ReportingDate_End)]
+    print(df_pd.shape)
+
+    print("Pivoting Pandas Table to be Indexed by RSSD_ID and ReportingDate")
+    df_pvt = pd.pivot_table(df_pd, index=["RSSD_ID", "ReportingDate"])
+    print(df_pvt.shape)
+
+    print("Preparing to Reshape and output as Numpy Array")
+    dim1 = df_pvt.index.get_level_values('RSSD_ID').nunique()
+    dim2 = df_pvt.index.get_level_values('ReportingDate').nunique()
+    print("Reshaping into 3 dimensional NumPy array")
+    result_pv = df_pvt.values.reshape((dim1, dim2, df_pvt.shape[1]))
+    print(result_pv.shape)
+
+    print("Quarterization of the Data")
+    qtr_count = result_pv.shape[1]
+    n = result_pv.shape[0]  # - 1
+    # result_pv = result_pv[1:n + 1]
+    results_quarter = np.zeros([4, n, int(qtr_count / 4), df_pvt.shape[1]])
+    print("Transformation for Quarterly Data")
+    for i in range(0, 4):
+        ids = [x for x in range(i, qtr_count, 4)]
+        results_quarter[i, :, :, :] = result_pv[:, ids, :]
+    print(results_quarter.shape)
+
+    return result_pv, results_quarter
+
+
 if __name__ == "__main__":
 
-
-    os.chdir("./Data_PP_Output/")
-    #data_types_list = ['X_mergered', 'Y_mergered', "CapRatios_mergered"]
-    data_types_list = ["CapRatios_mergered"]
-    for data_type in data_types_list:
-        print(data_type)
-        data, data_quarter = request_data(data_type)
-        print(data_type,":", data.shape, data_type,"_quarter:", data_quarter.shape)
+    os.chdir("./data")
+    for keyname in [x for x in Preprocess_Dict.keys() if x in ["X", "Y", "CapRatios","NCO"]]:
+        print(keyname)
+        data, data_quarter = pd_raw_to_numpy_data(Preprocess_Dict[keyname], fulldatescombine= False)
+        print(keyname, ":", data.shape, keyname, "_quarter:", data_quarter.shape)
         print("Saving objects to file")
-        np.save("./data_" + data_type + ".npy", data)
-        np.save("./data_" + data_type + "_quarter.npy", data_quarter)
+        np.save("./data_" + keyname + ".npy", data)
+        np.save("./quarter_based/data_" + keyname + "_quarter.npy", data_quarter)
 
+    #os.chdir("./Data_PP_Output/")
+    #data_types_list = ['X_mergered', 'Y_mergered', "CapRatios_mergered"]
+    # data_types_list = ["X","Y","CapRatios"]
+    # for data_type in data_types_list:
+    #     print(data_type)
+    #     data, data_quarter = request_data(data_type = data_type, BankLimit= 11000)
+    #     print(data_type,":", data.shape, data_type,"_quarter:", data_quarter.shape)
+    #     print("Saving objects to file")
+    #     np.save("./data_" + data_type + ".npy", data)
+    #     np.save("./data_" + data_type + "_quarter.npy", data_quarter)
+    #
+    #
 
 #May need to consider creating a table with all the time slices, to save on join.
 
