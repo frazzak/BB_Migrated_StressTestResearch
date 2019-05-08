@@ -293,6 +293,8 @@ def preprocess_moda_data(tbl_name = "zmicro", tble_schema = "STR",host="localhos
 
 
 def pd_raw_to_numpy_data(df, fulldatescombine = True, ReportingDate_Start = "1990 Q1", ReportingDate_End = "2016 Q4"):
+    #df = Preprocess_Dict[keyname]
+    #fulldatescombine = False
     if fulldatescombine:
         print("Generating Full Mesh RSSD_ID and Reporting Date to left join to.")
         RepordingDate_Df = pd.DataFrame(df["ReportingDate"].unique())
@@ -343,7 +345,7 @@ def pd_raw_to_numpy_data(df, fulldatescombine = True, ReportingDate_Start = "199
 
 if __name__ == "__main__":
 
-    os.chdir("./data")
+    os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/data")
     for keyname in [x for x in Preprocess_Dict.keys() if x in ["X", "Y", "CapRatios","NCO"]]:
         print(keyname)
         data, data_quarter = pd_raw_to_numpy_data(Preprocess_Dict[keyname], fulldatescombine= False)

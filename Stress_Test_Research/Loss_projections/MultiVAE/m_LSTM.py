@@ -48,6 +48,11 @@ class mLSTM(nn.Module):
         outputs = self.time_linear.forward(outputs)
         return outputs
     
+
+
+
+
+
 def train(inputs, targets, epcho, lstm_lr, threshold):
     
     t, m1, n = inputs.shape
@@ -56,25 +61,30 @@ def train(inputs, targets, epcho, lstm_lr, threshold):
        
     m_LSTM = mLSTM(m1, n, m2, dim_hidden)
     m_loss = torch.nn.MSELoss()
+
     #print(m_loss)
     m_optimizer = torch.optim.SGD(m_LSTM.parameters(), lr=lstm_lr)
     t_loss = np.inf
-    
+    t_loss_rmse = np.inf
     for i in range(0, epcho):
         m_optimizer.zero_grad()
         outputs = m_LSTM.forward(inputs)
         loss = m_loss(outputs, targets)
+        loss_rmse = torch.sqrt(m_loss(outputs, targets))
+        loss_rmse.backward(retain_graph=True)
         loss.backward(retain_graph=True)
         m_optimizer.step()
     #    print(loss.data)
         if t_loss > loss.data and np.abs(t_loss - loss.data) > threshold:
             t_loss = loss.data
+        elif t_loss_rmse > loss_rmse and np.abs(t_loss_rmse - loss_rmse) > threshold:
+            t_loss_rmse = loss_rmse
         else:
             #print(loss.data)
             print("Done!")
             break
     
-    return m_LSTM, loss.data
+    return m_LSTM, loss.data, loss_rmse
 
 
 # def plot(m_lstm,inputs_eval, targets_eval):

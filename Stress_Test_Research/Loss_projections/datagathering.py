@@ -434,6 +434,18 @@ class StressTestData():
                                                      "RSSD9045", "RSSD9016", "RSSD9101","BHCK4635","BHCK4605","BHCK4340","BHCK4598","BHCK3519","BHCK3210","BHCK3368","BHCKC245","BHCKC249"],
                                  rename_col_dict={"RSSD9001": "RSSD_ID", "RSSD9999": "ReportingDate",
                                                   "RSSD9161": "CUSIP", "BHCK2170": "TotalAssets",
+                                                  "BHDM3516": "QtrAvgLoansLeases_1", "BHBC3516": "QtrAvgLoansLeases_2",
+                                                  "BHCK3516": "QtrAvgLoansLeases_3",
+                                                  "BHFN3360": "QtrAvgTotalLoans", "BHCK7206": "CapRatios_T1RiskCR_1",
+                                                  "BHCW7206": "CapRatios_T1RiskCR_2",
+                                                  "BHCA7206": "CapRatios_T1RiskCR_3",
+                                                  "BHCK7205": "CapRatios_TotalRiskCR_1",
+                                                  "BHCW7205": "CapRatios_TotalRiskCR_2",
+                                                  "BHCA7205": "CapRatios_TotalRiskCR_3",
+                                                  "BHCK7204": "CapRatios_T1LR_1", "BHCW7204": "CapRatios_T1LR_2",
+                                                  "BHCA7204": "CapRatios_T1LR_3",
+                                                  "BHCWP793": "CapRatios_CET1CR_1", "BHCAP7204": "CapRatios_CET1CR_2",
+                                                  "BHBC6061": "Net Charge Offs",
                                                   "RSSD9045": "BHC_Indicator", "RSSD9016": "FHC_Indicator",
                                                   "RSSD9101": "Domestic_Indicator"
                                                  , "RSSD9138": "Financial_Sub_Indicator", "RSSD9397": "LargestEntityBHC",
@@ -442,6 +454,7 @@ class StressTestData():
                                                   "BHCKC245":"Total Equity_1","BHCKC249":"Total Equity_2", "BHCK3519":"QrtAvgEqCap",
                                                   "BHCK4340":"Net income(loss)","BHCK4598":"Less:Cash dividends on perp perf stock",
                                                   "RSSD9010":"Entity short name","RSSD9017":"Legal name"
+
                                                   }):
         print("Initialize Result DF")
         BankPerf_result = pd.DataFrame()
@@ -965,23 +978,23 @@ SectorIdx["sectoridx"].to_csv("../Data_Output/Sectidx.csv", sep = ",", index = F
 #SectorIdx["sectoridx"].keys()
 #SectorIdx.keys()
 #Should pring out Summary Statistics
-
-def file_dict_read(rootdir, filetype=".csv", skip_prefix=" "):
-    print("Initializing Raw Data Frame Dict")
-    tmp_dict = {}
-    print("Searching path:", rootdir)
-    for dirName, subdirList, fileList in os.walk(rootdir):
-        print('Found directory: %s' % dirName)
-        for fname in fileList:
-            if not fname.startswith(skip_prefix):
-                if fname.endswith(filetype):
-                    print("Reading File and Adding to Dataframe Dictionary")
-                    print(os.path.join(dirName, fname))
-                    print('\t%s' % fname)
-                    print(fname.split(filetype)[0])
-                    exec('''tmp_dict[fname.split(filetype)[0]] = pd.read_csv("''' + os.path.join(dirName,
-                                                                                                 fname) + '''")''')
-    return (tmp_dict)
+#
+# def file_dict_read(rootdir, filetype=".csv", skip_prefix=" "):
+#     print("Initializing Raw Data Frame Dict")
+#     tmp_dict = {}
+#     print("Searching path:", rootdir)
+#     for dirName, subdirList, fileList in os.walk(rootdir):
+#         print('Found directory: %s' % dirName)
+#         for fname in fileList:
+#             if not fname.startswith(skip_prefix):
+#                 if fname.endswith(filetype):
+#                     print("Reading File and Adding to Dataframe Dictionary")
+#                     print(os.path.join(dirName, fname))
+#                     print('\t%s' % fname)
+#                     print(fname.split(filetype)[0])
+#                     exec('''tmp_dict[fname.split(filetype)[0]] = pd.read_csv("''' + os.path.join(dirName,
+#                                                                                                  fname) + '''")''')
+#     return (tmp_dict)
 
 
 Z_micro = init_ST.Z_micro_process()
@@ -1117,8 +1130,8 @@ Z_micro["Z_Micro"].to_csv("../Data_Output/Z_micro.csv", sep = ",", index = False
 BankPerf = StressTestData().X_Y_bankingchar_perf_process(groupfunction=np.mean, groupby=["RSSD_ID", "ReportingDate"],
                                      groupagg_col='Other items:Total Assets',
                                      RSSD_DateParam=["1990-01-01", "2018-01-01"],
-                                     ReportingDateParam=["1990-01-01", "2018-01-01"], RSSDList_len=None, dropdup=False,
-                                     replace_nan=False, combinecol=True, merge = True, reducedf = False,skip_prefix = "WRDS_Covas_BankPerf_CallReport",  replace_dict={"BankPerf_FR9YC_varlist": {
+                                     ReportingDateParam=["1990-01-01", "2018-01-01"], RSSDList_len=1000, dropdup=False,
+                                     replace_nan=False, combinecol=False, merge = False, reducedf = False,skip_prefix = "WRDS_Covas_BankPerf_CallReport",  replace_dict={"BankPerf_FR9YC_varlist": {
                                          "df_keyname": "WRDS_Covas_BankPerf",
                                          "calcol": "Report: FR Y-9C",
                                          "BHCK892": "BHCKC892",
@@ -1147,14 +1160,15 @@ BankPerf = StressTestData().X_Y_bankingchar_perf_process(groupfunction=np.mean, 
                                              "+  +": "+",
                                              "-  -": "-"
                                          },
-
                                      }, RSSD_Subset = True, Y_calc= True)
 
+
+BankPerf.keys()
 #Workspace
 
 
 
-XY_GT_labels_tminus1 = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","Chargeoffs_t-1","Recoveries_t-1","Net income(loss)_t-1","Less:Cash dividends on perp perf stock_t-1","Total Equity_1_t-1","Total Equity_2_t-1","Other items:Book equity_t-1","Other items:Dividends _t-1","Other items:Stock purchases_t-1","Other items:Risk-weighted assets_t-1","Other items:Tier 1 common equity_t-1","Other items:T1CR_t-1"))]]
+# XY_GT_labels_tminus1 = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","Chargeoffs_t-1","Recoveries_t-1","Net income(loss)_t-1","Less:Cash dividends on perp perf stock_t-1","Total Equity_1_t-1","Total Equity_2_t-1","Other items:Book equity_t-1","Other items:Dividends _t-1","Other items:Stock purchases_t-1","Other items:Risk-weighted assets_t-1","Other items:Tier 1 common equity_t-1","Other items:T1CR_t-1"))]]
 
 
 
@@ -1164,23 +1178,23 @@ XY_GT_labels_tminus1 = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankP
 #CReate Function to the post processing and load to mysql
 
 
-
-X_merged = preprocess_loadMySQL(BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"], datatype = "X"
-                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "X_merged", if_exists = "replace")
-
-Y_merged = preprocess_loadMySQL(BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"], datatype = "Y"
-                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "Y_merged", if_exists = "replace")
-
-CapitalRatios_merged = preprocess_loadMySQL(BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"], datatype = "XYCap"
-                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "CapitalRatio_merged", if_exists = "replace")
-
-
-X_Y_Cap_merged = preprocess_loadMySQL(BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"], datatype = "X_Y_Cap"
-                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "X_Y_Cap_merged", if_exists = "replace")
+#
+# X_merged = preprocess_loadMySQL(BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"], datatype = "X"
+#                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+#                          , tbl_name = "X_merged", if_exists = "replace")
+#
+# Y_merged = preprocess_loadMySQL(BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"], datatype = "Y"
+#                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+#                          , tbl_name = "Y_merged", if_exists = "replace")
+#
+# CapitalRatios_merged = preprocess_loadMySQL(BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"], datatype = "XYCap"
+#                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+#                          , tbl_name = "CapitalRatio_merged", if_exists = "replace")
+#
+#
+# X_Y_Cap_merged = preprocess_loadMySQL(BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"], datatype = "X_Y_Cap"
+#                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+#                          , tbl_name = "X_Y_Cap_merged", if_exists = "replace")
 
 #Need to add logic to show partials
 
@@ -1203,28 +1217,32 @@ Z_macro_international_mysql = preprocess_loadMySQL(Z_macro_international, dataty
 #
 # #Merge with Dates
 #
-# RepordingDate_Df = pd.DataFrame(BankPerf["BankPerf_ConsecutiveReduced_XYcalc"]["ReportingDate"].unique())
-# RepordingDate_Df = RepordingDate_Df.rename({0:"ReportingDate"}, axis = 1)
-# RepordingDate_Df["key"] = 0
-#
-# BankIds_Df = pd.DataFrame(BankPerf["BankPerf_ConsecutiveReduced_XYcalc"]["RSSD_ID"].unique())
-# BankIds_Df = BankIds_Df.rename({0:"RSSD_ID"}, axis = 1)
-# BankIds_Df["key"] = 0
-#
-# BankID_Date_Ref = RepordingDate_Df.assign(foo=1).merge(BankIds_Df.assign(foo=1), on = "foo",how = "outer" ).drop(["foo","key_x","key_y"],1)
-#
-#
-#
-#
-#
-# list(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].keys())
-# #Creating Frame Joined to Dates.
-# BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"] = BankID_Date_Ref.merge(BankPerf["BankPerf_ConsecutiveReduced_XYcalc"], left_on = ["ReportingDate","RSSD_ID"], right_on = ["ReportingDate","RSSD_ID"], how = "left")
-# #BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].sort_values(["RSSD_ID",0])
-# #BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"] = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].drop("ReportingDate", axis = 1)
-# #BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"] = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].rename({0:"ReportingDate"}, axis = 1)
-# BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"]["ReportingDate"] =  pd.to_datetime(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].ReportingDate).dt.year.astype(str) + " Q" + pd.to_datetime(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].ReportingDate).dt.quarter.astype(str)
-#
+list(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns)
+
+
+RepordingDate_Df = pd.DataFrame(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]["ReportingDate"].unique())
+RepordingDate_Df = RepordingDate_Df.rename({0:"ReportingDate"}, axis = 1)
+RepordingDate_Df["key"] = 0
+
+
+BankIds_Df = pd.DataFrame(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]["RSSD_ID"].unique())
+BankIds_Df = BankIds_Df.rename({0:"RSSD_ID"}, axis = 1)
+BankIds_Df["key"] = 0
+
+BankID_Date_Ref = RepordingDate_Df.assign(foo=1).merge(BankIds_Df.assign(foo=1), on = "foo",how = "outer" ).drop(["foo","key_x","key_y"],1)
+
+
+
+
+
+#list(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].keys())
+#Creating Frame Joined to Dates.
+BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"] = BankID_Date_Ref.merge(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"], left_on = ["ReportingDate","RSSD_ID"], right_on = ["ReportingDate","RSSD_ID"], how = "left")
+#BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].sort_values(["RSSD_ID",0])
+#BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"] = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].drop("ReportingDate", axis = 1)
+#BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"] = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].rename({0:"ReportingDate"}, axis = 1)
+BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"]["ReportingDate"] =  pd.to_datetime(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].ReportingDate).dt.year.astype(str) + " Q" + pd.to_datetime(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].ReportingDate).dt.quarter.astype(str)
+
 
 
 
@@ -1235,23 +1253,36 @@ Z_macro_international_mysql = preprocess_loadMySQL(Z_macro_international, dataty
 Preprocess_Dict = dict()
 Preprocess_Dict['X'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "X"
                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "X", if_exists = "replace")
+                         , tbl_name = "X", if_exists = "replace").interpolate(method = 'linear')
+
 
 Preprocess_Dict['Y'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "Y"
                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "Y", if_exists = "replace")
-
-Preprocess_Dict['CapitalRatios']= preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "XYCap"
-                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "CapitalRatio", if_exists = "replace")
+                         , tbl_name = "Y", if_exists = "replace").interpolate(method = 'linear')
+#Preprocess_Dict['Y'].columns
+# Preprocess_Dict['CapitalRatios']= preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "XYCap"
+#                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+#                          , tbl_name = "CapitalRatio", if_exists = "replace")
 
 
 Preprocess_Dict['X_Y_Cap'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "X_Y_Cap"
                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "X_Y_Cap", if_exists = "replace")
+                         , tbl_name = "X_Y_Cap", if_exists = "replace").interpolate(method = 'linear')
 
-Preprocess_Dict['CapRatios'] = Preprocess_Dict['X_Y_Cap'][["RSSD_ID", "ReportingDate","Other items:T1CR"]]
-Preprocess_Dict['NCO'] = Preprocess_Dict['X_Y_Cap'][["RSSD_ID", "ReportingDate", "Other items:Net Charge Offs"]]
+
+Preprocess_Dict['X_Y_Cap'][[ 'Other items: CapRatios_T1RiskCR_coalesced',
+       'Other items: CapRatios_TotalRiskCR_coalesced',
+       'Other items: CapRatios_T1LR_coalesced',
+       'Other items: CapRatios_CET1CR_coalesced',
+       'Other items:Net Charge Offs_Calced',
+       'Other items:Net Charge Offs_coalesced',
+       'Other items:QtrAvgTotalLoans_coalesced',
+       'Other items:Net Charge Offs_Ratio']].info()
+
+
+
+Preprocess_Dict['CapRatios'] = Preprocess_Dict['X_Y_Cap'][["RSSD_ID", "ReportingDate","Other items: CapRatios_T1RiskCR_coalesced"]]
+Preprocess_Dict['NCO'] = Preprocess_Dict['X_Y_Cap'][["RSSD_ID", "ReportingDate", "Other items:Net Charge Offs_Ratio"]]
 
 #May have to create the join to the dates so all RSSD_IDS have date info. rather than partials.
 def preprocess_loadMySQL(BankPerf, datatype = "X"
@@ -1311,7 +1342,18 @@ def preprocess_loadMySQL(BankPerf, datatype = "X"
                                                                                            "Other items:Stock purchases",
                                                                                            "Other items:Risk-weighted assets",
                                                                                            "Other items:Tier 1 common equity",
-                                                                                           "Other items:T1CR"))]]
+                                                                                           "Other items:T1CR",
+                                                                                           'Other items: CapRatios_T1RiskCR_1',
+                                                                                           'Other items: CapRatios_T1RiskCR_2',
+                                                                                           'Other items: CapRatios_T1RiskCR_3',
+                                                                                           'Other items: CapRatios_TotalRiskCR_1',
+                                                                                           'Other items: CapRatios_TotalRiskCR_2',
+                                                                                           'Other items: CapRatios_TotalRiskCR_3',
+                                                                                           'Other items: CapRatios_T1LR_1 ',
+                                                                                           'Other items: CapRatios_T1LR_2',
+                                                                                           'Other items: CapRatios_CET1CR_1 ',
+                                                                                           'Other items: CapRatios_CET1CR_2'
+                                                                                                                            ))]]
             elif datatype == "XYCap_tminus1":
                 BankPerf = BankPerf[
                     BankPerf.columns[pd.Series(
@@ -1353,20 +1395,69 @@ def preprocess_loadMySQL(BankPerf, datatype = "X"
                                                                                             ("RSSD_ID", "ReportingDate", "ncoR:", "ppnrRatio:"))) & (~pd.Series(BankPerf.columns).str.endswith("_t-1"))]
 
                                                                                             | BankPerf.columns[pd.Series(BankPerf.columns).str.endswith(("Chargeoffs",
-                                                                                                                                                       "Recoveries",
-                                                                                                                                                       "Net income(loss)",
-                                                                                                                                                       "Less:Cash dividends on perp perf stock",
-                                                                                                                                                       "Total Equity_1",
-                                                                                                                                                       "Total Equity_2",
-                                                                                                                                                       "Other items:Book equity",
-                                                                                                                                                       "Other items:Dividends",
-                                                                                                                                                       "Other items:Stock purchases",
-                                                                                                                                                       "Other items:Risk-weighted assets",
-                                                                                                                                                       "Other items:Tier 1 common equity",
-                                                                                                                                                          "Other items:T1CR"))]]
-                print("Calculation Net Charge Offs")
-                BankPerf["Other items:Net Charge Offs"] = BankPerf["Chargeoffs"] - BankPerf["Recoveries"]
+                                                                                                                                                     "Recoveries",
+                                                                                                                                                     "Net income(loss)",
+                                                                                                                                                     "Less:Cash dividends on perp perf stock",
+                                                                                                                                                     "Total Equity_1",
+                                                                                                                                                     "Total Equity_2",
+                                                                                                                                                     "Other items:Book equity",
+                                                                                                                                                     "Other items:Dividends",
+                                                                                                                                                     "Other items:Stock purchases",
+                                                                                                                                                     "Other items:Risk-weighted assets",
+                                                                                                                                                     "Other items:Tier 1 common equity",
+                                                                                                                                                     "Other items:T1CR",
+                                                                                                                                                     'Other items:Net Charge Offs',
+                                                                                                                                                     'Other items:QtrAvgTotalLoans',
+                                                                                                                                                     'Other items: QtrAvgLoansLeases_1 ',
+                                                                                                                                                     'Other items: QtrAvgLoansLeases_2',
+                                                                                                                                                     'Other items: QtrAvgLoansLeases_3',
+                                                                                                                                                     'Other items: QtrAvgTotalLoans ',
+                                                                                                                                                     'Other items: CapRatios_T1RiskCR_1',
+                                                                                                                                                     'Other items: CapRatios_T1RiskCR_2',
+                                                                                                                                                     'Other items: CapRatios_T1RiskCR_3',
+                                                                                                                                                     'Other items: CapRatios_TotalRiskCR_1',
+                                                                                                                                                     'Other items: CapRatios_TotalRiskCR_2',
+                                                                                                                                                     'Other items: CapRatios_TotalRiskCR_3',
+                                                                                                                                                     'Other items: CapRatios_T1LR_1 ',
+                                                                                                                                                     'Other items: CapRatios_T1LR_2',
+                                                                                                                                                     'Other items: CapRatios_CET1CR_1 ',
+                                                                                                                                                     'Other items: CapRatios_CET1CR_2'
+                                                                                                                                                         ))]]
 
+
+                print("Coalescing Captial Ratios")
+                print("T1 Capital Ratio")
+                BankPerf['Other items: CapRatios_T1RiskCR_coalesced'] =  BankPerf[
+                    'Other items: CapRatios_T1RiskCR_3'].combine_first(
+                    BankPerf['Other items: CapRatios_T1RiskCR_1']).combine_first(
+                    BankPerf['Other items: CapRatios_T1RiskCR_2'])
+
+                print("T1 Capital Ratio")
+                BankPerf['Other items: CapRatios_TotalRiskCR_coalesced'] = BankPerf[
+                    'Other items: CapRatios_TotalRiskCR_3'].combine_first(
+                    BankPerf['Other items: CapRatios_TotalRiskCR_1']).combine_first(
+                    BankPerf['Other items: CapRatios_TotalRiskCR_2'])
+
+                print("T1 Leverage Ratio")
+                BankPerf['Other items: CapRatios_T1LR_coalesced'] = BankPerf[
+                    'Other items: CapRatios_T1LR_2'].combine_first(
+                    BankPerf['Other items: CapRatios_T1LR_1 '])
+
+                print("T1 Common Equity Ratio")
+                BankPerf['Other items: CapRatios_CET1CR_coalesced'] = BankPerf[
+                    'Other items: CapRatios_CET1CR_2'].combine_first(
+                    BankPerf['Other items: CapRatios_CET1CR_1 '])
+
+                print("Calculation Net Charge Offs")
+                BankPerf["Other items:Net Charge Offs_Calced"] = BankPerf['Chargeoffs'] - BankPerf['Recoveries']
+                print("Coalescing Net Charge Offs")
+                BankPerf["Other items:Net Charge Offs_coalesced"] = BankPerf["Other items:Net Charge Offs_Calced"].combine_first(BankPerf['Other items:Net Charge Offs'])
+
+                print("Coalescing Quarterly average loans and leases")
+                BankPerf["Other items:QtrAvgTotalLoans_coalesced"] = BankPerf["Other items:QtrAvgTotalLoans"].combine_first(BankPerf['Other items: QtrAvgLoansLeases_3']).combine_first(BankPerf['Other items: QtrAvgLoansLeases_1 ']).combine_first(BankPerf['Other items: QtrAvgLoansLeases_2']).combine_first(BankPerf['Other items: QtrAvgTotalLoans '])
+
+                print("Calculating Net Charge Offs Ratio")
+                BankPerf["Other items:Net Charge Offs_Ratio"] = BankPerf["Other items:Net Charge Offs_Calced"] / BankPerf["Other items:QtrAvgTotalLoans_coalesced"]
         else:
 
             if datatype.lower() in ["zmacro_domestic", "zmacro_international"]:
