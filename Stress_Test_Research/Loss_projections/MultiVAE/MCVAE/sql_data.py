@@ -343,10 +343,78 @@ def pd_raw_to_numpy_data(df, fulldatescombine = True, ReportingDate_Start = "199
     return result_pv, results_quarter
 
 
+
+def pd_raw_to_numpy_moda(df, fulldatescombine = True, ReportingDate_Start = "1990 Q1", ReportingDate_End = "2016 Q4"):
+
+    print("Calculating if DataFrame has appropriate length and quarters.")
+    reporting_date_lst = list()
+    for year_num in range(int(ReportingDate_Start.split(" ")[0]), int(ReportingDate_End.split(" ")[0]) + 1):
+        for qtr_num in range(1, 5):
+            reporting_date_lst.append(str(year_num) + " Q" + str(qtr_num))
+    ReportingDate_DF = pd.DataFrame(reporting_date_lst, columns=["ReportingDate"])
+    ReportingDate_DF = pd.DataFrame(list(ReportingDate_DF[(ReportingDate_DF["ReportingDate"] >= ReportingDate_Start) & (ReportingDate_DF["ReportingDate"] <= ReportingDate_End)]["ReportingDate"].unique()),
+                                    columns = ["ReportingDate"])
+
+    if ReportingDate_DF.shape[0] == df.shape[0] and all(elem in list(df.ReportingDate.unique())  for elem in list(ReportingDate_DF.ReportingDate)):
+        print("Dates and Rows Validated")
+        df_pd = df
+    else:
+        df_pd = ReportingDate_DF.merge(df, left_on=["ReportingDate"], right_on=["ReportingDate"],how="left")
+        df_pd.interpolate(method="polynomial", order=2).fillna(method="bfill").fillna(method="ffill").dropna(axis=1,how='all')
+
+
+
+
+    print(df_pd.shape)
+    print("Subsetting Dates from Dataframe")
+    df_pd = df_pd[(df_pd["ReportingDate"] >= ReportingDate_Start) & (df_pd["ReportingDate"] <= ReportingDate_End)]
+    print(df_pd.shape)
+
+    print("Pivoting Pandas Table to be Indexed by RSSD_ID and ReportingDate")
+    df_pvt = pd.pivot_table(df_pd, index=["ReportingDate"])
+    print(df_pvt.shape)
+
+    print("Preparing to Reshape and output as Numpy Array")
+    #dim1 = df_pvt.index.get_level_values('RSSD_ID').nunique()
+    dim1 = df_pvt.index.get_level_values('ReportingDate').nunique()
+    print("Reshaping into 3 dimensional NumPy array")
+    result_pv = df_pvt.values.reshape((1,dim1, df_pvt.shape[1]))
+    print(result_pv.shape)
+
+    print("Quarterization of the Data")
+    qtr_count = result_pv.shape[1]
+    n = result_pv.shape[0]  # - 1
+    # result_pv = result_pv[1:n + 1]
+    results_quarter = np.zeros([4, int(qtr_count / 4), df_pvt.shape[1]])
+    print("Transformation for Quarterly Data")
+    for i in range(0, 4):
+        ids = [x for x in range(i, qtr_count, 4)]
+        results_quarter[i, :, :] = result_pv[:, ids, :]
+    print(results_quarter.shape)
+
+    return result_pv, results_quarter
+
+
+
+
+
 if __name__ == "__main__":
 
     os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/data")
-    for keyname in [x for x in Preprocess_Dict.keys() if x in ["X", "Y", "CapRatios","NCO"]]:
+
+
+    keylist = ['Z_macro_domestic_pca','Z_macro_international_pca',"Sector_idx_pca","sb_idx_pca","Z_micro_pca"]
+    for keyname in [x for x in Preprocess_Dict.keys() if x in keylist]:
+        print(keyname)
+        data, data_quarter = pd_raw_to_numpy_moda(Preprocess_Dict[keyname], fulldatescombine= False)
+        print(keyname, ":", data.shape, keyname, "_quarter:", data_quarter.shape)
+        print("Saving objects to file")
+        np.save("./data_moda_" + keyname + ".npy", data)
+        np.save("./quarter_based/data_moda_" + keyname + "_quarter.npy", data_quarter)
+
+
+    keylist = ["X", "Y", "CapRatios", "NCO"]
+    for keyname in [x for x in Preprocess_Dict.keys() if x in keylist]:
         print(keyname)
         data, data_quarter = pd_raw_to_numpy_data(Preprocess_Dict[keyname], fulldatescombine= False)
         print(keyname, ":", data.shape, keyname, "_quarter:", data_quarter.shape)
@@ -354,32 +422,17 @@ if __name__ == "__main__":
         np.save("./data_" + keyname + ".npy", data)
         np.save("./quarter_based/data_" + keyname + "_quarter.npy", data_quarter)
 
-    #os.chdir("./Data_PP_Output/")
-    #data_types_list = ['X_mergered', 'Y_mergered', "CapRatios_mergered"]
-    # data_types_list = ["X","Y","CapRatios"]
-    # for data_type in data_types_list:
-    #     print(data_type)
-    #     data, data_quarter = request_data(data_type = data_type, BankLimit= 11000)
-    #     print(data_type,":", data.shape, data_type,"_quarter:", data_quarter.shape)
-    #     print("Saving objects to file")
-    #     np.save("./data_" + data_type + ".npy", data)
-    #     np.save("./data_" + data_type + "_quarter.npy", data_quarter)
-    #
-    #
+#    Preprocess_One.keys()
+    keylist = ["X_Y_NCO_pca", "X_Y_NCO_norm","X_Y_NCO_all_pca", "CapRatios"]
+    for keyname in [x for x in Preprocess_One.keys() if x in keylist]:
+        os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/data")
+        print(keyname)
+        data, data_quarter = pd_raw_to_numpy_data(Preprocess_One[keyname], fulldatescombine= False)
+        print(keyname, ":", data.shape, keyname, "_quarter:", data_quarter.shape)
+        print("Saving objects to file")
+        np.save("./data_" + keyname + ".npy", data)
+        np.save("./quarter_based/data_" + keyname + "_quarter.npy", data_quarter)
 
-#May need to consider creating a table with all the time slices, to save on join.
-
-
-#Fix Raw data and automate to upload into MySQL tables.
-#Format Conditional Modality
-#Create Function to handle other modalities.
-#Find additional relevant Modalities
-
-
-#Handle missing data by filling the time slices with nans.  Create a join to populate arrays with place holder.
-#Handle Duplicate data in the tables.
-
-#Should we consider data from 1976 onward?
 
 
 

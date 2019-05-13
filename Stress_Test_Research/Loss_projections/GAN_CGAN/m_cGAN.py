@@ -21,7 +21,7 @@ class Generator(nn.Module):
         self.conditional = conditional
         self.input_size = latent_size
         self.layer_size = layer_size
-        
+
         self.MLP = nn.Sequential()
         if self.conditional:
             self.input_size = self.input_size + num_cond
@@ -33,6 +33,8 @@ class Generator(nn.Module):
             self.MLP.add_module(name="L{:d}".format(i), module=nn.Linear(in_size, out_size))
             if i+2 < len(layer_size):
                 self.MLP.add_module(name="A{:d}".format(i), module=nn.ReLU())
+        self.linear_mu = nn.Linear(layer_size[-1], self.input_size)
+        self.linear_lagvar = nn.Linear(layer_size[-1], self.input_size)
 
     def forward(self, noise, cond):
         
@@ -44,9 +46,39 @@ class Generator(nn.Module):
             latent_inputs = noise
         
         gen_outputs = self.MLP(latent_inputs)
-        
-        return gen_outputs
+        mu = self.linear_mu(gen_outputs)
+        logvar = self.linear_lagvar(gen_outputs)
+        return gen_outputs , mu, logvar
 
+
+    def get_params(self, input_modalities, gen_mod, cond=None, ):
+        # obtain mu, logvar for each modality
+        #for modality in input_modalities:
+        for modality in input_modalities:
+            if modality is not None:
+                batch_size = modality.size(0)
+                break
+
+        # initialize the universal prior distribution
+        # add extra dimension 1 in order to add all params for each modality
+        params_size = [1, batch_size, self.input_size]
+        mu, logvar = self.init_params(params_size)
+
+        for i in range(0, self.modality_size):
+            if input_modalities[i] is not None:
+                temp_mu, temp_logvar = gen_mod(input_modalities[i], cond)
+                mu = torch.cat((mu, temp_mu.unsqueeze(0)), dim=0)
+                logvar = torch.cat((logvar, temp_logvar.unsqueeze(0)), dim=0)
+
+        # product of params to combine gaussians
+        eps = 1e-8
+        var = torch.exp(logvar) + eps
+        T = 1 / (var + eps)  # weights for each modality
+        pd_mu = torch.sum(mu * T, dim=0) / torch.sum(T, dim=0)  # weighted average
+        pd_var = 1 / torch.sum(T, dim=0)
+        pd_logvar = torch.log(pd_var + eps)
+
+        return pd_mu, pd_logvar
 
 class Discriminator(nn.Module):
     
@@ -67,7 +99,8 @@ class Discriminator(nn.Module):
             else:
                 # finally layer to transform data into 0~1 ranges
                 self.MLP.add_module(name="A{:d}".format(i), module=nn.Sigmoid())
-                
+        self.linear_mu = nn.Linear(layer_size[-1], self.input_size)
+        self.linear_lagvar = nn.Linear(layer_size[-1], self.input_size)
 
     def forward(self, inputs):
         
@@ -76,21 +109,19 @@ class Discriminator(nn.Module):
         # fake ones will have 0-like values of validity
         # validity: shape(batch_size, 1)
         validity = self.MLP(inputs)
-        
-        return validity
+        mu = self.linear_mu(validity)
+        logvar = self.linear_lagvar(validity)
+
+        return validity, mu, logvar
 
 def train_GAN(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rate, conditional=True, latent_size = 10,layer_size = [32, 64, 128], valid_dim = 1,epoch = 1000):
-    #mod_train = mod_train[j]
-    #mod_test = mod_test[j]
+
     # only train cgan on single modality
     batch_size = mod_train.shape[0]
-    #latent_size = 10
-    #layer_size = [32, 64, 128]
     mod_dim = mod_train.shape[1]
     cond_dim = cond_train.shape[1]
     #valid_dim = 1
     #epcho = 1000
-    
     # Loss functions
     adversarial_loss = torch.nn.MSELoss()
 
@@ -100,7 +131,7 @@ def train_GAN(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rat
     D_layer_size = layer_size.copy()
     D_layer_size.reverse()
     discriminator = Discriminator(mod_dim, D_layer_size, valid_dim)
-    
+
     optimizer_G = torch.optim.Adam(generator.parameters(), lr=learning_rate)
     optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=learning_rate)
 
@@ -168,9 +199,10 @@ def train_GAN(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rat
     z = torch.from_numpy(np.random.normal(0, 1, (test_batch_size, latent_size))).float()
     estimations = generator(z, cond_test)
     error = torch.nn.functional.mse_loss(estimations, mod_test)
+    rmse_error = torch.sqrt(error)
     if conditional:
-        print("CGAN testing_error (mse):%.2f" % error)
+        print("CGAN testing_error (mse):%.2f\t(rmse):%.2f" % (error, rmse_error))
     else:
-        print("GAN testing_error (mse):%.2f" % error)
-        
-    return error, estimations
+        print("GAN testing_error (mse):%.2f\t(rmse):%.2f" % (error, rmse_error))
+
+    return error, estimations, rmse_error

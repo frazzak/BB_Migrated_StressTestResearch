@@ -14,14 +14,13 @@ from torch.nn import functional as F
 class MCVAE(nn.Module):
     
     def __init__(self, latent_size, modality_size, conditional, num_cond,
-                 mod_input_sizes, layer_size, use_cuda):
+                 mod_input_sizes, layer_size, use_cuda,act_fn=F.elu):
         
         super(MCVAE, self).__init__()
         self.sub_encoders = nn.ModuleList()
         self.sub_decoders = nn.ModuleList()
         self.modality_size = modality_size
         self.conditional = conditional
-        
         decoder_layer_size = layer_size.copy()
         decoder_layer_size.reverse()
         for i in range(0, self.modality_size):
@@ -31,10 +30,39 @@ class MCVAE(nn.Module):
                                      conditional, num_cond)
             self.sub_encoders.append(temp_encoder)
             self.sub_decoders.append(temp_decoder)
+
         self.latent_size = latent_size
         self.use_cuda = use_cuda
         self.training = False
-        
+        self.latent_dim = latent_size
+        #For BDMC
+        #self.decoder = self.sub_decoders
+
+        self.act_fn = act_fn
+
+        #self.fc1 = nn.Linear(784, 200)
+        #self.fc2 = nn.Linear(200, 200)
+        #self.fc3 = nn.Linear(200, latent_dim * 2)
+
+        #self.fc4 = nn.Linear(latent_dim, 200)
+        #self.fc5 = nn.Linear(200, 200)
+        #self.fc6 = nn.Linear(200, 784)
+
+    def decode(self, z, cond=None):
+        #net = self.act_fn(self.fc4(net))
+        #net = self.act_fn(self.fc5(net))
+        #net = self.decode(net)
+        # reconstruct modalities based on sample
+        output_estimations = []
+        #print(type(z))
+        output_probdistributions = []
+        for i in range(0, self.modality_size):
+            temp_estimation = self.sub_decoders[i].forward(z, cond)
+            #output_estimations = torch.cat((output_estimations,temp_estimation))
+            output_estimations.extend([temp_estimation])
+        #output_estimations = torch.cat(output_estimations. dim = 2)
+        return tuple(output_estimations)
+
     def train(self):
         # set model in train mode
         self.training = True
@@ -108,11 +136,12 @@ class MCVAE(nn.Module):
         
         # reconstruct modalities based on sample
         output_estimations = []
+        output_probdistributions = []
         for i in range(0, self.modality_size):
             temp_estimation = self.sub_decoders[i].forward(z, cond)
             output_estimations.extend([temp_estimation])
-        
-        return output_estimations, mu, logvar
+            output_probdistributions.extend(F.softmax(temp_estimation, dim = 1))
+        return output_estimations, mu, logvar, output_probdistributions
     
     def inference(self, n=1, cond=None):
         
@@ -120,11 +149,13 @@ class MCVAE(nn.Module):
         z = torch.randn([batch_size, self.latent_size])
         
         output_estimations = []
+        output_probdistributions = []
         for i in range(0, self.modality_size):
             temp_estimation = self.sub_decoders[i].forward(z, cond)
             output_estimations.extend([temp_estimation])
+            output_probdistributions.extend(F.softmax(temp_estimation, dim=1))
         
-        return output_estimations
+        return output_estimations, output_probdistributions
 
 class m_encoder(nn.Module):
     
@@ -155,7 +186,7 @@ class m_encoder(nn.Module):
         
         mu = self.linear_mu(x)
         logvar = self.linear_lagvar(x)
-        
+
         return mu, logvar
 
 class m_decoder(nn.Module):
