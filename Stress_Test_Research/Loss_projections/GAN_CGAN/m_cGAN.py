@@ -21,6 +21,9 @@ class Generator(nn.Module):
         self.conditional = conditional
         self.input_size = latent_size
         self.layer_size = layer_size
+        #For BDMC
+        self.latent_dim = latent_size
+        self.training = False
 
         self.MLP = nn.Sequential()
         if self.conditional:
@@ -50,6 +53,23 @@ class Generator(nn.Module):
         logvar = self.linear_lagvar(gen_outputs)
         return gen_outputs , mu, logvar
 
+    def decode(self, z, cond=None):
+        if self.conditional:
+            latent_inputs = torch.cat([z, cond], 1)
+        else:
+            latent_inputs = z
+        gen_outputs = self.MLP(latent_inputs)
+        # reconstruct modalities based on sample
+
+        return gen_outputs
+
+    def train(self):
+        # set model in train mode
+        self.training = True
+
+    def test(self):
+        # set model in eval mode
+        self.training = False
 
     def get_params(self, input_modalities, gen_mod, cond=None, ):
         # obtain mu, logvar for each modality
