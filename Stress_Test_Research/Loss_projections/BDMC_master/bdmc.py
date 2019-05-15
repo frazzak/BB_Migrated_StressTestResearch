@@ -37,7 +37,7 @@ from BDMC_master import vae
 # modeltype = "mcvae"
 
 
-def bdmc(model, loader, forward_schedule, n_sample, modeltype = "vae", cond = None):
+def bdmc(model, loader, forward_schedule, n_sample, modeltype = "vae", cond = None, mod_num = None):
   """Bidirectional Monte Carlo. Backward schedule is set to be the reverse of
   the forward schedule.
 
@@ -54,7 +54,7 @@ def bdmc(model, loader, forward_schedule, n_sample, modeltype = "vae", cond = No
 
   # iterator is exhaustable in py3, so need duplicate
   load, load_ = itertools.tee(loader, 2)
-  if modeltype in ["mcvae", "cvae"]:
+  if modeltype in ["mcvae", "cvae", "cgan"]:
       # forward chain
       forward_logws = ais.ais_trajectory(
           model,
@@ -62,7 +62,7 @@ def bdmc(model, loader, forward_schedule, n_sample, modeltype = "vae", cond = No
           forward=True,
           schedule=forward_schedule,
           n_sample=n_sample,
-            modeltype = modeltype, cond = cond)
+            modeltype = modeltype, cond = cond, mod_num = mod_num)
 
       # backward chain
       backward_schedule = np.flip(forward_schedule, axis=0)

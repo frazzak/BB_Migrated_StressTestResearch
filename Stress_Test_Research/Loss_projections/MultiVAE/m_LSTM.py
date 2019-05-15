@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn as nn
 import torch.nn.init as Init
-
+import pandas as pd
 
 class mLSTM(nn.Module):
     
@@ -61,7 +61,7 @@ def train(inputs, targets, epcho, lstm_lr, threshold):
        
     m_LSTM = mLSTM(m1, n, m2, dim_hidden)
     m_loss = torch.nn.MSELoss()
-
+    m_loss_list = []
     #print(m_loss)
     m_optimizer = torch.optim.SGD(m_LSTM.parameters(), lr=lstm_lr)
     t_loss = np.inf
@@ -74,29 +74,38 @@ def train(inputs, targets, epcho, lstm_lr, threshold):
         loss_rmse.backward(retain_graph=True)
         loss.backward(retain_graph=True)
         m_optimizer.step()
-    #    print(loss.data)
+        m_loss_list.append(loss.item())
+        print("LSTM Training Loss at Epoch:",i,"Loss:",str(loss.item()))
+
         if t_loss > loss.data and np.abs(t_loss - loss.data) > threshold:
             t_loss = loss.data
-        elif t_loss_rmse > loss_rmse and np.abs(t_loss_rmse - loss_rmse) > threshold:
             t_loss_rmse = loss_rmse
         else:
-            #print(loss.data)
+            print(loss.item)
             print("Done!")
             break
-    
-    return m_LSTM, loss.data, loss_rmse
+    training_hist = pd.DataFrame(m_loss_list)
+    training_hist.index.name = "EPOCH"
+    training_hist.columns = ["MSE_Loss"]
+
+    return m_LSTM, loss.data, loss_rmse, training_hist
 
 
-# def plot(m_lstm,inputs_eval, targets_eval):
-#     with torch.no_grad():
-#         prediction = m_lstm.forward(inputs_eval).view(-1)
-#         loss = nn.MSELoss(prediction, targets_eval)
-#         plt.title("MESLoss: {:.5f}".format(loss))
-#         plt.plot(prediction.detach().numpy(), label="pred")
-#         plt.plot(targets_eval.detach().numpy(), label="true")
-#         plt.legend()
-#         plt.show()
-
+def plot(m_lstm, inputs_eval, targets_eval, figname = None):
+     with torch.no_grad():
+         prediction = m_lstm.forward(inputs_eval).view(-1)
+         loss = torch.nn.MSELoss(prediction, targets_eval)
+         plt.title("MESLoss: {:.5f}".format(loss))
+         plt.plot(prediction.detach().numpy(), label="pred")
+         plt.plot(targets_eval.detach().numpy(), label="true")
+         plt.legend()
+         if figname is not None:
+             plt.savefig("_".join(["./Images/m_LSTM_Plot",figname,".png"]), format = 'png')
+         else:
+             plt.savefig("_".join(["./Images/m_LSTM_Plot", "temp", ".png"]), format='png')
+         plt.show()
+         plt.close()
+     return("Completed")
 def predict(model, inputs):
     
     outputs = model.forward(inputs)

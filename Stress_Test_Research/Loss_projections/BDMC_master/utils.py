@@ -7,6 +7,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 
 
+
 def log_normal(x, mean, logvar):
   """Implementation WITHOUT constant, since the constants in p(z) 
   and q(z|x) cancels out.

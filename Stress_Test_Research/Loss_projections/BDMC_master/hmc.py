@@ -15,7 +15,8 @@ def hmc_trajectory(current_z, current_v, U, grad_U, epsilon, L=10, modeltype= "v
   """
   eps = epsilon.view(-1, 1)
   z = current_z
-  v = current_v - grad_U(z,modeltype = modeltype, cond = cond).mul(eps).mul_(.5)
+  v = current_v
+  v = v - grad_U(z, modeltype = modeltype, cond = cond).mul(eps).mul_(.5)
 
   for i in range(1, L + 1):
     z = z + v.mul(eps)
@@ -24,6 +25,8 @@ def hmc_trajectory(current_z, current_v, U, grad_U, epsilon, L=10, modeltype= "v
 
   v = v - grad_U(z,modeltype = modeltype, cond = cond).mul(eps).mul_(.5)
   v = -v  # this is not needed; only here to conform to the math
+  # if isinstance(z, list) and modeltype in ["mcvae"]:
+  #   z = torch.mean(torch.stack(z), dim=0)
 
   return z.detach(), v.detach()
 
@@ -56,6 +59,8 @@ def accept_reject(current_z, current_v,
     #.cuda()
     accept = (prob > uniform_sample).float()
     #.cuda()
+    if isinstance(current_z,list):
+      current_z = torch.mean(torch.stack(current_z), dim=0)
     z = z.mul(accept.view(-1, 1)) + current_z.mul(1. - accept.view(-1, 1))
 
     accept_hist = accept_hist.add(accept)

@@ -13,7 +13,7 @@ def ais_trajectory(model,
                    loader,
                    forward=True,
                    schedule=np.linspace(0., 1., 500),
-                   n_sample=100, modeltype = "vae", cond = None):
+                   n_sample=100, modeltype = "vae", cond = None, mod_num = None):
   """Compute annealed importance sampling trajectories for a batch of data. 
   Could be used for *both* forward and reverse chain in BDMC.
 
@@ -34,27 +34,31 @@ def ais_trajectory(model,
         f_i = p(z)^(1-t) p(x,z)^(t) = p(z) p(x|z)^t
     =>  log f_i = log p(z) + t * log p(x|z)
     """
-    zeros = torch.zeros(B, model.latent_dim)#.cuda()
+    zeros = torch.zeros(B, model.latent_dim)  # .cuda()
     log_prior = utils.log_normal(z, zeros, zeros)
+
+
     if modeltype in ["mcvae","cvae","vae"]:
       modres = model.decode(z, cond)
       tmp_loss_list = []
       for i in range (0, len(modres)):
-        #print("Subdecoder:",str(i))
         log_likelihood_tmp = log_likelihood_fn(modres[i][0], data)
         tmp_loss_list.append(log_likelihood_tmp)
       #log_likelihood = pd.DataFrame(tmp_loss_list).transpose().mean(axis = 1)
       log_likelihood = torch.mean(torch.stack(tmp_loss_list), dim = 0)
+    elif modeltype in ["cgan"]:
+        modres = model.decode(z, cond = cond)
+        log_likelihood = log_likelihood_fn(modres, data)
     else:
-      log_likelihood = log_likelihood_fn(model.decode(z), data)
+        log_likelihood = log_likelihood_fn(model.decode(z), data)
     return log_prior + log_likelihood.mul_(t)
 
 
   logws = []
+  #mod_dim = cond.shape[1]
   for i, (batch, post_z) in enumerate(loader):
     B = batch.size(0) * n_sample
     #batch = batch.cuda()
-    #testing = "testing"
     batch = utils.safe_repeat(batch, n_sample)
 
     with torch.no_grad():
@@ -63,6 +67,7 @@ def ais_trajectory(model,
       accept_hist = torch.zeros(B)#.cuda()
       logw = torch.zeros(B)#.cuda()
     # initial sample of z
+
     if forward:
       current_z = torch.randn(B, model.latent_dim)#.cuda()
     else:
@@ -71,7 +76,7 @@ def ais_trajectory(model,
 
     for j, (t0, t1) in tqdm(enumerate(zip(schedule[:-1], schedule[1:]), 1)):
       # update log importance weight
-      if modeltype in ["mcvae", "cvae","vae"]:
+      if modeltype in ["mcvae","cvae","vae","cgan"]:
         log_int_1 = log_f_i(current_z, batch, t0, modeltype = modeltype, cond = cond)
         log_int_2 = log_f_i(current_z, batch, t1, modeltype = modeltype, cond = cond)
       else:
@@ -86,7 +91,6 @@ def ais_trajectory(model,
         return -log_f_i(z, batch, t1, modeltype = modeltype, cond = cond)
 
       def grad_U(z,modeltype = "vae", cond = None):
-        # grad w.r.t. outputs; mandatory in this case
         grad_outputs = torch.ones(B)#.cuda()
         # torch.autograd.grad default returns volatile
         grad = torchgrad(U(z,modeltype = modeltype, cond = cond), z, grad_outputs=grad_outputs)[0]

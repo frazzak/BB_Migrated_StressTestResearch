@@ -13,55 +13,44 @@ from torch.nn import functional as F
 
 class MCVAE(nn.Module):
     
-    def __init__(self, latent_size, modality_size, conditional, num_cond,
-                 mod_input_sizes, layer_size, use_cuda,act_fn=F.elu):
+    def __init__(self, latent_size, modality_size, conditional, num_cond,mod_input_sizes, layer_size, use_cuda):
         
         super(MCVAE, self).__init__()
         self.sub_encoders = nn.ModuleList()
         self.sub_decoders = nn.ModuleList()
         self.modality_size = modality_size
         self.conditional = conditional
+        self.mod_input_sizes = mod_input_sizes
         decoder_layer_size = layer_size.copy()
         decoder_layer_size.reverse()
         for i in range(0, self.modality_size):
-            temp_encoder = m_encoder(mod_input_sizes[i], latent_size, layer_size,
-                                     conditional, num_cond)
-            temp_decoder = m_decoder(mod_input_sizes[i], latent_size, decoder_layer_size,
-                                     conditional, num_cond)
+            temp_encoder = m_encoder(mod_input_sizes[i], latent_size, layer_size,conditional, num_cond)
+            temp_decoder = m_decoder(mod_input_sizes[i], latent_size, decoder_layer_size, conditional, num_cond)
             self.sub_encoders.append(temp_encoder)
             self.sub_decoders.append(temp_decoder)
 
         self.latent_size = latent_size
+        self.latent_dim = latent_size
         self.use_cuda = use_cuda
         self.training = False
-        self.latent_dim = latent_size
-        #For BDMC
-        #self.decoder = self.sub_decoders
 
-        self.act_fn = act_fn
 
-        #self.fc1 = nn.Linear(784, 200)
-        #self.fc2 = nn.Linear(200, 200)
-        #self.fc3 = nn.Linear(200, latent_dim * 2)
-
-        #self.fc4 = nn.Linear(latent_dim, 200)
-        #self.fc5 = nn.Linear(200, 200)
-        #self.fc6 = nn.Linear(200, 784)
 
     def decode(self, z, cond=None):
-        #net = self.act_fn(self.fc4(net))
-        #net = self.act_fn(self.fc5(net))
-        #net = self.decode(net)
+        #TODO: Fix this part to work with AIS BDMC
+        # make input_modalities as tuple, each dimension represents a modality
+        #mu, logvar = self.get_params(input_modalities, cond)
+
+        # reparametrization trick to sample
+        #z = self.reparameterize(mu, logvar)
+
         # reconstruct modalities based on sample
         output_estimations = []
-        #print(type(z))
-        output_probdistributions = []
         for i in range(0, self.modality_size):
             temp_estimation = self.sub_decoders[i].forward(z, cond)
-            #output_estimations = torch.cat((output_estimations,temp_estimation))
             output_estimations.extend([temp_estimation])
-        #output_estimations = torch.cat(output_estimations. dim = 2)
-        return tuple(output_estimations)
+
+        return output_estimations
 
     def train(self):
         # set model in train mode
@@ -85,8 +74,9 @@ class MCVAE(nn.Module):
         if self.use_cuda:
             mu, logvar = mu.cuda(), logvar.cuda()
         return mu, logvar
-        
-    
+
+
+
     def get_params(self, input_modalities, cond=None):
         # obtain mu, logvar for each modality
         for modality in input_modalities:
@@ -98,7 +88,7 @@ class MCVAE(nn.Module):
         # add extra dimension 1 in order to add all params for each modality
         params_size = [1, batch_size, self.latent_size]
         mu, logvar = self.init_params(params_size)
-        
+
         for i in range(0, self.modality_size):
             if input_modalities[i] is not None:
                 temp_mu, temp_logvar = self.sub_encoders[i].forward(input_modalities[i], cond)
@@ -216,17 +206,11 @@ class m_decoder(nn.Module):
         
         if self.conditional:
             inputs = torch.cat((inputs, cond), dim=-1)
-        
+
         x = self.MLP(inputs)
         
         return x
-        
-        
-        
-        
-        
-        
-        
+
         
         
         

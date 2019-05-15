@@ -7,7 +7,7 @@ from torch.autograd import Variable
 from torch.distributions import Bernoulli
 
 
-def simulate_data(model, batch_size=10, n_batch=1, cond = None, modeltype = 'vae'):
+def simulate_data(model, batch_size=10, n_batch=1, cond = None, modeltype = 'vae', mod_dim = None):
   """Simulate data from the VAE model. Sample from the 
   joint distribution p(z)p(x|z). This is equivalent to
   sampling from p(x)p(z|x), i.e. z is from the posterior.
@@ -24,21 +24,25 @@ def simulate_data(model, batch_size=10, n_batch=1, cond = None, modeltype = 'vae
       iterator that loops over batches of torch Tensor pair x, z
   """
 
-  # shorter aliases
 
+  # shorter aliases
   batches = []
   for i in range(n_batch):
-    # assume prior for VAE is unit Gaussian
-    z = torch.randn(batch_size, model.latent_dim)#.cuda()
+    z = torch.randn(batch_size, model.latent_dim)  # .cuda()
 
-    #if modeltype == 'vae':
-    if modeltype in ['mcvae', "cvae"]:
-      x_logits = model.decode(z,cond)
+    if modeltype in ['mcvae', "cvae","cgan"]:
+      x_logits = model.decode(z, cond)
     else:
       x_logits = model.decode(z)
 
+
     if isinstance(x_logits, tuple):
       x_logits = x_logits[0]
+
+    if isinstance(x_logits, list):
+      x_logits = x_logits[0]
+      #x_logits = torch.cat(x_logits, dim = 1)
+
     x_bernoulli_dist = Bernoulli(probs=x_logits.sigmoid())
     x = x_bernoulli_dist.sample().data
 
