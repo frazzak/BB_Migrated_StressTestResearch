@@ -231,12 +231,15 @@ class StressTestData():
                                              "-  -": "-"
                                          },
 
+
                                      },
                                      keyname=None, groupfunction=np.mean, groupby=["RSSD_ID", "ReportingDate"],
                                      groupagg_col='Other items:Consolidated assets',
                                      RSSD_DateParam=["1989-12-31", "2018-01-01"],
                                      ReportingDateParam=["1989-12-31", "2017-12-31"], RSSDList_len=1000, dropdup=False,
-                                     replace_nan=False, merge = True, Consqtr = True, combinecol = True, reducedf = True, skip_prefix = None, Y_calc = True, RSSD_Subset = True, calc_CR_hist = True,get_prev_time_cols = True
+                                     replace_nan=False, merge = True, Consqtr = True, combinecol = True, reducedf = True, skip_prefix = None, Y_calc = True, RSSD_Subset = True
+                                     , calc_CR_hist = True,get_prev_time_cols = True
+                                     , concecutiveqtrs = 8
                                      ):
 
         print("Reading in CSV files from", self.BankPerf_dir)
@@ -269,9 +272,9 @@ class StressTestData():
 
         if Consqtr:
             print("Applying Consecutive Quarters Rule")
-            BankCharPerf_raw_data_dict = self.BankPerf_ConsecutiveQtrs_Reduce(BankCharPerf_raw_data_dict, concecutiveqtrs=8,
+            BankCharPerf_raw_data_dict = self.BankPerf_ConsecutiveQtrs_Reduce(BankCharPerf_raw_data_dict, concecutiveqtrs=concecutiveqtrs,
                                                                  BankPerf_Calc_df_name="BankPerf_Calculated",
-                                                                 sincedt="1990-01-30", outputkeyname = "BankPerf_MainCalc")
+                                                                 sincedt=ReportingDateParam[0], outputkeyname = "BankPerf_MainCalc")
 
         #BankPerfConRedcued.keys()
         if combinecol:
@@ -758,9 +761,11 @@ class StressTestData():
                               ):
         # Need to handle NAN rows and outliers.
 
+
+
         if fillna:
-            print("Forward Filling Nans")
-            BankPerf = BankPerf.fillna(method = 'ffill')
+            print("Interpolating and Filling Nans")
+            BankPerf = BankPerf.interpolate(method = 'polynomial',order = 2).fillna(method = 'ffill').fillna(method = 'bfill')
         if replace_nan:
             print("Replace 0.0 with np.nan")
             BankPerf = BankPerf.replace(0.0, np.nan)
@@ -874,443 +879,45 @@ def DateValues_Extractor(DF, DateColumn="ReportingDate", day=[30, 31], month=[3,
     return (DF)
 
 
-#CDS_Swaps_Full = pd.read_csv("~/Downloads/CDS_WRDS.csv")
-#del CDS_Swaps_Full
+def outlier_preprocess( df, col_exclude = ["RSSD_ID","ReportingDate"], quantiles = [.15,.80], interpolate = True, interpolate_method = "linear", makezero = None, verbose = False):
+    down_quantiles = df[df.columns.difference(col_exclude)].quantile(quantiles[0])
+    if verbose:
+        print(down_quantiles)
 
-#CDS_Swaps_Full.describe().transpose()
+    outliers_low = (df[df.columns.difference(col_exclude)] < down_quantiles)
 
+    up_quantiles = df[df.columns.difference(col_exclude)].quantile(quantiles[1])
 
+    if verbose:
+        print(up_quantiles)
+    outliers_high = (df[df.columns.difference(col_exclude)] > up_quantiles)
 
 
+    df_tmp = df[df.columns.difference(col_exclude)].mask(outliers_low, down_quantiles, axis=1).mask(outliers_high, up_quantiles, axis=1)
 
-#Entry Point
-init_ST = StressTestData()
+    if makezero is not None:
+        if isinstance(makezero,list):
+            zero_mask = (df_tmp < makezero[0]) & (df_tmp < makezero[1])
+            df_tmp = df_tmp.mask(zero_mask, 0, axis=1)
+        else:
+            zero_mask = (df_tmp < makezero)
+            df_tmp = df_tmp.mask(zero_mask,0, axis = 1)
 
-# #Z_Macro complate and distributions match to Malik 2018
-# Z_macro = init_ST.Z_macro_process()
-#
-# Z_macro.keys()
-#
-#
-# Z_macro['Z_macro']['Date']
-#
-# Z_macro_out = Z_macro['Z_macro'][(pd.to_datetime(Z_macro['Z_macro']['Date']) <= "2017-12-31") & (pd.to_datetime(Z_macro['Z_macro']['Date']) >= "1990-01-01")]
-# Z_macro_out["Date"] =  pd.to_datetime(Z_macro_out.Date).dt.year.astype(str) + " Q" + pd.to_datetime(Z_macro_out.Date).dt.quarter.astype(str)
-# Z_macro_out.keys()
-# Z_macro_out = Z_macro_out.drop("Scenario Name_x",axis = 1)
-# Z_macro_out.to_csv("../Data_Output/Z_Macro.csv", sep = ",", index = False)
-#
+    if interpolate:
+        df_tmp = df_tmp.interpolate(method=interpolate_method, order=2)
 
+    df_tmp = pd.concat([df[col_exclude], df_tmp], axis = 1)
 
+    if verbose:
+        print(df_tmp.describe())
 
+    return(df_tmp)
 
-#Z_macro["Historic_Domestic"].keys()
-#pd.to_datetime(Z_macro["Historic_Domestic"]["Date"]).min()
 
-#Z_macro.keys()
 
-#Z_macro_Domestic_colsuse = [x for x in Z_macro["Historic_Domestic"].columns if x not in ["Scenario Name"]]
-#Z_macro["Historic_Domestic"][Z_macro_Domestic_colsuse][pd.to_datetime(Z_macro["Historic_Domestic"]["Date"]) <= "2017-12-31"].describe().transpose()
-#Z_macro["Historic_Domestic"][Z_macro_Domestic_colsuse].to_csv("../Data_Output/Z_Macro_Domestic.csv", sep = ",", index = False)
-#Z_macro_International_colsuse = [x for x in Z_macro["Historic_International"].columns if x not in ["Scenario Name"]]
-#Z_macro["Historic_International"][Z_macro_International_colsuse][pd.to_datetime(Z_macro["Historic_International"]["Date"]) <= "2017-12-31"].describe().transpose()
-#Z_macro["Historic_International"][Z_macro_International_colsuse].to_csv("../Data_Output/Z_Macro_International.csv", sep = ",", index = False)
-#Z_macro_combined = Z_macro["Historic_Domestic"][Z_macro_Domestic_colsuse].merge(Z_macro["Historic_International"][Z_macro_International_colsuse], on = "pdDate")
-
-#Z_macro_combined = Z_macro["Historic_Domestic"][Z_macro_Domestic_colsuse].merge(Z_macro["Historic_International"][Z_macro_International_colsuse], on = "Date")
-
-#Z_macro_combined.columns
-
-#
-#Z_macro_combined["Date"] =  pd.to_datetime(Z_macro_combined.Date).dt.year.astype(str) + " Q" + pd.to_datetime(Z_macro_combined.Date).dt.quarter.astype(str)
-
-
-#Z_macro_combined.to_csv("../Data_Output/Z_Macro.csv", sep = ",", index = False)
-
-#Shadow Banking Proxies
-# SBidx = init_ST.SBidx_process()
-# SBidx["SB_idx_prox"] = SBidx["SB_idx_prox"].rename({"Date":"ReportingDate"},axis = 1)
-
-
-#Subset Quarter values only.
-
-# SBidx["SB_idx_prox"] = SBidx["SB_idx_prox"][(pd.to_datetime(SBidx["SB_idx_prox"]["ReportingDate"]).dt.month.isin([3,6,9,12])) & (pd.to_datetime(SBidx["SB_idx_prox"]["ReportingDate"]).dt.day.isin([30,31]))]
-#
-#
-# #Trim Dates
-# SBidx["SB_idx_prox"] = SBidx["SB_idx_prox"][(pd.to_datetime(SBidx["SB_idx_prox"]["ReportingDate"]) >= "1990-01-01") & (pd.to_datetime(SBidx["SB_idx_prox"]["ReportingDate"]) <= "2017-12-31")]
-#
-#
-# SBidx["SB_idx_prox"]["ReportingDate"] =  pd.to_datetime(SBidx["SB_idx_prox"].ReportingDate).dt.year.astype(str) + " Q" + pd.to_datetime(SBidx["SB_idx_prox"].ReportingDate).dt.quarter.astype(str)
-#
-# #SBidx["SB_idx_prox"].keys()
-#
-#
-# #SBidx["SB_idx_prox"]["ReportingDate"]
-#
-# #Select only the Quarterly values / Get only 3-31, 6-30,9-30. 12-31
-# SBidx["SB_idx_prox"].to_csv("../Data_Output/SBidx.csv", sep = ",", index = False)
-#
-
-
-#Sector Indices
-# #Select only the Quarterly values / Get only 3-31, 6-30,9-30. 12-31
-# SectorIdx = init_ST.sectoridx_process()
-# #
-# #SectorIdx.keys()
-# #SectorIdx["sectoridx"].keys()
-#
-# #SectorIdx["sectoridx"].to_csv("../Data_Output/Sectidx.csv", sep = ",", index = False)
-#
-# #We may have to average quarterly values or quarterly return values.
-# SectorIdx["sectoridx"] = SectorIdx["sectoridx"].rename({"Date":"ReportingDate"},axis = 1)
-# #Select only the Quarterly values
-#
-# SectorIdx["sectoridx"]["ReportingDate"]
-#
-# SectorIdx["sectoridx"] = SectorIdx["sectoridx"][(pd.to_datetime(SectorIdx["sectoridx"]["ReportingDate"]).dt.month.isin([3,6,9,12])) & (pd.to_datetime(SectorIdx["sectoridx"]["ReportingDate"]).dt.day.isin([30,31]))]
-# SectorIdx["sectoridx"] = SectorIdx["sectoridx"][(pd.to_datetime(SectorIdx["sectoridx"]["ReportingDate"]) >= "1990-01-01") & (pd.to_datetime(SectorIdx["sectoridx"]["ReportingDate"]) <= "2017-12-31")]#.describe().transpose()
-#
-#
-# SectorIdx["sectoridx"]["ReportingDate"] =  pd.to_datetime(SectorIdx["sectoridx"].ReportingDate).dt.year.astype(str) + " Q" + pd.to_datetime(SectorIdx["sectoridx"].ReportingDate).dt.quarter.astype(str)
-# SectorIdx["sectoridx"].to_csv("../Data_Output/Sectidx.csv", sep = ",", index = False)
-
-#SectorIdx["WRDS_SP500_RealEstate_Indicies"]["tic"].unique()
-#SectorIdx["sectoridx"].keys()
-#SectorIdx.keys()
-#Should pring out Summary Statistics
-#
-# def file_dict_read(rootdir, filetype=".csv", skip_prefix=" "):
-#     print("Initializing Raw Data Frame Dict")
-#     tmp_dict = {}
-#     print("Searching path:", rootdir)
-#     for dirName, subdirList, fileList in os.walk(rootdir):
-#         print('Found directory: %s' % dirName)
-#         for fname in fileList:
-#             if not fname.startswith(skip_prefix):
-#                 if fname.endswith(filetype):
-#                     print("Reading File and Adding to Dataframe Dictionary")
-#                     print(os.path.join(dirName, fname))
-#                     print('\t%s' % fname)
-#                     print(fname.split(filetype)[0])
-#                     exec('''tmp_dict[fname.split(filetype)[0]] = pd.read_csv("''' + os.path.join(dirName,
-#                                                                                                  fname) + '''")''')
-#     return (tmp_dict)
-
-
-# Z_micro = init_ST.Z_micro_process()
-#
-# #Z_micro.keys()
-# #Z_micro["WRDS_government_bonds"].keys()
-#
-# #Z_micro["WRDS_US Treasury and Inflation Indexes"].keys()
-#
-# list(Z_micro["Z_Micro"].keys())
-
-
-
-
-#Z_micro["WRDS_currency_swaps"].keys()
-
-#Z_micro["WRDS_government_bonds"].keys()
-
-
-
-# CurrencySwapsList = ('exusal',
-# 'exalus',
-# 'exbzus',
-# 'excaus',
-# 'exchus',
-# 'exdnus',
-# 'exhkus',
-# 'exinus',
-# 'exjpus',
-# 'exkous',
-# 'exmaus',
-# 'exmxus',
-# 'exusnz',
-# 'exnzus',
-# 'exnous',
-# 'exsius',
-# 'exsfus',
-# 'exslus',
-# 'exsdus',
-# 'exszus',
-# 'extaus',
-# 'exthus',
-# 'exusuk',
-# 'exukus',
-# 'exvzus',
-# 'exusir',
-# 'exusec',
-# 'execus',
-# 'exuseu',
-# 'exeuus',
-# 'twexb',
-# 'twexm',
-# 'twexo',
-# 'indexgx',
-# 'ReportingDate')
-#
-# list(Z_micro["Z_Micro"].columns)
-#
-#
-# z_micro_currsqp = Z_micro["Z_Micro"][Z_micro["Z_Micro"].columns[(pd.Series(Z_micro["Z_Micro"].columns).str.startswith(CurrencySwapsList))]]
-#
-# z_micro_currsqp[(pd.to_datetime(z_micro_currsqp["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(z_micro_currsqp["ReportingDate"]) <= "2017-12-31")].describe().transpose()
-#
-#
-#
-# #
-# GovernmentBondsList = ('D_AH_M3',
-#  'D_AH_M6',
-#  'D_AH_Y1',
-#  'D_COMP_Y10P',
-#  'D_LTNOM_Y25P',
-#  'D_TCMNOM_Y20',
-#  'LTAVG_Y10P',
-#  'TB_M3',
-#  'TB_M6',
-#  'TB_WK4',
-#  'TB_Y1',
-#  'TCMII_Y10',
-#  'TCMII_Y20',
-#  'TCMII_Y30',
-#  'TCMII_Y5',
-#  'TCMII_Y7',
-#  'TCMNOM_M1',
-#  'TCMNOM_M3',
-#  'TCMNOM_M6',
-#  'TCMNOM_Y10',
-#  'TCMNOM_Y1',
-#  'TCMNOM_Y20',
-#  'TCMNOM_Y2',
-#  'TCMNOM_Y30',
-#  'TCMNOM_Y3',
-#  'TCMNOM_Y5',
-#  'TCMNOM_Y7',
-#   'ReportingDate')
-
-# z_micro_govtbonds = Z_micro["Z_Micro"][Z_micro["Z_Micro"].columns[(pd.Series(Z_micro["Z_Micro"].columns).str.startswith(GovernmentBondsList))]]
-#
-# z_micro_govtbonds.keys().__len__()
-#
-# z_micro_govtbonds[(pd.to_datetime(z_micro_govtbonds["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(z_micro_govtbonds["ReportingDate"]) <= "2017-12-31")].describe().transpose()[["count","mean","std","min","50%","max"]]
-
-
-
-#Z_micro["Z_Micro"][(pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) >= "1976-01-01") & (pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) <= "2017-12-31")].describe().transpose()
-
-
-
-# Z_micro["Z_Micro"] = Z_micro["Z_Micro"].rename({"Date":"ReportingDate"},axis = 1)
-# Z_micro["Z_Micro"] = DateValues_Extractor(Z_micro["Z_Micro"])
-# Z_micro["Z_Micro"] = Z_micro["Z_Micro"][(pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) >= "1990-01-01") & (pd.to_datetime(Z_micro["Z_Micro"]["ReportingDate"]) <= "2017-12-31")]
-# #TODO:Remove all NAN columns
-# Z_micro["Z_Micro"] = Z_micro["Z_Micro"].dropna(axis = 1 , how = 'all')
-# Z_micro["Z_Micro"]["ReportingDate"] =  pd.to_datetime(Z_micro["Z_Micro"].ReportingDate).dt.year.astype(str) + " Q" + pd.to_datetime(Z_micro["Z_Micro"].ReportingDate).dt.quarter.astype(str)
-#
-# #Foward fill, then backward fill
-# #list(Z_micro["Z_Micro"].keys()).__len__()
-#
-# #Z_micro["Z_Micro"] = Z_micro["Z_Micro"].fillna(method = "ffill").fillna(method = "bfill")
-#
-# Z_micro["Z_Micro"].to_csv("../Data_Output/Z_micro.csv", sep = ",", index = False)
-
-
-
-
-#Need Additional Subsetting and formatting logic for the WRDS data
-#Also need additional interest rate swaps data.
-#May need to calcualte the returns for some of the indices and prices.
-#Should output Summary Statistics
-
-
-#gc.collect()
-#May need to subset BankPerf to get Xi and Yi
-
-BankPerf = StressTestData().X_Y_bankingchar_perf_process(groupfunction=np.mean, groupby=["RSSD_ID", "ReportingDate"],
-                                     groupagg_col='Other items:Total Assets',
-                                     RSSD_DateParam=["1976-01-01", "2018-01-01"],
-                                     ReportingDateParam=["1990-01-01", "2018-01-01"], RSSDList_len=1000, dropdup=False,
-                                     replace_nan=False, combinecol=False, merge = False, reducedf = False,skip_prefix = "WRDS_Covas_BankPerf_CallReport",  replace_dict={"BankPerf_FR9YC_varlist": {
-                                         "df_keyname": "WRDS_Covas_BankPerf",
-                                         "calcol": "Report: FR Y-9C",
-                                         "BHCK892": "BHCKC892",
-                                         "+": ",",
-                                         "-": ",",
-                                         "(": "",
-                                         ")": "",
-                                         ". . .": "",
-                                         ",  ,": ",",
-                                         "+  +": "+",
-                                         "-  -": "-"},
-                                         "BankPerf_FFIEC_varlist": {
-                                             "df_keyname": "WRDS_Covas_CallReport_Combined",
-                                             "calcol": "Report: FFIEC 031/041",
-                                             "RCFD560": "RCFDB560",
-                                             "RIADK129": "RIAD4639",
-                                             "RIADK205": "RIAD4657",
-                                             "RIADK133": "RIAD4609",
-                                             "RIADK206": "RIAD4667",
-                                             "+": ",",
-                                             "-": ",",
-                                             "(": "",
-                                             ")": "",
-                                             ". . .": "",
-                                             ",  ,": ",",
-                                             "+  +": "+",
-                                             "-  -": "-"
-                                         },
-                                     }, RSSD_Subset = True, Y_calc= True)
-
-
-#BankPerf.keys()
-#Workspace
-
-
-
-# XY_GT_labels_tminus1 = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith(("RSSD_ID","ReportingDate","Chargeoffs_t-1","Recoveries_t-1","Net income(loss)_t-1","Less:Cash dividends on perp perf stock_t-1","Total Equity_1_t-1","Total Equity_2_t-1","Other items:Book equity_t-1","Other items:Dividends _t-1","Other items:Stock purchases_t-1","Other items:Risk-weighted assets_t-1","Other items:Tier 1 common equity_t-1","Other items:T1CR_t-1"))]]
-
-
-
-
-
-#Load Merged Data to MySQL
-#CReate Function to the post processing and load to mysql
-
-
-#
-# X_merged = preprocess_loadMySQL(BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"], datatype = "X"
-#                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-#                          , tbl_name = "X_merged", if_exists = "replace")
-#
-# Y_merged = preprocess_loadMySQL(BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"], datatype = "Y"
-#                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-#                          , tbl_name = "Y_merged", if_exists = "replace")
-#
-# CapitalRatios_merged = preprocess_loadMySQL(BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"], datatype = "XYCap"
-#                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-#                          , tbl_name = "CapitalRatio_merged", if_exists = "replace")
-#
-#
-# X_Y_Cap_merged = preprocess_loadMySQL(BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"], datatype = "X_Y_Cap"
-#                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-#                          , tbl_name = "X_Y_Cap_merged", if_exists = "replace")
-
-#Need to add logic to show partials
-
-# Z_macro_domestic = Z_macro['Historic_Domestic'][(pd.to_datetime(Z_macro['Historic_Domestic']['Date']) <= "2017-12-31") & (pd.to_datetime(Z_macro['Historic_Domestic']['Date']) >= "1990-01-01")]
-# Z_macro_domestic = Z_macro_domestic.rename({'Date':'ReportingDate'}, axis = 1)
-# Z_macro_domestic = Z_macro_domestic[Z_macro_domestic.columns.difference(['Scenario Name'])]
-# Z_macro_domestic["ReportingDate"] =  pd.to_datetime(Z_macro_domestic.ReportingDate).dt.year.astype(str) + " Q" + pd.to_datetime(Z_macro_domestic.ReportingDate).dt.quarter.astype(str)
-
-
-# Z_macro_domestic_mysql = preprocess_loadMySQL(Z_macro_domestic, datatype = "zmacro_Domestic"
-#                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-#                          , tbl_name = "Zmacro_domestic", if_exists = "replace")
-#
-#
-# # Z_macro_international = Z_macro['Historic_International'][(pd.to_datetime(Z_macro['Historic_International']['Date']) <= "2017-12-31") & (pd.to_datetime(Z_macro['Historic_International']['Date']) >= "1990-01-01")]
-#
-# Z_macro_international_mysql = preprocess_loadMySQL(Z_macro_international, datatype = "ZMacro_International"
-#                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-#                          , tbl_name = "ZMacro_International", if_exists = "replace")
-
-#BankPerf_bckp = BankPerf
-#BankPerf = BankPerf_bckp
-# BankPerf = BankPerf["BankPerf_Mergered_XYcalc_Subset_BankPerf"]
-#
-# #Merge with Dates
-#
-# list(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns)
-
-#TODO: Functionalize this part. Preprocessing for transformations.
-RepordingDate_Df = pd.DataFrame(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]["ReportingDate"].unique())
-RepordingDate_Df = RepordingDate_Df.rename({0:"ReportingDate"}, axis = 1)
-RepordingDate_Df["key"] = 0
-BankIds_Df = pd.DataFrame(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]["RSSD_ID"].unique())
-BankIds_Df = BankIds_Df.rename({0:"RSSD_ID"}, axis = 1)
-BankIds_Df["key"] = 0
-BankID_Date_Ref = RepordingDate_Df.assign(foo=1).merge(BankIds_Df.assign(foo=1), on = "foo",how = "outer" ).drop(["foo","key_x","key_y"],1)
-BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"] = BankID_Date_Ref.merge(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"], left_on = ["ReportingDate","RSSD_ID"], right_on = ["ReportingDate","RSSD_ID"], how = "left")
-BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"]["ReportingDate"] =  pd.to_datetime(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].ReportingDate).dt.year.astype(str) + " Q" + pd.to_datetime(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].ReportingDate).dt.quarter.astype(str)
-
-
-Preprocess_Dict = dict()
-Preprocess_Dict['X'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "X"
-                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "X", if_exists = "replace").interpolate(method = 'linear')
-
-
-Preprocess_Dict['Y'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "Y"
-                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "Y", if_exists = "replace").interpolate(method = 'linear')
-#Preprocess_Dict['Y'].columns
-# Preprocess_Dict['CapitalRatios']= preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "XYCap"
-#                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-#                          , tbl_name = "CapitalRatio", if_exists = "replace")
-
-
-Preprocess_Dict['X_Y_Cap'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "X_Y_Cap"
-                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "X_Y_Cap", if_exists = "replace").interpolate(method = 'linear')
-
-
-
-
-collist = [ x for x in list(Preprocess_Dict['X_Y_Cap'].keys()) if x.startswith("Other items: CapRatios") if not x.endswith("_t-1") if x.endswith("_coalesced") ]
-Preprocess_Dict['CapRatios'] = Preprocess_Dict['X_Y_Cap'][["RSSD_ID", "ReportingDate"] + collist]
-
-Preprocess_Dict['CapRatios']["ReportingDate"] = Preprocess_Dict['CapRatios']["ReportingDate"].apply(lambda x: pd.to_datetime(str(int(12/int(x.split("Q")[1]))) + "/" + x.split(" ")[0]) )
-CapitalRatios_plt = pd.pivot_table(Preprocess_Dict['CapRatios'][Preprocess_Dict['CapRatios'].columns.difference(["RSSD_ID"])], index=["ReportingDate"], aggfunc = np.mean)
-
-CapitalRatios_plt.plot()
-
-
-
-colist  = [ x for x in list(Preprocess_Dict['X_Y_Cap'].keys()) if x.startswith("Other items:Chargeoffs") if x.endswith("_Rate") if not x.endswith("_t-1") ]
-Preprocess_Dict['NCO'] = Preprocess_Dict['X_Y_Cap'][["RSSD_ID", "ReportingDate", "Other items:Net Charge Offs_Ratio",'Other items:Loan Charge Offs_Ratio'] + colist]
-#'Other items:Net Charge Offs_coalesced'
-
-
-
-Preprocess_Dict['X'].keys()
-Preprocess_Dict['Y'].keys()
-
-
-
-Preprocess_Dict['PCA_DF'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "PCA_DF"
-                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "PCA_DF", if_exists = "replace").interpolate(method = 'linear')
-
-
-
-
-pca_colist = [x for x in Preprocess_Dict['PCA_DF'].keys().tolist() if x.endswith(("_coalesced","Rate","Ratio"))] \
-+ [x for x in Preprocess_Dict['PCA_DF'].keys().tolist() if x.startswith(("ppnrRatio","ncoR","'Other items","Loans categories:")) if not  x.endswith(("t-1"))] \
-+ ['ReportingDate', 'RSSD_ID','Chargeoffs', 'Recoveries','Net income(loss)', 'Less:Cash dividends on perp perf stock','Total Equity_1', 'Total Equity_2']
-
-
-target_list = ['Other items: CapRatios_T1RiskCR_coalesced'
-    #,'Other items:Net Charge Offs_Ratio','Other items:Loan Charge Offs_Ratio']
-
-
-target = 'Other items: CapRatios_T1RiskCR_coalesced'
-interpolatefill = True
-Preprocess_Dict['PCA_DF'][pca_colist]
-Preprocess_Dict['PCA_DF_1'] = Preprocess_Dict['PCA_DF'][pca_colist]
-
-Preprocess_One = process_raw_bankdat_PCA_Norm(Preprocess_Dict, keyname = 'PCA_DF_1', target_list =  ['Other items: CapRatios_T1RiskCR_coalesced'], n_components = 5, visualizations = True)
-
-Preprocess_One.keys()
-Preprocess_One['CapRatios'] = Preprocess_One.pop('PCA_DF_1_target')
-Preprocess_One['X_Y_NCO_pca'] = Preprocess_One.pop('PCA_DF_1_normalized_2_pca')
-Preprocess_One['X_Y_NCO_all_pca'] = Preprocess_One.pop('PCA_DF_1_normalized_pca')
-Preprocess_One['X_Y_NCO_norm'] = Preprocess_One.pop('PCA_DF_1_normalized')
-
-
-def process_raw_bankdat_PCA_Norm(df_raw, dates = ["1990 Q1", "2016 Q4"], raw_date_col = "ReportingDate", keyname = None, interpolatefill = True, n_components = 10, visualizations = False, target_list = ['Other items: CapRatios_T1RiskCR_coalesced']):
+def process_raw_bankdat_PCA_Norm(df_raw, dates = ["1990 Q1", "2016 Q4"], raw_date_col = "ReportingDate",
+                                 keyname = None, interpolatefill = True, n_components = 10,
+                                 visualizations = False, target_list = ['Other items: CapRatios_T1RiskCR_coalesced']):
     #df_raw = Z_macro
     #keyname = "Z_macro"
     df_raw_dict = dict()
@@ -1346,11 +953,12 @@ def process_raw_bankdat_PCA_Norm(df_raw, dates = ["1990 Q1", "2016 Q4"], raw_dat
         df_raw = df_raw.interpolate(method="polynomial", order=2).fillna(method="bfill").fillna(method="ffill").dropna(axis=1, how='all')
 
      print("Normalizing, Transforming to PCA, Correlating, and Generating Plots")
+
     for target in target_list:
         exclude = ["ReportingDate","RSSD_ID"]
         print("Target:", target)
         non_target_tmp =  exclude #+ [x for x in target_list if not x == target]
-        print("Exlucding:", non_target_tmp)
+        print("Exlcuding:", non_target_tmp)
         print("First Remove Exclusions:",non_target_tmp)
         df_raw_tmp = df_raw[df_raw.columns.difference(non_target_tmp)]
 
@@ -1450,21 +1058,12 @@ def process_raw_bankdat_PCA_Norm(df_raw, dates = ["1990 Q1", "2016 Q4"], raw_dat
             plt.close()
 
         print("Reattaching Columns:", non_target_tmp)
-        df_raw_dict["_".join([keyname, "normalized"])] = pd.concat([df_raw[non_target_tmp],x_train_normalized], axis = 1)
-        df_raw_dict["_".join([keyname, "normalized_pca"])] = pd.concat([df_raw[non_target_tmp], pca_df], axis=1)
-        df_raw_dict["_".join([keyname, "normalized_2_pca"])]  = pd.concat([df_raw[non_target_tmp], pca_df[["PCA_0","PCA_1"]]], axis=1)
+        df_raw_dict["_".join([keyname, "normalized"])] = pd.concat([df_raw[non_target_tmp].reset_index(drop = True),x_train_normalized.reset_index(drop = True)], axis = 1)
+        df_raw_dict["_".join([keyname, "normalized_pca"])] = pd.concat([df_raw[non_target_tmp].reset_index(drop = True), pca_df.reset_index(drop = True)], axis=1)
+        df_raw_dict["_".join([keyname, "normalized_2_pca"])]  = pd.concat([df_raw[non_target_tmp].reset_index(drop = True), pca_df[["PCA_0","PCA_1"]].reset_index(drop = True)], axis=1)
         df_raw_dict["_".join([keyname,'original_processed'])] = df_raw
         df_raw_dict["_".join([keyname, 'target'])] = df_raw[non_target_tmp + [target]]
         return(df_raw_dict)
-
-
-
-
-
-
-
-
-
 
 
 def Lineplot(df, x = "ReportingDate", y = "'Other items:Loan Charge Offs_Ratio'"):
@@ -1481,10 +1080,14 @@ def Lineplot(df, x = "ReportingDate", y = "'Other items:Loan Charge Offs_Ratio'"
 
 #ax.grid()
 
-def process_raw_modality_PCA_Norm(df_raw, dates = ["1976-01-01", "2017-12-31"], raw_date_col = "Date", keyname = None, extractquarters = True, interpolatefill = True,Norm_PCA_Corr_Plot = True, removecols = None):
+def process_raw_modality_PCA_Norm(df_raw, dates = ["1976-01-01", "2017-12-31"], raw_date_col = "Date", keyname = None, extractquarters = True
+                                  , interpolatefill = True,Norm_PCA_Corr_Plot = True, removecols = None, rootdir = "/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/", normalize = True
+                                  ,n_components = 12):
+    os.chdir(rootdir)
     #df_raw = Z_macro
     #keyname = "Z_macro"
     df_raw_dict = dict()
+
     if keyname is not None:
         print("Preproecessing Raw DataFrame:%s" % keyname)
         df_raw = df_raw[keyname]
@@ -1495,6 +1098,10 @@ def process_raw_modality_PCA_Norm(df_raw, dates = ["1976-01-01", "2017-12-31"], 
     #removecols = [x for x in df_raw.columns if  x.startswith('Scenario Name')]
     if removecols is not None and len(removecols) > 0:
         df_raw = df_raw[df_raw.columns.difference(removecols)]
+
+    if n_components >= df_raw.shape[1] and n_components >= df_raw.shape[1] - 2 and df_raw.shape[1] > 9:
+        print("Setting n_componets to 10")
+        n_components = 10
 
     if extractquarters:
         print("Extracting Quarterly Dates")
@@ -1515,85 +1122,11 @@ def process_raw_modality_PCA_Norm(df_raw, dates = ["1976-01-01", "2017-12-31"], 
     #
     if Norm_PCA_Corr_Plot:
         print("Normalizing, Transforming to PCA, Correlating, and Generating Plots")
-        df_raw_dict = Normalize_PCA_Correlations_Plots(df_raw, Target="ReportingDate",n_components= df_raw.shape[1] - 2, filename = keyname)
+        df_raw_dict = Normalize_PCA_Correlations_Plots(df_raw, Target="ReportingDate",n_components= n_components, filename = keyname, normalize = normalize)
 
     df_raw_dict["_".join(["df_raw", keyname, 'processed'])] = df_raw
 
     return(df_raw_dict)
-#SciKit
-#Standaridze Dataframe
-#from sklearn.preprocessing import StandardScaler
-# Separating out the features
-#x = df.loc[:, features].values
-# Separating out the target
-#y = df.loc[:,['target']].values
-# Standardizing the features
-#x = StandardScaler().fit_transform(x)
-#PCA
-#from sklearn.decomposition import PCA
-#pca = PCA(n_components=2)
-#principalComponents = pca.fit_transform(x)
-
-
-
-#Pandas Normalize Modalities
-#Z_Micro
-#TODO: Create Function to handle these items.
-
-Z_micro = init_ST.Z_micro_process()
-Z_micro["Z_Micro"]
-Z_micro_dict_1 = process_raw_modality_PCA_Norm(Z_micro, keyname = "Z_Micro")
-
-Preprocess_Dict['zmicro_pca'] = preprocess_loadMySQL(Z_micro_dict_1['PCA_DF'].loc[:,['ReportingDate',0,1]], datatype = "z_micro"
-                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "Z_micro_pca", if_exists = "replace").interpolate(method = 'linear')
-
-
-
-Z_macro = init_ST.Z_macro_process()
-Z_macro_domestic_dict_1 = process_raw_modality_PCA_Norm(Z_macro, keyname = "Historic_Domestic", raw_date_col="Date", removecols= [x for x in Z_macro["Historic_Domestic"].columns if  x.startswith('Scenario Name')],extractquarters = False)
-Z_macro_domestic_dict_1.keys()
-Z_macro_domestic_dict_1['PCA_DF'].loc[:,['ReportingDate',0,1]]
-
-
-Preprocess_Dict['zmacro_domestic_pca'] = preprocess_loadMySQL(Z_macro_domestic_dict_1['PCA_DF'].loc[:,['ReportingDate',0,1]], datatype = "z_macro_domestic"
-                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "z_macro_domestic_pca", if_exists = "replace").interpolate(method = 'linear')
-
-
-Z_macro = init_ST.Z_macro_process()
-Z_macro_international_dict_1 = process_raw_modality_PCA_Norm(Z_macro, keyname = "Historic_International", raw_date_col="Date", removecols= [x for x in Z_macro["Historic_International"].columns if  x.startswith('Scenario Name')],extractquarters = False)
-
-
-Preprocess_Dict['zmacro_international_pca'] = preprocess_loadMySQL(Z_macro_international_dict_1['PCA_DF'].loc[:,['ReportingDate',0,1]], datatype = "z_macro_international"
-                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "Z_macro_international_pca", if_exists = "replace").interpolate(method = 'linear')
-
-
-
-SectorIdx = init_ST.sectoridx_process()
-SectorIdx_dict_1 = process_raw_modality_PCA_Norm(SectorIdx, keyname = "sectoridx", raw_date_col="Date",extractquarters = True)
-#SectorIdx_dict_1.keys()
-
-Preprocess_Dict['Sectidx_pca'] = preprocess_loadMySQL(SectorIdx_dict_1['PCA_DF'].loc[:,['ReportingDate',0,1]], datatype = "sectoridx"
-                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "Sector_idx_pca", if_exists = "replace").interpolate(method = 'linear')
-
-
-
-
-SBidx = init_ST.SBidx_process()
-SBidx_dict_1 = process_raw_modality_PCA_Norm(SBidx, keyname = "SB_idx_prox", raw_date_col="Date",extractquarters = True)
-
-
-Preprocess_Dict['sb_idx_pca'] = preprocess_loadMySQL(SBidx_dict_1['PCA_DF'].loc[:,['ReportingDate',0,1]], datatype = "sbidx"
-                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
-                         , tbl_name = "sb_idx_pca", if_exists = "replace").interpolate(method = 'linear')
-
-#Preprocess_Dict['sb_idx_pca']["ReportingDate"].nunique()
-#Will need to generate dates via sequence.
-
-
 
 
 def varname(p):
@@ -1601,10 +1134,11 @@ def varname(p):
     m = re.search(r'\bvarname\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)', line)
     if m:
       return m.group(1)
-def Normalize_PCA_Correlations_Plots(raw_df,Target = "ReportingDate",n_components = 12, filename = "None"):
-    if n_components > raw_df.shape[1] - 2 and raw_df.shape[1] > 9 :
+def Normalize_PCA_Correlations_Plots(raw_df,Target = "ReportingDate",n_components = 12, filename = "None", normalize = True):
+    if n_components >= raw_df.shape[1] and n_components >= raw_df.shape[1] - 2 and raw_df.shape[1] > 9 :
         print("Setting n_componets to 10")
         n_components = 10
+
 
     print("PCA , Normalization and Figure, Correlation Heatmap")
     scale = StandardScaler()
@@ -1612,14 +1146,19 @@ def Normalize_PCA_Correlations_Plots(raw_df,Target = "ReportingDate",n_component
     x_train = raw_df
     print("Dropping Target column:%s" % Target)
     columns = x_train.drop(Target, axis=1).columns
-    print("Normalizing DataFrame")
-    x_train = scale.fit_transform(x_train.drop(Target, axis=1))  # drop the label and normalizing
-    print("Creating Normalized DataFrame")
-    x_train_normalized = pd.DataFrame(x_train)  # It is required to have X converted into a data frame to later plotting need
-    print("Reapplying Column Names")
-    x_train_normalized.columns = columns
-    print("Re-Ordering Column Names")
-    x_train_normalized = x_train_normalized.sort_index(axis = 1)
+
+    if normalize:
+        print("Normalizing DataFrame")
+        x_train = scale.fit_transform(x_train.drop(Target, axis=1))  # drop the label and normalizing
+        print("Creating Normalized DataFrame")
+        x_train_normalized = pd.DataFrame(x_train)  # It is required to have X converted into a data frame to later plotting need
+        print("Reapplying Column Names")
+        x_train_normalized.columns = columns
+        print("Re-Ordering Column Names")
+        x_train_normalized = x_train_normalized.sort_index(axis = 1)
+    else:
+        x_train_normalized = x_train.drop(Target, axis=1)
+        x_train_normalized.columns = columns
 
     print("Setting Y target:%s" % Target)
     y_train = raw_df[Target].reset_index(drop = True)#.apply(lambda x: x.split(' ')[0]).reset_index(drop = True)
@@ -1628,7 +1167,7 @@ def Normalize_PCA_Correlations_Plots(raw_df,Target = "ReportingDate",n_component
     classes = np.sort(np.unique(y_train))
     labels = y_train.tolist()
 
-    print("Initializing PCA and transforming Nomarlized DataFrame with Componets:%s" % str(n_components))
+    print("Initializing PCA and transforming Normalized DataFrame with Components:%s" % str(n_components))
     # Run PCA
     pca = PCA(n_components=n_components)
     x_train_projected = pca.fit_transform(x_train_normalized)
@@ -1637,7 +1176,7 @@ def Normalize_PCA_Correlations_Plots(raw_df,Target = "ReportingDate",n_component
     print("Correlation Heatmap Calculations for first two componets")
     pca_cols = ['PCA_' + str(i) for i in range(0,x_train_projected.shape[1])]
     pca_df = pd.DataFrame(x_train_projected, columns=pca_cols).reset_index(drop=True)
-    pca_normalized  = pd.concat([pca_df[["PCA_0","PCA_1"]],x_train_normalized.reset_index(drop = True)], axis = 1)
+    pca_normalized  = pd.concat([pca_df,x_train_normalized.reset_index(drop = True)], axis = 1)
     #pca_normalized = pca_normalized.rename({0:"PCA_1", 1:"PCA_2"}, axis = 1)
     pca_normalized_corr = pca_normalized.corr()
 
@@ -1657,37 +1196,38 @@ def Normalize_PCA_Correlations_Plots(raw_df,Target = "ReportingDate",n_component
     plt.savefig("./Images/PCA_Normalized_Correlation_Heatmap_%s.pdf"  % filename, format='pdf')
     plt.close()
 
-    print("Scatter of PCA BiPlot Visualization")
-    fig = plt.figure(figsize=(20, 20))
-    fig.set_size_inches(20.5, 20.5, forward=True)
-    ax = fig.add_subplot(1, 1, 1)
+    if normalize:
+        print("Scatter of PCA BiPlot Visualization")
+        fig = plt.figure(figsize=(20, 20))
+        fig.set_size_inches(20.5, 20.5, forward=True)
+        ax = fig.add_subplot(1, 1, 1)
 
-#markers = ["o", "D"]
+    #markers = ["o", "D"]
 
-    for class_ix in zip(
-                classes):
-            ax.scatter(x_train_projected[np.where(y_train == class_ix[0]), 0],
-                       x_train_projected[np.where(y_train == class_ix[0]), 1],
-                       #marker=marker, color=color, edgecolor='whitesmoke',
-                       linewidth='1', alpha=0.9, label= class_ix[0])
-            #ax.legend(loc='best')
+        for class_ix in zip(
+                    classes):
+                ax.scatter(x_train_projected[np.where(y_train == class_ix[0]), 0],
+                           x_train_projected[np.where(y_train == class_ix[0]), 1],
+                           #marker=marker, color=color, edgecolor='whitesmoke',
+                           linewidth='1', alpha=0.9, label= class_ix[0])
+                #ax.legend(loc='best')
 
-    plt.title(
-        "Scatter plot projections on the "
-        "2 first principal components")
-    plt.xlabel("Principal axis 1 - Explains %.1f %% of the variance" % (
-            pca.explained_variance_ratio_[0] * 100.0))
-    plt.ylabel("Principal axis 2 - Explains %.1f %% of the variance" % (
-            pca.explained_variance_ratio_[1] * 100.0))
+        plt.title(
+            "Scatter plot projections on the "
+            "2 first principal components")
+        plt.xlabel("Principal axis 1 - Explains %.1f %% of the variance" % (
+                pca.explained_variance_ratio_[0] * 100.0))
+        plt.ylabel("Principal axis 2 - Explains %.1f %% of the variance" % (
+                pca.explained_variance_ratio_[1] * 100.0))
 
-    print("Annotations for Datapoints")
-    for i, txt in enumerate(labels):
-        ax.annotate(txt, (x_train_projected[i,0], x_train_projected[i,1]))
+        print("Annotations for Datapoints")
+        for i, txt in enumerate(labels):
+            ax.annotate(txt, (x_train_projected[i,0], x_train_projected[i,1]))
 
-    plt.savefig("./Images/pca_biplot_%s.pdf" % filename, format='pdf')
-    plt.savefig("Images/pca_biplot_%s.png" % filename, format='png')
-    #plt.show()
-    plt.close()
+        plt.savefig("./Images/pca_biplot_%s.pdf" % filename, format='pdf')
+        plt.savefig("Images/pca_biplot_%s.png" % filename, format='png')
+        #plt.show()
+        plt.close()
     print("Recombine DataFrame with Target and PCA")
     results_dict = dict()
     results_dict["Orig_DF"] = raw_df
@@ -1698,6 +1238,51 @@ def Normalize_PCA_Correlations_Plots(raw_df,Target = "ReportingDate",n_component
          x_train_normalized.reset_index(drop=True)], axis=1)
     results_dict["PCA_Corr"] = pca_normalized_corr
     return(results_dict)
+
+
+
+
+
+def preprocess_load_wrapper(df,keyname = None,keyname_out = None,datatype = None,collist = None,
+                            server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user = "root", pw="", db="STR",
+                            interpolate = True,interpolatemethod = 'linear',if_exists="replace", fillnan = False, upload_df_db = False):
+    if datatype not in ["X","X_tminus1","Y","Y_tminus1","CapRatios","CapRatios_tminus1","XYCap", "XYCap_tminus1", "X_Y_Cap","PCA_DF"] + ["zmacro_domestic", "zmacro_international", "zmacro","zmicro","sectoridx", "sbidx"]:
+        print("Datatype:", datatype,"Not Found in Preprocess List")
+        return
+    if keyname is not None and isinstance(df,dict):
+        df = df[keyname]
+    elif keyname is None and isinstance(df,dict):
+        print("Need Keyname for Dictionary")
+        return
+    else:
+        print("No Dict Found")
+
+    if keyname_out is None:
+        tbl_name = keyname
+        keyname_out = keyname
+
+    if collist is not None and isinstance(collist,list):
+        df = df[collist]
+    elif collist == "PCA":
+        collist = ['ReportingDate'] + [x for x in df.keys() if isinstance(x,int) ]
+        df = df[collist]
+    else:
+        print("No Collist")
+    print("Running Preprocessing")
+    preprocess_tmp =      preprocess_loadMySQL(df, datatype= datatype
+                             , server= server, user= user, pw=pw, db=db
+                             , tbl_name=tbl_name, if_exists=if_exists, upload_df_db = upload_df_db)
+    if interpolate:
+        if interpolatemethod is None:
+            interpolatemethod = "linear"
+
+        preprocess_tmp =  preprocess_tmp.interpolate(method = interpolatemethod, order = 2)
+    if fillnan:
+        preprocess_tmp  = preprocess_tmp.fillna(method = "ffill").fillna(method = "bfill")
+
+    return preprocess_tmp
+
+
 
 
 def PandasNormalize(df, exclude_columns = ["Date"], type = "minmax"):
@@ -1711,10 +1296,25 @@ def PandasNormalize(df, exclude_columns = ["Date"], type = "minmax"):
         df_norm = (df_tmp - df_tmp.mean()) / (df_tmp.max() - df_tmp.min())
     elif type == "std":
         df_norm=(df_tmp-df_tmp.mean())/df_tmp.std()
+    elif type == "scilearn":
+        scale = StandardScaler()
+        # print("Preparing Normalization DataSet")
+        x_train = df_tmp
+        # #print("Dropping Target column:%s" % target)
+        # columns = x_train.columns
+        columns = x_train.columns
+        # print("Normalizing DataFrame")
+        x_train = scale.fit_transform(x_train)
+        # #x_train = scale.fit_transform(x_train)
+        # print("Creating Normalized DataFrame")
+        x_train_normalized = pd.DataFrame(x_train)  # It is required to have X converted into a data frame to later plotting need
+        # print("Reapplying Column Names")
+        x_train_normalized.columns = columns
+        df_norm = x_train_normalized
     else:
         return("No type Selected")
     print("Recombining Excluded Columns")
-    df_norm = pd.concat([df[exclude_columns],df_norm], axis = 1)
+    df_norm = pd.concat([df[exclude_columns].reset_index(drop = True),df_norm.reset_index(drop=True)], axis = 1)
     return(df_norm)
 
 
@@ -1906,7 +1506,7 @@ def preprocess_loadMySQL(BankPerf, datatype = "X"
                 BankPerf["Other items:Loan Charge Offs_Ratio"] = BankPerf['Chargeoffs'] / BankPerf["Other items:QtrAvgTotalLoans_coalesced"]
 
                 print("Calculating Charge Off Rates")
-                collist = [x for x in list(BankPerf.keys()) if x.startswith("Other items:Chargeoffs")]
+                colist = [x for x in list(BankPerf.keys()) if x.startswith("Other items:Chargeoffs")]
                 for col_name in colist:
                     print("_".join([col_name,"Rate"]))
                     BankPerf["_".join([col_name,"Rate"])] =  BankPerf[col_name] / BankPerf["Other items:QtrAvgTotalLoans_coalesced"]
@@ -2008,7 +1608,7 @@ def preprocess_loadMySQL(BankPerf, datatype = "X"
                     BankPerf["_".join([col_name1,"Rate"])] =  BankPerf[col_name1] / BankPerf["Other items:QtrAvgTotalLoans_coalesced"]
         else:
 
-            if datatype.lower() in ["zmacro_domestic", "zmacro_international", "zmacro","sectoridx", "sbidx"]:
+            if datatype.lower() in ["zmacro_domestic", "zmacro_international", "zmacro","zmicro","sectoridx", "sbidx"]:
                 if "Scenario Name" in BankPerf.keys():
                     BankPerf = BankPerf.drop("Scenario Name", axis=1)
                 if "Scenario Name_x" in BankPerf.keys():
@@ -2039,7 +1639,275 @@ def preprocess_loadMySQL(BankPerf, datatype = "X"
 
 
 
-    #Create TCR1 Column
+
+
+init_ST = StressTestData()
+
+
+
+#Bank Data Preprocesing
+BankPerf = StressTestData().X_Y_bankingchar_perf_process(groupfunction=np.mean, groupby=["RSSD_ID", "ReportingDate"],
+                                     groupagg_col='Other items:Total Assets',
+                                     RSSD_DateParam=["1976-01-01", "2018-01-01"],
+                                     ReportingDateParam=["1976-01-01", "2018-01-01"], RSSDList_len=None, dropdup=False,
+                                     replace_nan=False, combinecol=False, merge = False, reducedf = False,skip_prefix = "WRDS_Covas_BankPerf_CallReport",  replace_dict={"BankPerf_FR9YC_varlist": {
+                                         "df_keyname": "WRDS_Covas_BankPerf",
+                                         "calcol": "Report: FR Y-9C",
+                                         "BHCK892": "BHCKC892",
+                                         "+": ",",
+                                         "-": ",",
+                                         "(": "",
+                                         ")": "",
+                                         ". . .": "",
+                                         ",  ,": ",",
+                                         "+  +": "+",
+                                         "-  -": "-"},
+                                         "BankPerf_FFIEC_varlist": {
+                                             "df_keyname": "WRDS_Covas_CallReport_Combined",
+                                             "calcol": "Report: FFIEC 031/041",
+                                             "RCFD560": "RCFDB560",
+                                             "RIADK129": "RIAD4639",
+                                             "RIADK205": "RIAD4657",
+                                             "RIADK133": "RIAD4609",
+                                             "RIADK206": "RIAD4667",
+                                             "+": ",",
+                                             "-": ",",
+                                             "(": "",
+                                             ")": "",
+                                             ". . .": "",
+                                             ",  ,": ",",
+                                             "+  +": "+",
+                                             "-  -": "-"
+                                         },
+                                     }, RSSD_Subset = True, Y_calc= True,concecutiveqtrs = 10)
+
+
+#Workspace
+
+
+
+
+#TODO: Functionalize this part. Preprocessing for transformations.
+
+#TODO:Filter for RSSD_IDs that actually exisit in 2016.
+RSSD_IDS = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]['RSSD_ID'][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]['ReportingDate'].isin(['2016-12-31'])].unique()
+# This way , not to consider nan or filled values, but actual values.
+BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf_2016Q4"] = \
+    BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]['RSSD_ID'].isin(RSSD_IDS)]
+#Joins and creates dataframe to dates avaialble.
+
+RepordingDate_Df = pd.DataFrame(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf_2016Q4"]["ReportingDate"].unique())
+RepordingDate_Df = RepordingDate_Df.rename({0:"ReportingDate"}, axis = 1)
+RepordingDate_Df["key"] = 0
+BankIds_Df = pd.DataFrame(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf_2016Q4"]["RSSD_ID"].unique())
+BankIds_Df = BankIds_Df.rename({0:"RSSD_ID"}, axis = 1)
+BankIds_Df["key"] = 0
+BankID_Date_Ref = RepordingDate_Df.assign(foo=1).merge(BankIds_Df.assign(foo=1), on = "foo",how = "outer" ).drop(["foo","key_x","key_y"],1)
+BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"] = BankID_Date_Ref.merge(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf_2016Q4"], left_on = ["ReportingDate","RSSD_ID"], right_on = ["ReportingDate","RSSD_ID"], how = "left")
+
+
+BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"]["ReportingDate"] =  pd.to_datetime(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].ReportingDate).dt.year.astype(str) + " Q" + pd.to_datetime(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"].ReportingDate).dt.quarter.astype(str)
+
+
+Preprocess_Dict = dict()
+Preprocess_Dict['X'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "X"
+                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+                         , tbl_name = "X", if_exists = "replace")#.interpolate(method = 'linear')
+
+
+
+
+#outlier_preprocess(Preprocess_Dict['X'], quantiles=[0,1], makezero = 1e-10).round(2).describe()
+
+Preprocess_Dict['X'] = outlier_preprocess(Preprocess_Dict['X'], quantiles=[0,1], makezero = 1e-10).round(2)
+
+#Normalize and interpolate
+Preprocess_Dict['X']  = PandasNormalize(Preprocess_Dict['X'], exclude_columns = ["RSSD_ID", "ReportingDate"], type = "scilearn").interpolate(method = 'linear', order = 2)
+
+
+Preprocess_Dict['Y'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "Y"
+                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+                         , tbl_name = "Y", if_exists = "replace")#.interpolate(method = 'linear')
+
+
+# test = \
+#Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'].keys() if x.startswith(('ppnrRatio:','ncoR:'))]] = Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'].keys() if x.startswith(('ppnrRatio:','ncoR:'))]]
+#outlier_preprocess(Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'].keys() if x.startswith(('ppnrRatio:','ncoR:'))]],quantiles=[0,.9736], makezero = 1e-9, verbose = False).round(4)
+
+
+Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ppnrRatio:')]] = Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ppnrRatio:')]] *.01
+Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ncoR:')]] = Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ncoR:')]] * .01
+
+
+Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'].keys() if x.startswith(('ppnrRatio:','ncoR:'))]] = outlier_preprocess(Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'].keys() if x.startswith(('ppnrRatio:','ncoR:'))]],quantiles=[0,.9736], makezero = 1e-9, verbose = False)[["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'].keys() if x.startswith(('ppnrRatio:','ncoR:'))]].round(4)
+
+# Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ppnrRatio:')]].describe()
+#  outlier_preprocess(Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'] if x.startswith('ppnrRatio:') if not x.endswith("ppnrRatio:Noninterest expense")]]
+#                                          ,quantiles = [0,.9875], makezero= 1e-30)[[x for x in Preprocess_Dict['Y'] if x.startswith('ppnrRatio:') if not x.endswith("ppnrRatio:Noninterest expense")]].round(2).describe()
+#
+# outlier_preprocess(Preprocess_Dict['Y'][["RSSD_ID", "ReportingDate"] + [x for x in Preprocess_Dict['Y']if x.endswith("ppnrRatio:Noninterest expense")]]
+#                                         , quantiles = [0, .9735], makezero = 1e-30)[[x for x in Preprocess_Dict['Y'] if x.endswith("ppnrRatio:Noninterest expense")]].round(2).describe()
+
+
+#Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ppnrRatio:') if not x.endswith("ppnrRatio:Noninterest expense")]] = outlier_preprocess(Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'] if x.startswith('ppnrRatio:') if not x.endswith("ppnrRatio:Noninterest expense")]],quantiles = [0,.9875], makezero= 1e-30)[[x for x in Preprocess_Dict['Y'] if x.startswith('ppnrRatio:') if not x.endswith("ppnrRatio:Noninterest expense")]].round(2)
+
+
+#Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.endswith("ppnrRatio:Noninterest expense")]] = outlier_preprocess(Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'] if x.endswith("ppnrRatio:Noninterest expense")]],quantiles = [0,.9735], makezero= 1e-30)[[x for x in Preprocess_Dict['Y'] if x.endswith("ppnrRatio:Noninterest expense")]].round(2)
+
+
+#Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ncoR:')]].describe()
+
+#Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ncoR:')]] = outlier_preprocess(Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'] if x.startswith('ncoR:')]]
+#                        ,quantiles = [0,1], makezero= 1e-15)[[x for x in Preprocess_Dict['Y'] if x.startswith('ncoR:')]].round(2)
+
+#Preprocess_Dict['Y'].describe()
+
+
+
+
+Preprocess_Dict['X_Y_Cap'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "X_Y_Cap"
+                         ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+                         , tbl_name = "X_Y_Cap", if_exists = "replace")#.interpolate(method = 'linear')
+
+collist = [ x for x in list(Preprocess_Dict['X_Y_Cap'].keys()) if x.startswith("Other items: CapRatios") if not x.endswith("_t-1") if x.endswith("_coalesced") ]
+Preprocess_Dict['CapRatios'] = Preprocess_Dict['X_Y_Cap'][["RSSD_ID", "ReportingDate"] + collist]
+Preprocess_Dict['CapRatios'][collist] = Preprocess_Dict['CapRatios'][collist] * .01
+Preprocess_Dict['CapRatios'][collist].describe()
+#outlier_preprocess(Preprocess_Dict['CapRatios'],quantiles = [.086,.832],verbose = False).round(2).describe()
+
+Preprocess_Dict['CapRatios'] = outlier_preprocess(Preprocess_Dict['CapRatios'],quantiles = [.086,.832],verbose = False).round(2)
+
+#Preprocess_Dict['CapRatios'] .keys()
+#Preprocess_Dict['Y'].keys()
+Preprocess_Dict["Y_Cap"] = Preprocess_Dict['Y'].merge(Preprocess_Dict['CapRatios'][["RSSD_ID","ReportingDate",'Other items: CapRatios_T1RiskCR_coalesced']])
+#Preprocess_Dict['CapRatios']  = Preprocess_Dict['CapRatios'][["RSSD_ID","ReportingDate","Other items: CapRatios_T1RiskCR_coalesced"]]
+#Preprocess_Dict["Y_Cap"].round(4).describe()
+
+
+#colist  = [ x for x in list(Preprocess_Dict['X_Y_Cap'].keys()) if x.startswith("Other items:Chargeoffs") if x.endswith("_Rate") if not x.endswith("_t-1") ]
+# Preprocess_Dict['NCO'] = Preprocess_Dict['X_Y_Cap'][["RSSD_ID", "ReportingDate", "Other items:Net Charge Offs_Ratio",'Other items:Loan Charge Offs_Ratio']]
+# #'Other items:Net Charge Offs_coalesced'
+#
+# Preprocess_Dict['NCO'] = outlier_preprocess(Preprocess_Dict['NCO'],quantiles = [0,.73785], makezero = 1e-20, verbose = True).round(2)
+# Preprocess_Dict['NCO'].describe()
+
+
+
+
+#######Visualizations
+#df = Preprocess_Dict['CapRatios']
+
+#outlier_preprocess(df, quantiles = [.15,.72]).describe()
+
+# Visualization Code
+# Preprocess_Dict['CapRatios']["ReportingDate"] = Preprocess_Dict['CapRatios']["ReportingDate"].apply(lambda x: pd.to_datetime(str(int(12/int(x.split("Q")[1]))) + "/" + x.split(" ")[0]) )
+# #Plot Mean Cap Ratio
+# CapitalRatios_plt = pd.pivot_table(Preprocess_Dict['CapRatios'][Preprocess_Dict['CapRatios'].columns.difference(["RSSD_ID",'Other items: CapRatios_T1LR_coalesced'])][Preprocess_Dict['CapRatios']["ReportingDate"] >= "1986-01-01"], index=["ReportingDate"], aggfunc = np.mean)
+#
+# CapitalRatios_plt.plot()
+
+
+
+
+
+os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/data")
+keylist = ["X","Y_Cap"]
+for keyname in [x for x in Preprocess_Dict.keys() if x in keylist]:
+    print(keyname)
+    data, data_quarter = pd_raw_to_numpy_data(Preprocess_Dict[keyname], fulldatescombine=False,  ReportingDate_Start = "1987 Q1", ReportingDate_End = "2017 Q4")
+    print(keyname, ":", data.shape, keyname, "_quarter:", data_quarter.shape)
+    print("Saving objects to file")
+    np.save("./data_" + keyname + ".npy", data)
+    np.save("./quarter_based/data_" + keyname + "_quarter.npy", data_quarter)
+
+
+
+# Preprocess_Dict['PCA_DF'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "PCA_DF"
+#                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+#                          , tbl_name = "PCA_DF", if_exists = "replace")#.interpolate(method = 'linear')
+#
+#
+#
+#
+# pca_colist = [x for x in Preprocess_Dict['PCA_DF'].keys().tolist() if x.endswith(("_coalesced","Rate","Ratio"))] \
+# + [x for x in Preprocess_Dict['PCA_DF'].keys().tolist() if x.startswith(("ppnrRatio","ncoR","'Other items","Loans categories:")) if not  x.endswith(("t-1"))] \
+# + ['ReportingDate', 'RSSD_ID','Chargeoffs', 'Recoveries','Net income(loss)', 'Less:Cash dividends on perp perf stock','Total Equity_1', 'Total Equity_2']
+#
+
+
+
+#target = 'Other items: CapRatios_T1RiskCR_coalesced'
+#interpolatefill = True
+#Preprocess_Dict['PCA_DF'][pca_colist]
+Preprocess_Dict['PCA_DF_1'] = Preprocess_Dict['PCA_DF'][pca_colist]
+
+Preprocess_Dict['PCA_DF_1'] = outlier_preprocess(Preprocess_Dict['PCA_DF_1'], interpolate=True, interpolate_method='polynomial')
+
+
+Preprocess_One = process_raw_bankdat_PCA_Norm(Preprocess_Dict, keyname = 'PCA_DF_1', target_list =  ['Other items: CapRatios_T1RiskCR_coalesced'], n_components = 20, visualizations = False)
+
+Preprocess_One.keys()
+
+
+Preprocess_One['CapRatios'] = Preprocess_One.pop('PCA_DF_1_target')
+Preprocess_One['CapRatios'] = outlier_preprocess(Preprocess_One['CapRatios'])
+#Normalize only
+# df_raw = Preprocess_Dict['CapRatios']
+# exclude = ["ReportingDate", "RSSD_ID"]
+# #print("Target:", target)
+# non_target_tmp = exclude  # + [x for x in target_list if not x == target]
+# print("Excluding:", non_target_tmp)
+# print("First Remove Exclusions:", non_target_tmp)
+# df_raw_tmp = df_raw[df_raw.columns.difference(non_target_tmp)]
+#
+# print('Normalize without target')
+# scale = StandardScaler()
+# print("Preparing Normalization DataSet")
+# x_train = df_raw_tmp
+# #print("Dropping Target column:%s" % target)
+# columns = x_train.columns
+# # columns = x_train.columns
+# print("Normalizing DataFrame")
+# x_train = scale.fit_transform(x_train)
+# #x_train = scale.fit_transform(x_train)
+# print("Creating Normalized DataFrame")
+# x_train_normalized = pd.DataFrame(x_train)  # It is required to have X converted into a data frame to later plotting need
+# print("Reapplying Column Names")
+# x_train_normalized.columns = columns
+# print("Re-Ordering Column Names")
+# x_train_normalized = x_train_normalized.sort_index(axis=1)
+#
+#
+#
+#
+# df_norm_df = pd.concat([df_raw[non_target_tmp].reset_index(drop=True), x_train_normalized.reset_index(drop=True)], axis=1)
+#
+# df_norm_df.describe()
+
+#df_norm_df = outlier_preprocess(df_norm_df, quantiles = [.21,1])
+
+Preprocess_Dict['CapRatios'] = df_norm_df
+#Preprocess_One['CapRatios'] = df_norm_df
+
+Preprocess_One['X_Y_NCO_pca'] = Preprocess_One.pop('PCA_DF_1_normalized_2_pca')
+Preprocess_One['X_Y_NCO_all_pca'] = Preprocess_One.pop('PCA_DF_1_normalized_pca')
+Preprocess_One['X_Y_NCO_norm'] = Preprocess_One.pop('PCA_DF_1_normalized')
+
+
+
+
+# Preprocess_Dict['zmicro_pca_all'] = preprocess_loadMySQL(Z_micro_dict_1['PCA_DF'].loc[:,['ReportingDate',0,1]], datatype = "z_micro"
+#                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+#                          , tbl_name = "Z_micro_pca", if_exists = "replace").interpolate(method = 'linear')
+
+#df = Z_micro_dict_1['PCA_DF']
+
+#Z_micro_dict_1['PCA_DF'][[0]].plot.density(fill = True)
+
+#collist = ['ReportingDate'] + [x for x in df.keys() if isinstance(x,int) ]
+#Preprocess_Dict['zmicro_pca_all'] = preprocess_loadMySQL(df[collist], datatype = "z_micro"
+                         # ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
+                         # , tbl_name = "Z_micro_pca", if_exists = "replace").interpolate(method = 'linear')
 
 
 
@@ -2048,105 +1916,177 @@ def preprocess_loadMySQL(BankPerf, datatype = "X"
 
 
 
+####Process Modalities
+Z_micro = init_ST.Z_micro_process()
+Z_micro["Z_Micro"]
+Z_micro_dict_1 = process_raw_modality_PCA_Norm(Z_micro, keyname = "Z_Micro")
+Preprocess_Dict['zmicro_pca_all'] = preprocess_load_wrapper(Z_micro_dict_1, keyname = 'PCA_DF', collist = 'PCA', datatype = "zmicro")
 
 
 
-    # identifiers = ["RSSD_ID","ReportingDate"]
-    #
-    # loans = ["Loans categories:Commercial & industrial_Covas"
-    #     ,"Loans categories:Construction & land development"
-    #     ,"Loans categories:Multifamily real estate"
-    #
-    #     ,"Loans categories:Nonfarm nonresidential CRE"
-    #     ,"Loans categories:Home equity lines of credit"
-    #     ,"Loans categories:Residential real estate (excl. HELOCs)_Covas"
-    #     ,"Loans categories:Credit card"
-    #     ,"Loans categories:Consumer (excl. credit card)_Covas"]
-    #
-    # loans_t1 = [v + "_t-1" for v in loans]
-    #
-    # #Need to re-run
-    # lossrates = [v for v in BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns[pd.Series(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns).str.startswith("Net charge-offs by type of loan:")] if not v.endswith("_t-1")]
-    #
-    # df_tmp = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]
-    # for i,y in zip(loans_t1,lossrates):
-    #     print(i,y)
-    # df_tmp[] = df_tmp[i] * df_tmp[y]
+Z_macro = init_ST.Z_macro_process()
+excludeZmacro = ['Nominal GDP growth','Nominal disposable income growth','5-year Treasury yield','House Price Index (Level)']
+Z_macro_subset = Z_macro["Historic_Domestic"].columns.difference(excludeZmacro)
+Z_macro["Historic_Domestic_subset"] = Z_macro["Historic_Domestic"][Z_macro_subset]
+
+Z_macro_domestic_dict_1 = process_raw_modality_PCA_Norm(Z_macro, keyname = "Historic_Domestic_subset", raw_date_col="Date", removecols= [x for x in Z_macro["Historic_Domestic"].columns if  x.startswith('Scenario Name')],extractquarters = False, normalize = True, n_components = 12)
+Preprocess_Dict['zmacro_domestic_pca_all'] = preprocess_load_wrapper(Z_macro_domestic_dict_1, keyname = 'PCA_DF', collist = 'PCA', datatype = "zmacro_domestic")
 
 
 
-    # #Conditional Vector
-    # #Net charge offs.
-    # #
-    # list(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"].columns)
-    # collist = ["RSSD_ID","ReportingDate","Chargeoffs","Recoveries"]
-    #
-    # Conditional_ij = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][collist]
-    # Conditional_ij["NetChargeOffs"] = Conditional_ij["Chargeoffs"] - Conditional_ij["Recoveries"]
-    #
-    #
-    # Conditional_ij["ReportingDate"] =  Conditional_ij.ReportingDate.dt.year.astype(str) + " Q" + Conditional_ij.ReportingDate.dt.quarter.astype(str)
-    # Conditional_ij.to_csv("../Data_Output/Conditional_ij.csv", sep = ",", index= False)
-    #
-    #
-    # #['RSSD_ID',"ReportingDate','Other items:T1CR','Other items:T1CR_t-1']
-    # BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"][['RSSD_ID','ReportingDate','Other items:T1CR','Other items:T1CR_t-1']]
-    #
-    # X_i.ReportingDate.dt.year.astype(str) + " Q" + X_i.ReportingDate.dt.quarter.astype(str)
-    #
-    # list(BankPerf["BankPerf_ConsecutiveReduced_Subset_BankPerf"].columns)
-    #
+Preprocess_Dict['NCO'][["RSSD_ID","ReportingDate","Other items:Net Charge Offs_Ratio",'Other items:Loan Charge Offs_Ratio']]
+df_raw = Preprocess_Dict['NCO']
+#NCO_test = process_raw_bankdat_PCA_Norm(Preprocess_Dict, keyname = 'NCO',target_list='Other items:Loan Charge Offs_Ratio', n_components = 12, visualizations = False)
+exclude = ["ReportingDate","RSSD_ID"]
+#print("Target:", target)
+non_target_tmp =  exclude #+ [x for x in target_list if not x == target]
+print("Exlcuding:", non_target_tmp)
+print("First Remove Exclusions:",non_target_tmp)
+df_raw_tmp = df_raw[df_raw.columns.difference(non_target_tmp)]
 
-    #Create calculated Net Charge Off and Book Equity.
-    #Create calculated Capital Ratio.
-    #Get Net Charge off amount via Data Source
-    #Get PPNR
+# print('Normalize without target')
+# scale = StandardScaler()
+# print("Preparing Normalization DataSet")
+# x_train = df_raw_tmp
+# #print("Dropping Target column:%s" % target)
+# #columns = x_train.drop(target, axis=1).columns
+# columns = x_train.columns
+# print("Normalizing DataFrame")
+# #x_train = scale.fit_transform(x_train.drop(target, axis=1))  # drop the label and normalizing
+# x_train = scale.fit_transform(x_train)
+# print("Creating Normalized DataFrame")
+# x_train_normalized = pd.DataFrame(x_train)  # It is required to have X converted into a data frame to later plotting need
+# print("Reapplying Column Names")
+# x_train_normalized.columns = columns
+# #print("Re-Ordering Column Names")
+# #x_train_normalized = x_train_normalized.sort_index(axis=1)
+#
+# print("PCA Dim Reduction")
+# #print("Setting Y target:%s" % target)
+# #y_train = df_raw[target].reset_index(drop=True)  # .apply(lambda x: x.split(' ')[0]).reset_index(drop = True)
+# #y_train = df_raw["ReportingDate"].reset_index(drop = True)
+#
+# #print("Initializing PCA and transforming Nomarlized DataFrame with Componets:%s" % str(n_components))
+# # Run PCA
+# n_components = 1
+# pca = PCA(n_components=n_components)
+# x_train_projected = pca.fit_transform(x_train_normalized)
+#
+# #print("Correlation Heatmap Calculations for first two componets")
+# pca_cols = ['PCA_' + str(i) for i in range(0, x_train_projected.shape[1])]
+# pca_df = pd.DataFrame(x_train_projected, columns=pca_cols).reset_index(drop=True)
+# pca_normalized = pd.concat([pca_df, df_raw_tmp.reset_index(drop=True)], axis=1)
+#
+# NCO_test = pca_normalized
+# # pca_normalized = pca_normalized.rename({0:"PCA_1", 1:"PCA_2"}, axis = 1)
+# #The plot is done with predicted distributions.
+# # import seaborn as sns
+# # #from importlib import reload
+# # #reload(sns)
+#  fig, ax = plt.subplots(figsize=(11, 8.5))
+# #
+#
+# #
+# # #Shaded Density Plot
+# #
+# desnityplot_df = Z_macro_domestic_dict_1['PCA_DF'][Z_macro_domestic_dict_1['PCA_DF']["ReportingDate"].str.startswith("2016")]
+#  g = sns.distplot(desnityplot_df[0],hist = False, kde = True,
+#                   kde_kws = {'shade': True, 'linewidth': 3},
+#                    label = "PCA"
+#                          )
+# #
+#
+# #Scatter plot
+# #
+# NCO_test = Preprocess_Dict['NCO'][["RSSD_ID","ReportingDate","Other items:Net Charge Offs_Ratio",'Other items:Loan Charge Offs_Ratio']]
+# #Merge PCA with NCO on dates or create own PCA
+#
+# #NCO_test[['Other items:Net Charge Offs_Ratio', 'Other items:Loan Charge Offs_Ratio']]  = NCO_test[['Other items:Net Charge Offs_Ratio','Other items:Loan Charge Offs_Ratio']] * .01
+# NCO_test = NCO_test[NCO_test["ReportingDate"].str.startswith("2016")]
+# scatterNCOtest = NCO_test.merge(desnityplot_df[["ReportingDate",0]], on = "ReportingDate")
+#
+#  s = sns.scatterplot(x= 0, y = "Other items:Loan Charge Offs_Ratio", data = scatterNCOtest, s = 5, color = 'b')
+# #
+#
+# # #Draw Vertical Lines Across Plots
+# hlines = desnityplot_df[["ReportingDate",0]]
+#
+#
+# for i in  hlines.index:
+#     x_bounds = ax.get_xlim()
+#     print(hlines.loc[i,["ReportingDate",0]])
+#     vline_value = hlines.loc[i,0].astype(float)
+#     label = hlines.loc[i,"ReportingDate"]
+#     ax.axvline(x=vline_value, color="r", linewidth=1, label= label)
+#     ax.annotate(s=label, xy=(((vline_value - x_bounds[0]) / (x_bounds[1] - x_bounds[0])), .5),
+#                 xycoords='axes fraction', verticalalignment='left', horizontalalignment='left bottom', rotation=270)
+#
+
+
+
+#scatterNCOtest.keys()
 
 
 
 
-    #Calc NCO
+# plt.close()
+
+Z_macro = init_ST.Z_macro_process()
+Z_macro_international_dict_1 = process_raw_modality_PCA_Norm(Z_macro, keyname = "Historic_International", raw_date_col="Date", removecols= [x for x in Z_macro["Historic_International"].columns if  x.startswith('Scenario Name')],extractquarters = False, n_components= 12)
+Preprocess_Dict['zmacro_international_pca_all'] = preprocess_load_wrapper(Z_macro_international_dict_1, keyname = 'PCA_DF', collist = 'PCA', datatype = "zmacro_international")
+
+
+SectorIdx = init_ST.sectoridx_process()
+SectorIdx_dict_1 = process_raw_modality_PCA_Norm(SectorIdx, keyname = "sectoridx", raw_date_col="Date",extractquarters = True)
+Preprocess_Dict['sectidx_pca_all'] = preprocess_load_wrapper(SectorIdx_dict_1, keyname = 'PCA_DF', collist = 'PCA', datatype = "sectoridx")
+
+
+SBidx = init_ST.SBidx_process()
+SBidx_dict_1 = process_raw_modality_PCA_Norm(SBidx, keyname = "SB_idx_prox", raw_date_col="Date",extractquarters = True, n_components= 7)
+Preprocess_Dict['sbidx_pca_all'] = preprocess_load_wrapper(SBidx_dict_1, keyname = 'PCA_DF', collist = 'PCA', datatype = "sbidx")
+#TODO: Improve n_componets logic
+
+
+#Create Transformational Cubes
+os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/data")
+keylist = ['zmacro_domestic_pca_all', 'zmacro_international_pca_all', "sectidx_pca_all", "sbidx_pca_all",
+           "zmicro_pca_all"]
+for keyname in [x for x in Preprocess_Dict.keys() if x in keylist]:
+    print(keyname)
+    data, data_quarter = pd_raw_to_numpy_moda(Preprocess_Dict[keyname], fulldatescombine=False,ReportingDate_Start = "1976 Q1", ReportingDate_End = "2016 Q4")
+    print(keyname, ":", data.shape, keyname, "_quarter:", data_quarter.shape)
+    print("Saving objects to file")
+    np.save("./data_moda_" + keyname + ".npy", data)
+    np.save("./quarter_based/data_moda_" + keyname + "_quarter.npy", data_quarter)
 
 
 
+Preprocess_Dict['sectidx_pca_all']["ReportingDate"].iloc[160:168,]
+
+pd.Series(Preprocess_Dict['zmacro_domestic_pca_all']["ReportingDate"].unique())[pd.Series(Preprocess_Dict['zmacro_domestic_pca_all']["ReportingDate"].unique()).isin(['1986 Q3','2016 Q4'])]
+
+list(pd.Series(Preprocess_Dict['X']["ReportingDate"].unique())[pd.Series(Preprocess_Dict['X']["ReportingDate"].unique()).isin(datamoda_test_date)].index)
+122 - 86
 
 
-    #Need to develop a Capital Ratio Calculator.
-
-    #This will be needed for the predicted values to compare with the Ground Truth.
-
-    #Need to calculate the measured CR_t,i
-    #Other items:Book equity #t
-    #Other items:Risk-weighted assets #t-1
-
-    #May need to calculate  the Net Charge Off, Book Equirty and CRi.
-    #Have to get time period lags.
+Preprocess_Dict['X'][Preprocess_Dict['X']["RSSD_ID"].isin([1020201])].iloc[86:122,:].describe()
 
 
-    #Calculate PPNR as PPNR componet ratio * consolidated assets of previous period.
+moda_Reporting_Ref = pd.Series(Preprocess_Dict['zmacro_domestic_pca_all']["ReportingDate"].unique())
+Preprocess_Dict['moda_DateIdx']  = moda_Reporting_Ref
+data_Reporting_Ref = pd.Series(Preprocess_Dict['X']["ReportingDate"][Preprocess_Dict['X']["ReportingDate"] >= "1987 Q1"].unique())
+Preprocess_Dict['data_DateIdx']  = data_Reporting_Ref
 
-    #calculate net charge off
-    #Sum of associated loan of previous period * current period charge off rate.
-    #Book Equity
-    #Book Equity of previous period + .65 * (ppnr - nco) - dividends_t-1 - Stock Repurchases t-1
-    #CR - Book Equity - Reg Capital Deductions of previous period/ Risk weighted Assets
-
-
-    #Should we just update each row with columns with t-1
-
-
-
-
-    #Discrimitative to Macro-Economic and Bank.
-    #Get from source data,
-    #Charge-offs : BHCK4635
-    #Total Equity : BHCK310
-    #Net Charge-offs : BHCK4635 - BHCK4605
-    #Return on Equity : BHCK4340-BHCK4598/Average(BHCK310)
+keylist = ['zmacro_domestic_pca_all','zmacro_international_pca_all',"sectidx_pca_all","sbidx_pca_all","zmicro_pca_all"]
+for keyname in [x for x in Preprocess_Dict.keys() if x in keylist]:
+    os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/data")
+    print(keyname)
+    data, data_quarter = pd_raw_to_numpy_moda(Preprocess_Dict[keyname], fulldatescombine= False,  ReportingDate_Start = "1976 Q1", ReportingDate_End = "2017 Q4")
+    print(keyname, ":", data.shape, keyname, "_quarter:", data_quarter.shape)
+    print("Saving objects to file")
+    np.save("./data_moda_" + keyname + ".npy", data)
+    np.save("./quarter_based/data_moda_" + keyname + "_quarter.npy", data_quarter)
 
 
-
-    #VAE-CVAE=MNIST
-    #import utils, models, train
 
 

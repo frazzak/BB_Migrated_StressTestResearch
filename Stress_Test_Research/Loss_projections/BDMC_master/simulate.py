@@ -28,7 +28,14 @@ def simulate_data(model, batch_size=10, n_batch=1, cond = None, modeltype = 'vae
   # shorter aliases
   batches = []
   for i in range(n_batch):
-    z = torch.randn(batch_size, model.latent_dim)  # .cuda()
+
+    if modeltype in ['mcvae','vae','cvae']:
+      z = []
+      for dim_size in (model.mod_input_sizes):
+        z_tmp = torch.randn([batch_size, dim_size])
+        z.append(z_tmp)
+    else:
+      z = torch.randn(batch_size, model.latent_dim)  # .cuda()
 
     if modeltype in ['mcvae', "cvae","cgan"]:
       x_logits = model.decode(z, cond)

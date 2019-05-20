@@ -9,9 +9,6 @@ import pymysql as msql
 import numpy as np
 import os
 
-#TODO: Get all partial data, not just banks with quarters that match window.
-#TODO: Load Merged Bank Data.
-#TODO: May not need to transform RSSD by RSSD for all banks. find way to transform whole fetched cursor at once
 def request_data(data_type = "X", rssd_reportingdate_base_tble = "X_Y_Cap", ReportingDate_Start = "1990 Q1", ReportingDate_End = "2016 Q4" , qtr_count_val =108,
                  host = "localhost", db = 'STR', user = "root", passwd = "",
                  Y_tble = "X_Y_Cap", X_tble = "X_Y_Cap", XYCap_tble = "X_Y_Cap", CreateNewRefTable = False, BankLimit = 50):
@@ -401,6 +398,21 @@ def pd_raw_to_numpy_moda(df, fulldatescombine = True, ReportingDate_Start = "199
 if __name__ == "__main__":
 
     os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/data")
+
+
+    keylist = ['zmacro_domestic_pca_all','zmacro_international_pca_all',"sectidx_pca_all","sb_idx_pca_all","zmicro_pca_all"]
+    for keyname in [x for x in Preprocess_Dict.keys() if x in keylist]:
+        print(keyname)
+        data, data_quarter = pd_raw_to_numpy_moda(Preprocess_Dict[keyname], fulldatescombine= False)
+        print(keyname, ":", data.shape, keyname, "_quarter:", data_quarter.shape)
+        print("Saving objects to file")
+        np.save("./data_moda_" + keyname + ".npy", data)
+        np.save("./quarter_based/data_moda_" + keyname + "_quarter.npy", data_quarter)
+
+
+
+
+
 
 
     keylist = ['Z_macro_domestic_pca','Z_macro_international_pca',"Sector_idx_pca","sb_idx_pca","Z_micro_pca"]

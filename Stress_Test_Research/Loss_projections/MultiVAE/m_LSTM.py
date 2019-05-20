@@ -81,7 +81,7 @@ def train(inputs, targets, epcho, lstm_lr, threshold):
             t_loss = loss.data
             t_loss_rmse = loss_rmse
         else:
-            print(loss.item)
+            print(loss.item())
             print("Done!")
             break
     training_hist = pd.DataFrame(m_loss_list)

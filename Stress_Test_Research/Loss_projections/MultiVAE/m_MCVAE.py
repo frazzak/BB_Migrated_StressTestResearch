@@ -36,13 +36,13 @@ class MCVAE(nn.Module):
 
 
 
-    def decode(self, z, cond=None):
+    def decode(self, input_modalities, cond=None):
         #TODO: Fix this part to work with AIS BDMC
         # make input_modalities as tuple, each dimension represents a modality
-        #mu, logvar = self.get_params(input_modalities, cond)
+        mu, logvar = self.get_params(input_modalities, cond)
 
-        # reparametrization trick to sample
-        #z = self.reparameterize(mu, logvar)
+        #reparametrization trick to sample
+        z = self.reparameterize(mu, logvar)
 
         # reconstruct modalities based on sample
         output_estimations = []
