@@ -111,4 +111,4 @@ def predict(model, inputs):
     outputs = model.forward(inputs)
     
     return outputs
-    
+

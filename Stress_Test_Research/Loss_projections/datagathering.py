@@ -1710,7 +1710,7 @@ BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"]["ReportingDate"] =
 
 
 Preprocess_Dict = dict()
-Preprocess_Dict['X'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "X"
+Preprocess_Dict['X_loancat'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "X"
                          ,server = "mysql+pymysql://{user}:{pw}@localhost/{db}", user="root", pw="", db="STR"
                          , tbl_name = "X", if_exists = "replace")#.interpolate(method = 'linear')
 
@@ -1719,10 +1719,10 @@ Preprocess_Dict['X'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduce
 
 #outlier_preprocess(Preprocess_Dict['X'], quantiles=[0,1], makezero = 1e-10).round(2).describe()
 
-Preprocess_Dict['X'] = outlier_preprocess(Preprocess_Dict['X'], quantiles=[0,1], makezero = 1e-10).round(2)
+Preprocess_Dict['X_loancat'] = outlier_preprocess(Preprocess_Dict['X_loancat'], quantiles=[0,1], makezero = 1e-10).round(2).interpolate(method = 'polynomial', order = 2)
 
 #Normalize and interpolate
-Preprocess_Dict['X']  = PandasNormalize(Preprocess_Dict['X'], exclude_columns = ["RSSD_ID", "ReportingDate"], type = "scilearn").interpolate(method = 'linear', order = 2)
+#Preprocess_Dict['X']  = PandasNormalize(Preprocess_Dict['X'], exclude_columns = ["RSSD_ID", "ReportingDate"], type = "scilearn").interpolate(method = 'linear', order = 2)
 
 
 Preprocess_Dict['Y'] = preprocess_loadMySQL(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_ReportingDated"], datatype = "Y"
@@ -1740,6 +1740,26 @@ Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ncoR:')]]
 
 
 Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'].keys() if x.startswith(('ppnrRatio:','ncoR:'))]] = outlier_preprocess(Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'].keys() if x.startswith(('ppnrRatio:','ncoR:'))]],quantiles=[0,.9736], makezero = 1e-9, verbose = False)[["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'].keys() if x.startswith(('ppnrRatio:','ncoR:'))]].round(4)
+
+
+
+# Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'].keys() if x.startswith(('ppnrRatio:','ncoR:'))]] = outlier_preprocess(Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'].keys() if x.startswith(('ppnrRatio:','ncoR:'))]],quantiles=[0,.9736], makezero = 1e-9, verbose = False)[["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'].keys() if x.startswith(('ppnrRatio:','ncoR:'))]].round(4)
+
+
+Preprocess_Dict['X_ppnr'] = Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'].keys() if x.startswith(('ppnrRatio:'))]]
+
+
+#Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ncoR:')]].sum(axis = 1).describe()
+
+(Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ncoR:')]].sum(axis = 1) - Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ppnrRatio:')]].sum(axis = 1)).describe()
+
+#Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ncoR:')]].sum(axis = 1).describe()
+
+Preprocess_Dict['Y_nco'] = Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'].keys() if x.startswith(('ncoR:'))]]
+Preprocess_Dict['Y_nco']["NCO_Combined"] = Preprocess_Dict['Y_nco'][[x for x in Preprocess_Dict['Y_nco'].keys() if x.startswith('ncoR:')]].sum(axis = 1)
+
+Preprocess_Dict['Y_nco'].describe()
+
 
 # Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ppnrRatio:')]].describe()
 #  outlier_preprocess(Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'] if x.startswith('ppnrRatio:') if not x.endswith("ppnrRatio:Noninterest expense")]]
@@ -1772,15 +1792,16 @@ Preprocess_Dict['X_Y_Cap'] = preprocess_loadMySQL(BankPerf["BankPerf_Consecutive
 collist = [ x for x in list(Preprocess_Dict['X_Y_Cap'].keys()) if x.startswith("Other items: CapRatios") if not x.endswith("_t-1") if x.endswith("_coalesced") ]
 Preprocess_Dict['CapRatios'] = Preprocess_Dict['X_Y_Cap'][["RSSD_ID", "ReportingDate"] + collist]
 Preprocess_Dict['CapRatios'][collist] = Preprocess_Dict['CapRatios'][collist] * .01
-Preprocess_Dict['CapRatios'][collist].describe()
+#Preprocess_Dict['CapRatios'][collist].describe()
 #outlier_preprocess(Preprocess_Dict['CapRatios'],quantiles = [.086,.832],verbose = False).round(2).describe()
 
 Preprocess_Dict['CapRatios'] = outlier_preprocess(Preprocess_Dict['CapRatios'],quantiles = [.086,.832],verbose = False).round(2)
 
+
 #Preprocess_Dict['CapRatios'] .keys()
 #Preprocess_Dict['Y'].keys()
-Preprocess_Dict["Y_Cap"] = Preprocess_Dict['Y'].merge(Preprocess_Dict['CapRatios'][["RSSD_ID","ReportingDate",'Other items: CapRatios_T1RiskCR_coalesced']])
-#Preprocess_Dict['CapRatios']  = Preprocess_Dict['CapRatios'][["RSSD_ID","ReportingDate","Other items: CapRatios_T1RiskCR_coalesced"]]
+#Preprocess_Dict["Y_Cap"] = Preprocess_Dict['Y'].merge(Preprocess_Dict['CapRatios'][["RSSD_ID","ReportingDate",'Other items: CapRatios_T1RiskCR_coalesced']])
+Preprocess_Dict['CapRatios']  = Preprocess_Dict['CapRatios'][["RSSD_ID","ReportingDate","Other items: CapRatios_T1RiskCR_coalesced"]]
 #Preprocess_Dict["Y_Cap"].round(4).describe()
 
 
@@ -1811,7 +1832,7 @@ Preprocess_Dict["Y_Cap"] = Preprocess_Dict['Y'].merge(Preprocess_Dict['CapRatios
 
 
 os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/data")
-keylist = ["X","Y_Cap"]
+keylist = ["X_loancat","X_ppnr","Y_nco","CapRatios"]
 for keyname in [x for x in Preprocess_Dict.keys() if x in keylist]:
     print(keyname)
     data, data_quarter = pd_raw_to_numpy_data(Preprocess_Dict[keyname], fulldatescombine=False,  ReportingDate_Start = "1987 Q1", ReportingDate_End = "2017 Q4")
@@ -1934,15 +1955,15 @@ Preprocess_Dict['zmacro_domestic_pca_all'] = preprocess_load_wrapper(Z_macro_dom
 
 
 
-Preprocess_Dict['NCO'][["RSSD_ID","ReportingDate","Other items:Net Charge Offs_Ratio",'Other items:Loan Charge Offs_Ratio']]
-df_raw = Preprocess_Dict['NCO']
-#NCO_test = process_raw_bankdat_PCA_Norm(Preprocess_Dict, keyname = 'NCO',target_list='Other items:Loan Charge Offs_Ratio', n_components = 12, visualizations = False)
-exclude = ["ReportingDate","RSSD_ID"]
-#print("Target:", target)
-non_target_tmp =  exclude #+ [x for x in target_list if not x == target]
-print("Exlcuding:", non_target_tmp)
-print("First Remove Exclusions:",non_target_tmp)
-df_raw_tmp = df_raw[df_raw.columns.difference(non_target_tmp)]
+# Preprocess_Dict['NCO'][["RSSD_ID","ReportingDate","Other items:Net Charge Offs_Ratio",'Other items:Loan Charge Offs_Ratio']]
+# df_raw = Preprocess_Dict['NCO']
+# #NCO_test = process_raw_bankdat_PCA_Norm(Preprocess_Dict, keyname = 'NCO',target_list='Other items:Loan Charge Offs_Ratio', n_components = 12, visualizations = False)
+# exclude = ["ReportingDate","RSSD_ID"]
+# #print("Target:", target)
+# non_target_tmp =  exclude #+ [x for x in target_list if not x == target]
+# print("Exlcuding:", non_target_tmp)
+# print("First Remove Exclusions:",non_target_tmp)
+# df_raw_tmp = df_raw[df_raw.columns.difference(non_target_tmp)]
 
 # print('Normalize without target')
 # scale = StandardScaler()
@@ -2032,6 +2053,7 @@ df_raw_tmp = df_raw[df_raw.columns.difference(non_target_tmp)]
 # plt.close()
 
 Z_macro = init_ST.Z_macro_process()
+
 Z_macro_international_dict_1 = process_raw_modality_PCA_Norm(Z_macro, keyname = "Historic_International", raw_date_col="Date", removecols= [x for x in Z_macro["Historic_International"].columns if  x.startswith('Scenario Name')],extractquarters = False, n_components= 12)
 Preprocess_Dict['zmacro_international_pca_all'] = preprocess_load_wrapper(Z_macro_international_dict_1, keyname = 'PCA_DF', collist = 'PCA', datatype = "zmacro_international")
 
@@ -2040,20 +2062,30 @@ SectorIdx = init_ST.sectoridx_process()
 SectorIdx_dict_1 = process_raw_modality_PCA_Norm(SectorIdx, keyname = "sectoridx", raw_date_col="Date",extractquarters = True)
 Preprocess_Dict['sectidx_pca_all'] = preprocess_load_wrapper(SectorIdx_dict_1, keyname = 'PCA_DF', collist = 'PCA', datatype = "sectoridx")
 
-
 SBidx = init_ST.SBidx_process()
 SBidx_dict_1 = process_raw_modality_PCA_Norm(SBidx, keyname = "SB_idx_prox", raw_date_col="Date",extractquarters = True, n_components= 7)
 Preprocess_Dict['sbidx_pca_all'] = preprocess_load_wrapper(SBidx_dict_1, keyname = 'PCA_DF', collist = 'PCA', datatype = "sbidx")
+
+
+#Preprocess_Dict['sectsbidx_pca_all'] = SectorIdx_dict_1['PCA_DF'][['ReportingDate'] + [x for x in SectorIdx_dict_1['PCA_DF'].keys() if isinstance(x,int)]].merge(SBidx_dict_1['PCA_DF'][['ReportingDate'] + [x for x in SBidx_dict_1['PCA_DF'].keys() if isinstance(x,int)]], on = "ReportingDate")
+
 #TODO: Improve n_componets logic
 
-
+#Preprocess_Dict['sectsbidx_pca_all']['ReportingDate'] <= '2017 Q4'
+sectsbix = SectorIdx['sectoridx'].merge(SBidx['SB_idx_prox'], on = "Date", how = 'left')
+sectsbix_dict = dict()
+sectsbix_dict['sectdbidx'] = sectsbix
+sectsbix_dict1 = process_raw_modality_PCA_Norm(sectsbix_dict, keyname = "sectdbidx", raw_date_col="Date",extractquarters = True, n_components= 12)
+#Preprocess_Dict['sectsbidx_pca_all'].columns = ['ReportingDate'] + [x for x in range(0,19)]
+Preprocess_Dict['sectsbidx_pca_all'] = preprocess_load_wrapper(sectsbix_dict1, keyname = 'PCA_DF', collist = 'PCA', datatype = "sbidx")
 #Create Transformational Cubes
-os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/data")
-keylist = ['zmacro_domestic_pca_all', 'zmacro_international_pca_all', "sectidx_pca_all", "sbidx_pca_all",
+
+keylist = ['zmacro_domestic_pca_all', 'zmacro_international_pca_all', "sectsbidx_pca_all",
            "zmicro_pca_all"]
 for keyname in [x for x in Preprocess_Dict.keys() if x in keylist]:
+    os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/data")
     print(keyname)
-    data, data_quarter = pd_raw_to_numpy_moda(Preprocess_Dict[keyname], fulldatescombine=False,ReportingDate_Start = "1976 Q1", ReportingDate_End = "2016 Q4")
+    data, data_quarter = pd_raw_to_numpy_moda(Preprocess_Dict[keyname], fulldatescombine=False,ReportingDate_Start = "1976 Q1", ReportingDate_End = "2017 Q4")
     print(keyname, ":", data.shape, keyname, "_quarter:", data_quarter.shape)
     print("Saving objects to file")
     np.save("./data_moda_" + keyname + ".npy", data)
@@ -2061,23 +2093,14 @@ for keyname in [x for x in Preprocess_Dict.keys() if x in keylist]:
 
 
 
-Preprocess_Dict['sectidx_pca_all']["ReportingDate"].iloc[160:168,]
-
-pd.Series(Preprocess_Dict['zmacro_domestic_pca_all']["ReportingDate"].unique())[pd.Series(Preprocess_Dict['zmacro_domestic_pca_all']["ReportingDate"].unique()).isin(['1986 Q3','2016 Q4'])]
-
-list(pd.Series(Preprocess_Dict['X']["ReportingDate"].unique())[pd.Series(Preprocess_Dict['X']["ReportingDate"].unique()).isin(datamoda_test_date)].index)
-122 - 86
-
-
-Preprocess_Dict['X'][Preprocess_Dict['X']["RSSD_ID"].isin([1020201])].iloc[86:122,:].describe()
-
 
 moda_Reporting_Ref = pd.Series(Preprocess_Dict['zmacro_domestic_pca_all']["ReportingDate"].unique())
 Preprocess_Dict['moda_DateIdx']  = moda_Reporting_Ref
-data_Reporting_Ref = pd.Series(Preprocess_Dict['X']["ReportingDate"][Preprocess_Dict['X']["ReportingDate"] >= "1987 Q1"].unique())
+data_Reporting_Ref = pd.Series(Preprocess_Dict['X_loancat']["ReportingDate"][Preprocess_Dict['X_loancat']["ReportingDate"] >= "1987 Q1"].unique())
 Preprocess_Dict['data_DateIdx']  = data_Reporting_Ref
 
-keylist = ['zmacro_domestic_pca_all','zmacro_international_pca_all',"sectidx_pca_all","sbidx_pca_all","zmicro_pca_all"]
+#"sectidx_pca_all","sbidx_pca_all"
+keylist = ['zmacro_domestic_pca_all','zmacro_international_pca_all',"zmicro_pca_all"]
 for keyname in [x for x in Preprocess_Dict.keys() if x in keylist]:
     os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/data")
     print(keyname)
