@@ -567,8 +567,7 @@ def get_raw_train_test_data(moda_names=['sbidx', 'zmicro', 'zmacro_domestic', 'z
 
         print('build real modalities to evaluate')
         print("retrieving data...")
-        # TODO: Address Quarter ID only taking first Quarter Issue
-        # quarter_ID = 0
+
         print("Modalities to be loaded ", moda_names, "for quarter_ID ", str(quarter_ID))
 
         # cond_name = moda_names[2]  # this can be changed to see different conditional effects from differnt modalities
@@ -580,30 +579,27 @@ def get_raw_train_test_data(moda_names=['sbidx', 'zmicro', 'zmacro_domestic', 'z
         # TODO: Explore ways to extract the modalities properly as well as the X and Y and conditional
         if quarter_ID is not None:
             print("Running Load Quarter Based Data Function")
-
             data_dict = load_all_quarter_data(quarter_ID=quarter_ID, cond_name=cond_name, modality_names=moda_names, data_names = data_names,path_dict = path_dict, path_qtr_dict = path_qtr_dict)
-
-
         else:
             #TODO: Need model target for t shape.
             data_dict = load_all_quarter_data(quarter_ID=None, cond_name=cond_name, modality_names=moda_names, data_names = data_names,path_dict = path_dict, path_qtr_dict = path_qtr_dict)
             #t = data_dict["data_Y"].shape[0]
 
 
-            # TODO: Try to use full historical Bank Data rather than just 10 years for testing and 3 for training.
-            print("Create Training and Testing Sets")
-            print("Running Train Eval Data Function")
-            #TODO: Add logic to make dataset appropirate for bank split rather than time split.
-            traintest_sets_dict = build_datasets(data_dict, data_train_window = data_train_window, data_test_window = data_test_window,
-                                                 moda_train_window = moda_train_window , moda_test_window = moda_test_window,splittype = splittype)
-            # traintest_sets_dict= build_train_eval_data(X, Y, XYCap, moda, cond, train_window, test_window)
+        # TODO: Try to use full historical Bank Data rather than just 10 years for testing and 3 for training.
+        print("Create Training and Testing Sets")
+        print("Running Train Eval Data Function")
+        #TODO: Add logic to make dataset appropirate for bank split rather than time split.
+        traintest_sets_dict = build_datasets(data_dict, data_train_window = data_train_window, data_test_window = data_test_window,
+                                             moda_train_window = moda_train_window , moda_test_window = moda_test_window,splittype = splittype)
+        # traintest_sets_dict= build_train_eval_data(X, Y, XYCap, moda, cond, train_window, test_window)
 
 
-            print("Storing Condition Name and number")
-            traintest_sets_dict["cond_name"] = cond_name
-            for trainset_cond in [x for x in traintest_sets_dict.keys() if x.startswith("trainset_data_cond")]:
-                traintest_sets_dict["cond_num"] = traintest_sets_dict[trainset_cond].shape[1]
-            print("Done!")
+        print("Storing Condition Name and number")
+        traintest_sets_dict["cond_name"] = cond_name
+        for trainset_cond in [x for x in traintest_sets_dict.keys() if x.startswith("trainset_data_cond")]:
+            traintest_sets_dict["cond_num"] = traintest_sets_dict[trainset_cond].shape[1]
+        print("Done!")
 
 
 
@@ -614,7 +610,7 @@ def get_raw_train_test_data(moda_names=['sbidx', 'zmicro', 'zmacro_domestic', 'z
 
 
 
-
+importlib.reload(simulate)
 def ais_bdmc_lld(model, mod, latent_dim, cond=None, batch_size=None, n_batch=5, chain_length=100, iwae_samples=1,
                  modeltype="vae"):
     print("Initializing Parameters for:", modeltype)
@@ -632,7 +628,7 @@ def ais_bdmc_lld(model, mod, latent_dim, cond=None, batch_size=None, n_batch=5, 
     model.test()
     # bdmc uses simulated data from the model
     print("Generating Simulated Data from the Model:", modeltype)
-    loader = simulate.simulate_data(model, batch_size=batch_size, n_batch=n_batch, cond=cond, modeltype=modeltype, mod_dim = latent_dim)
+    loader = simulate.simulate_data(model, mod = mod, batch_size=batch_size, n_batch=n_batch, cond=cond, modeltype=modeltype, mod_dim = latent_dim)
     # run bdmc
     print("Running Bi-Directional Monte Carlo with AIS Sampling")
     forward_logws, backward_logws, lower_bounds, upper_bounds = bdmc.bdmc(model=model, loader=loader,
@@ -664,6 +660,7 @@ def train_CVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_ra
         print("evaluating # %d modality" % i)
         mod_input_size = [mod_train[i].shape[1]]
         batch_size_train = mod_train[i].shape[0]
+        latent_size = mod_input_size[0]
         mVAE = m_MCVAE.MCVAE(latent_size, modality_size, conditional, num_cond, mod_input_size, layer_size, use_cuda)
         m_optimizer = torch.optim.Adam(mVAE.parameters(), lr=learning_rate)
         mVAE.train()
@@ -718,8 +715,7 @@ def train_CVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_ra
                 #                                                                                                  modeltype=modeltype)
 
                 forward_logws_test, backward_logws_test, lower_bounds_test, upper_bounds_test = ais_bdmc_lld(mVAE,
-                                                                                                             mod_test[
-                                                                                                                 i],
+                                                                                                             [mod_test[i]],
                                                                                                              latent_size,
                                                                                                              cond=cond_test,
                                                                                                              n_batch=n_batch,
@@ -744,8 +740,7 @@ def train_CVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_ra
                 #                                                                                                  modeltype=modeltype)
 
                 forward_logws_test, backward_logws_test, lower_bounds_test, upper_bounds_test = ais_bdmc_lld(mVAE,
-                                                                                                             mod_test[
-                                                                                                                 i],
+                                                                                                             [mod_test[i]],
                                                                                                              latent_size,
                                                                                                              cond=cond_test,
                                                                                                              n_batch=n_batch,
@@ -767,8 +762,8 @@ def train_CVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_ra
         lld_ais_test = pd.concat(dfs_test).mean()
         # print("Average LLD Train Bounds:\t.2f\t.2f\tAverage LLD Test Bounds:\t.2f\t.2f" % (lld_ais_train[1], lld_ais_train[0], lld_ais_test[1], lld_ais_test[0]))
         #print(lld_ais_train[1], lld_ais_train[0], lld_ais_test[1], lld_ais_test[0])
-        print("Test LLD:",lld_ais_test[1], lld_ais_test[0])
-        results_dict['AIS_BDMC_LLD'] = pd.DataFrame([tuple([lower_bounds_test, upper_bounds_test])])
+        print("Test LLD:",lld_ais_test[0], lld_ais_test[1])
+        results_dict['AIS_BDMC_LLD'] = pd.DataFrame([tuple([lld_ais_test[0], lld_ais_test[1]])])
         results_dict['AIS_BDMC_LLD'].columns = ["lower_bounds_test", "upper_bounds_test"]
 
     training_history_df = pd.DataFrame(training_history).transpose().astype('float')
@@ -812,12 +807,14 @@ def train_MCVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_r
     training_history = list()
     modality_size = len(mod_train)
     mod_input_sizes = []
+
     # i = 0
     for i in range(0, modality_size):
         print(mod_train[i].shape)
         mod_input_sizes.extend([mod_train[i].shape[1]])
 
     # conditional = True
+    latent_size = mod_input_sizes[0]
     mcvae = m_MCVAE.MCVAE(latent_size, modality_size, conditional, num_cond, mod_input_sizes, layer_size, use_cuda)
     m_optimizer = torch.optim.Adam(mcvae.parameters(), lr=learning_rate)
     print("Model parameter initialization Done!")
@@ -879,6 +876,7 @@ def train_MCVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_r
         #print(lower_bounds_train, upper_bounds_train, lower_bounds_test, upper_bounds_test)
         #results_dict['AIS_BDMC_LLD'] = pd.DataFrame([tuple([lower_bounds_train, upper_bounds_train, lower_bounds_test, upper_bounds_test])])
         #results_dict['AIS_BDMC_LLD'].columns = ["lower_bounds_train", "upper_bounds_train", "lower_bounds_test", "upper_bounds_test"]
+        print(lower_bounds_test, upper_bounds_test)
         results_dict['AIS_BDMC_LLD'] = pd.DataFrame([tuple([lower_bounds_test, upper_bounds_test])])
         results_dict['AIS_BDMC_LLD'].columns = ["lower_bounds_test", "upper_bounds_test"]
     # results_dict["Train"]
@@ -933,6 +931,7 @@ def train_GAN(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rat
         batch_size = mod_train[j].shape[0]
         mod_dim = mod_train[j].shape[1]
         cond_dim = cond_train.shape[1]
+        latent_size = mod_dim
         # Loss functions
         adversarial_loss = torch.nn.MSELoss()
 
@@ -1027,10 +1026,10 @@ def train_GAN(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rat
             evaluation
             ''')
         test_batch_size = cond_test.shape[0]
-        z = torch.from_numpy(np.random.normal(0, 1, (test_batch_size, latent_size))).float()
+        #z = torch.from_numpy(np.random.normal(0, 1, (test_batch_size, latent_size))).float()
         #Use Discriminator ?
-        estimations, test_mu, test_logvar = generator(z, cond_test)
-
+        estimations, test_mu, test_logvar = generator(mod_test[j], cond_test)
+        #t_loss_gen, MSE_gen_test, KLD_gen_test, RMSE_gen_test = elbo_loss([mod_test[j]], estimations, test_mu, test_logvar)
         t_error = torch.nn.functional.mse_loss(estimations, mod_test[j])
         m_error = m_error + t_error
         print("Testing Done!")
@@ -1054,7 +1053,7 @@ def train_GAN(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rat
 
                 forward_logws_test, backward_logws_test, lower_bounds_test, upper_bounds_test = ais_bdmc_lld(
                     generator,
-                    [mod_test[j]],
+                    mod_test[j],
                     latent_size,
                     cond=cond_test,
                     n_batch=n_batch,
@@ -1080,7 +1079,7 @@ def train_GAN(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rat
 
                 forward_logws_test, backward_logws_test, lower_bounds_test, upper_bounds_test = ais_bdmc_lld(
                     generator,
-                    [mod_test[j]],
+                    mod_test[j],
                     latent_size,
                     cond=cond_test,
                     n_batch=n_batch,
@@ -1101,8 +1100,8 @@ def train_GAN(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rat
         lld_ais_test = pd.concat(dfs_test).mean()
         #print("Average LLD Train Bounds:\t.2f\t.2f\tAverage LLD Test Bounds:\t.2f\t.2f" % (lld_ais_train[1], lld_ais_train[0], lld_ais_test[1], lld_ais_test[0]))
         #print(lld_ais_train[1], lld_ais_train[0], lld_ais_test[1], lld_ais_test[0])
-        print(lld_ais_test[1], lld_ais_test[0])
-        results_dict['AIS_BDMC_LLD'] = pd.DataFrame([tuple([lower_bounds_test, upper_bounds_test])])
+        print(lld_ais_test[0], lld_ais_test[1])
+        results_dict['AIS_BDMC_LLD'] = pd.DataFrame([tuple([lld_ais_test[0], lld_ais_test[1]])])
         results_dict['AIS_BDMC_LLD'].columns = ["lower_bounds_test", "upper_bounds_test"]
     training_history_dict = dict()
 
@@ -1302,7 +1301,8 @@ def GenerativeModels_ScenarioGen(traintest_sets_dict,cond_name = None,learning_r
             print("Saving Error from iteration")
             tmp_error_obj.append(error)
             tmp_rmse_error_obj.append(rmse_error)
-            tmp_lld_obj.append(tmp_results_dict['AIS_BDMC_LLD']["upper_bounds_test"][0])
+            if bdmc_run:
+                tmp_lld_obj.append(tmp_results_dict['AIS_BDMC_LLD']["upper_bounds_test"][0])
             print("Saving Estimations")
             result_dict["_".join([model.lower(),"pred_moda"])] = pred_moda
             print("Saving Training and Testing Probability Distributions")
@@ -1316,7 +1316,8 @@ def GenerativeModels_ScenarioGen(traintest_sets_dict,cond_name = None,learning_r
         tmp_result_rmse_obj = torch.stack(tmp_rmse_error_obj)
         results_rmse_lst.append(tmp_result_rmse_obj)
         #tmp_lld_obj = torch.stack(tmp_lld_obj)
-        results_lld_lst.append(tmp_lld_obj)
+        if bdmc_run:
+            results_lld_lst.append(tmp_lld_obj)
     print("Calculating Average Performance and adding to Results Object")
 
 
@@ -1330,18 +1331,20 @@ def GenerativeModels_ScenarioGen(traintest_sets_dict,cond_name = None,learning_r
     results_rmse.loc["mean"] = results_rmse.mean()
     results_rmse.loc["std"] = results_rmse.iloc[:iterations].std()
     results_rmse.loc["iterations"] = iterations
-    results_lld = pd.DataFrame(results_lld_lst, index=models).astype(float)
-    results_lld = results_lld.transpose()
-    results_lld.loc["mean"] = results_lld.mean()
-    results_lld.loc["std"] = results_lld.iloc[:iterations].std()
-    results_lld.loc["iterations"] = iterations
+    if bdmc_run:
+        results_lld = pd.DataFrame(results_lld_lst, index=models).astype(float)
+        results_lld = results_lld.transpose()
+        results_lld.loc["mean"] = results_lld.mean()
+        results_lld.loc["std"] = results_lld.iloc[:iterations].std()
+        results_lld.loc["iterations"] = iterations
     print("Saving and Printing results")
     result_dict["results_mse"] = results_mse
-    print("MSE:",result_dict["results_mse"])
+    print("MSE:\n",result_dict["results_mse"])
     result_dict["results_rmse"] = results_rmse
-    print("RMSE:",result_dict["results_rmse"])
-    result_dict["results_lld"] = results_lld
-    print("LLD:",result_dict["results_lld"])
+    print("RMSE:\n",result_dict["results_rmse"])
+    if bdmc_run:
+        result_dict["results_lld"] = results_lld
+        print("LLD:\n",result_dict["results_lld"])
     return(result_dict)
 
 #TODO: Consolidate VAE, CVAE and MCVAE into one function for comparasion.
@@ -1617,7 +1620,7 @@ def LSTM_BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativem
 
 
 
-    genmodel = "mcvae"
+    #genmodel = "mcvae"
     for genmodel in generativemodel:
 
         for subset in dataset_subsets:
@@ -1711,7 +1714,7 @@ def LSTM_BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativem
             raw_targets = traintest_sets_dict[model_raw_target_keyname]
             raw_eval_targets = traintest_sets_dict[model_raw_eval_target_keyname]
 
-            print("Setting up Dimensions for inputs and targets for Training  model")
+            print("Setting up Dimensions for inputs and targets for Training model:", predictmodel)
 
             if splittype == "timesplit":
                 n, t, m1 = raw_inputs.shape
@@ -1739,6 +1742,11 @@ def LSTM_BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativem
             elif predictmodel in ['LR','LinearRegression','LinReg','linreg']:
                 print("Training Linear Regression Model")
                 model, train_loss, train_rmse, train_trainhist = m_LinReg.train(inputs_train, targets_train, epoch,lstm_lr, threshold)
+                #train_trainhist_dict["_".join([tmp_dict_name, "trainhist", predictmodel])] = train_trainhist
+            elif predictmodel.lower() in ['gru']:
+                print("Training GRU")
+                model, train_loss, train_rmse, train_trainhist = m_GRU.train(inputs_train, targets_train, epoch,
+                                                                                lstm_lr, threshold)
                 train_trainhist_dict["_".join([tmp_dict_name, "trainhist", predictmodel])] = train_trainhist
             else:
                 print("No Prediction Model Found:",predictmodel)
@@ -1781,11 +1789,14 @@ def LSTM_BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativem
             elif predictmodel in ['LR', 'LinearRegression', 'LinReg', 'linreg']:
                 print("Running Predictions on Inputs using Trained Model: Testing Error")
                 pred = m_LinReg.predict(model, inputs_test)
+            elif predictmodel.lower() in ['gru']:
+                pred = m_GRU.predict(model, inputs_test)
             else:
-                print("No Prediction Model Found:",predictmodel)
+                print("No Prediction Model Found:", predictmodel)
                 return
 
             print("Calculating Testing RMSE")
+            #print(pred.shape, targes_test.shape)
             mse = torch.nn.functional.mse_loss(pred, targets_test)
             rmse = torch.sqrt(torch.nn.functional.mse_loss(pred, targets_test))
             rmse_lst.append(rmse)
@@ -1899,11 +1910,12 @@ path_qtr_dict = {"path_root": os.path.join(os.getcwd(), "data/quarter_based/"),
 
 #"X_loancat","X_ppnr","Y_nco","CapRatios"
 
+
 os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/")
-traintest_sets_dict_timesplit  = get_raw_train_test_data(quarter_ID = None, cond_name = 'zmicro', moda_names = ['zmacro_domestic','zmacro_international',"zmicro","sectsbidx"]
+traintest_sets_dict_timesplit  = get_raw_train_test_data(quarter_ID = None, cond_name = 'zmacro_domestic', moda_names = ['zmacro_domestic','zmacro_international',"zmicro","sectsbidx"]
                                                , data_names = ["X_loancat","X_ppnr","Y_nco","CapRatios"], path_dict= path_dict, path_qtr_dict= path_qtr_dict
                                                , modaDateIdx = Preprocess_Dict['moda_DateIdx'], dataDateIdx = Preprocess_Dict['data_DateIdx']
-                                                ,moda_train_date = ["1976 Q1","2007 Q4"],data_train_date = ["1987 Q2","2007 Q4"], datamoda_test_date = ["2008 Q1","2009 Q4"]
+                                                ,moda_train_date = ["1990 Q1","2007 Q4"],data_train_date = ["1990 Q1","2007 Q4"], datamoda_test_date = ["2008 Q1","2009 Q4"]
                                                 , splittype= "timesplit")
 
 #
@@ -1918,33 +1930,59 @@ traintest_sets_dict_timesplit  = get_raw_train_test_data(quarter_ID = None, cond
 
 #Runnining in Console 0
 #ScenarioGenResults_dict_timesplit_iterations = GenerativeModels_ScenarioGen(traintest_sets_dict = traintest_sets_dict_timesplit, learning_rate = 1e-3 , iterations = 30, epoch = 1000,                                                                   models=["mcvae","cvae","vae","cgan","gan"], splittype = "timesplit", verbose = False, bdmc = False, chain_length = 50),"cvae","vae","cgan","gan"
-
+mod_test[0].shape
+cond_test.shape
+importlib.reload(simulate)
+importlib.reload(ais)
+importlib.reload(m_CGAN)
+importlib.reload(m_MCVAE)
+importlib.reload(m_LSTM)
+importlib.reload(ais)
+importlib.reload(hmc)
 #,"cvae","vae","cgan","gan"
-ScenarioGenResults_dict_timesplit = GenerativeModels_ScenarioGen(traintest_sets_dict = traintest_sets_dict_timesplit, learning_rate = 1e-3 , iterations = 30, epoch = 1000,
-                                                                  models=["mcvae","cvae","vae","cgan","gan"], splittype = "timesplit", verbose = True, bdmc_run = True, chain_length = 10, n_batch = 5)
+ScenarioGenResults_dict_timesplit = GenerativeModels_ScenarioGen(traintest_sets_dict = traintest_sets_dict_timesplit, learning_rate = 1e-3 , iterations = 1, epoch = 1000,
+                                                                  models=["mcvae","cgan"], splittype = "timesplit", verbose = False, bdmc_run = False, chain_length = 1000, n_batch = 1)
 
-ScenarioGenResults_dict_timesplit.keys()
+
+
+
+
+#ScenarioGenResults_dict_timesplit.keys()
+
+
+#ScenarioGenResults_dict
 
 #ScenarioGen_Setting1 = ScenarioGenResults_dict_timesplit
 #ScenarioGenResults_dict_timesplit['results_rmse'].to_csv('./Images/Table_Data/ScenarioGen_30iter_train_1976_2007_test_2008_2009_rmse.csv')
+#ScenarioGenResults_dict_timesplit['results_lld'].to_csv('./Images/Table_Data/ScenarioGen_30iter_train_1976_2007_test_2008_2009_lld.csv')
+
+#ScenarioGen_Setting2 = ScenarioGenResults_dict_timesplit
+#ScenarioGenResults_dict_timesplit['results_rmse'].to_csv('./Images/Table_Data/ScenarioGen_30iter_train_1976_2015_test_2016_2017_rmse.csv')
+#ScenarioGenResults_dict_timesplit['results_lld'].to_csv('./Images/Table_Data/ScenarioGen_30iter_train_1976_2015_test_2016_2017_lld.csv')
+
+
+
+from MultiVAE import m_GRU
+#importlib.reload(m_GRU)
+#Working ["LSTM", "GRU",]
 
 
 BankPredEval_timesplit, BankPredEval_timesplit_trainhist = LSTM_BankPerfPred(ScenarioGenResults_dict = ScenarioGenResults_dict_timesplit,
                                            traintest_sets_dict = traintest_sets_dict_timesplit,
                                            generativemodel = ["mcvae", "cgan"]
-                                           ,modelTarget= "Y_nco_timesplit",
-                                           exclude = ["trainset_data_X_ppnr_timesplit","trainset_data_X_loancat_timesplit","trainset_data_CapRatios_timesplit"],
-                                           epoch = 5,
+                                           ,modelTarget= "CapRatios_timesplit",
+                                           exclude = ["trainset_data_X_loancat_timesplit"],
+                                           epoch = 1,
                                            basetraindataset = "trainset_data_X_loancat_tminus1_timesplit",
                                            basetestdataset = "testset_data_X_loancat_tminus1_timesplit",
                                            splittype= "timesplit",
                                            include = ["trainset_data_mod_timesplit",
+                                                      "trainset_data_Y_nco_timesplit",
+                                                      "trainset_data_X_ppnr_timesplit",
                                                       "trainset_data_X_loancat_tminus1_timesplit",
-                                                      "trainset_data_X_ppnr_tminus1_timesplit",
-                                                      "trainset_data_Y_nco_tminus1_timesplit",
-                                                      "trainset_data_CapRatios_tminus1_timesplit"
+
                                                       ],
-                                            lstm_lr = 1e-2, threshold = 1e-4, predictmodel = "LinReg")
+                                            lstm_lr = 1e-2, threshold = 1e-4, predictmodel = "gru")
 
 
 
@@ -2097,16 +2135,31 @@ quarter_ID = 0
 #Set Training and Testing Windows
 
 #Time Split
-train_window = [1,17]
-test_window = [18,26]
+# train_window = [1,17]
+# test_window = [18,26]
 splittype = "timesplit"
 
 
 os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/")
 #"CapRatios","X","Y","NCO"
-traintest_sets_dict_qtr_timesplit  = get_raw_train_test_data(quarter_ID = quarter_ID, cond_name = 'zmicro', moda_names = ['sbidx','Sectidx','zmicro', 'zmacro_domestic', 'zmacro_international']
-                                               ,train_window = train_window, test_window = test_window
-                                               , data_names = ["X","Y_Cap"], path_dict= path_dict, path_qtr_dict= path_qtr_dict, splittype= "timesplit")
+# traintest_sets_dict_qtr_timesplit  = get_raw_train_test_data(quarter_ID = quarter_ID, cond_name = 'zmicro', moda_names = ['sbidx','Sectidx','zmicro', 'zmacro_domestic', 'zmacro_international']
+#                                                ,train_window = train_window, test_window = test_window
+#                                                , data_names = ["X","Y_Cap"], path_dict= path_dict, path_qtr_dict= path_qtr_dict, splittype= "timesplit")
+#
+
+Preprocess_Dict["_".join(["moda_DateIdx_qtr",str(quarter_ID)])] = Preprocess_Dict['moda_DateIdx'][Preprocess_Dict['moda_DateIdx'].str.endswith(str(quarter_ID + 1))].reset_index(drop = True)
+Preprocess_Dict["_".join(["data_DateIdx_qtr",str(quarter_ID)])] = Preprocess_Dict['data_DateIdx'][Preprocess_Dict['data_DateIdx'].str.endswith(str(quarter_ID + 1))].reset_index(drop = True)
+
+os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/")
+traintest_sets_dict_timesplit  = get_raw_train_test_data(quarter_ID = quarter_ID, cond_name = 'zmacro_domestic', moda_names = ['zmacro_domestic','zmacro_international',"zmicro","sectsbidx"]
+                                               , data_names = ["X_loancat","X_ppnr","Y_nco","CapRatios"], path_dict= path_dict, path_qtr_dict= path_qtr_dict
+                                               , modaDateIdx = Preprocess_Dict["_".join(["moda_DateIdx_qtr",str(quarter_ID)])] , dataDateIdx = Preprocess_Dict["_".join(["data_DateIdx_qtr",str(quarter_ID)])]
+                                                ,moda_train_date = [x + str(quarter_ID + 1) for x in ["1976 Q","2007 Q"]]
+                                                ,data_train_date = [x + str(quarter_ID + 1) for x in ["1990 Q","2007 Q"]]
+                                                , datamoda_test_date = [x + str(quarter_ID + 1) for x in ["2008 Q","2009 Q"]]
+                                                , splittype= "timesplit")
+
+
 
 ScenarioGenResults_qtr_dict = GenerativeModels_ScenarioGen(traintest_sets_dict_qtr_timesplit, learning_rate = 1e-3 , iterations = 1, epoch = 1000, models=["mcvae", "cgan"])
 

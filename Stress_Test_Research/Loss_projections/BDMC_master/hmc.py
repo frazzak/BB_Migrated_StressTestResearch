@@ -19,30 +19,53 @@ def hmc_trajectory(current_z, current_v, U, grad_U, epsilon, L=10, cond = None, 
   eps = epsilon.view(-1, 1)
   z = current_z
   v = current_v
-  if isinstance(v, list):
-    v = torch.mean(torch.stack(v), dim=0)
-  v = v - grad_U(z, cond = cond, modeltype = modeltype).mul(eps).mul_(.5)
+
+  if isinstance(v, list) and isinstance(z, list) and modeltype in ["mcvae"]:
+    #v = torch.mean(torch.stack(v), dim=0)
+    for mod in range(0, len(z)):
+      #print(v[mod].shape, z[mod].shape)
+      grad_calc = grad_U([z[mod]], cond=cond, modeltype=modeltype)
+      v[mod] = v[mod] -  grad_calc.mul(eps).mul_(.5)
+  else:
+    v = v - grad_U(z, cond = cond, modeltype = modeltype).mul(eps).mul_(.5)
+
 
   for i in range(1, L + 1):
-    if isinstance(current_z, list):
+    if isinstance(current_z, list) and isinstance(v, list) and modeltype in ["mcvae"]:
       for mod in range(0,len(z)):
-        z[mod] = z[mod] + v.mul(eps)
+        z[mod] = z[mod] + v[mod].mul(eps)
     else:
       z = z + v.mul(eps)
+
     if i < L:
-      v = v - grad_U(z,cond = cond, modeltype = modeltype).mul(eps)
+      if isinstance(current_z, list) and isinstance(v, list) and modeltype in ["mcvae"]:
+        for mod in range(0, len(z)):
+          v[mod] = v[mod] - grad_U([z[mod]], cond=cond, modeltype=modeltype).mul(eps)
+      else:
+        v = v - grad_U(z,cond = cond, modeltype = modeltype).mul(eps)
 
-  v = v - grad_U(z, cond = cond, modeltype = modeltype).mul(eps).mul_(.5)
-  v = -v  # this is not needed; only here to conform to the math
 
-  if isinstance(z, list):
+  if isinstance(current_z, list) and isinstance(v, list) and modeltype in ["mcvae"]:
+   for mod in range(0, len(z)):
+     v[mod] = v[mod] - grad_U([z[mod]], cond = cond, modeltype = modeltype).mul(eps).mul_(.5)
+     v[mod] = -v[mod]  # this is not needed; only here to conform to the math
+  else:
+    v = v - grad_U(z, cond = cond, modeltype = modeltype).mul(eps).mul_(.5)
+    v = -v  # this is not needed; only here to conform to the math
+
+
+  if isinstance(z, list) and isinstance(v, list):
     z_tmp_list = []
+    v_tmp_list = []
     for i in range(0,len(z)):
       z_tmp_list.append(z[i].detach())
+      v_tmp_list.append(v[i].detach())
     z = z_tmp_list
+    v = v_tmp_list
   else:
     z = z.detach()
-  return z, v.detach()
+    v = v.detach()
+  return z, v
 
 
 def accept_reject(current_z, current_v,
@@ -61,11 +84,17 @@ def accept_reject(current_z, current_v,
       U: function to compute potential energy
       K: function to compute kinetic energy
   """
-  if isinstance(current_v, list):
-    current_v = torch.mean(torch.stack(current_v), dim=0)
-
-  current_Hamil = K(current_v, modeltype = modeltype) + U(current_z, cond = cond, modeltype = modeltype)
-  propose_Hamil = K(v,modeltype = modeltype) + U(z, cond = cond, modeltype = modeltype)
+  if isinstance(current_v, list) and isinstance(current_z, list):
+    current_Hamil_tmp_lst = []
+    propose_Hamil_tmp_lst = []
+    for i in range(0, len(z)):
+      current_Hamil_tmp_lst.append(K(current_v[i], modeltype = modeltype) + U([current_z[i]], cond = cond, modeltype = modeltype))
+      propose_Hamil_tmp_lst.append(K(v[i],modeltype = modeltype) + U([z[i]], cond = cond, modeltype = modeltype))
+    current_Hamil = torch.mean(torch.stack(current_Hamil_tmp_lst), dim=0)
+    propose_Hamil = torch.mean(torch.stack(propose_Hamil_tmp_lst), dim=0)
+  else:
+      current_Hamil = K(current_v, modeltype = modeltype) + U(current_z, cond = cond, modeltype = modeltype)
+      propose_Hamil = K(v,modeltype = modeltype) + U(z, cond = cond, modeltype = modeltype)
 
 
 

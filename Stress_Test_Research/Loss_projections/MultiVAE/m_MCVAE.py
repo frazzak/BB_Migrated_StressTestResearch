@@ -50,7 +50,7 @@ class MCVAE(nn.Module):
             temp_estimation = self.sub_decoders[i].forward(z, cond)
             output_estimations.extend([temp_estimation])
 
-        return output_estimations
+        return output_estimations, mu, logvar
 
     def train(self):
         # set model in train mode
@@ -88,7 +88,7 @@ class MCVAE(nn.Module):
         # add extra dimension 1 in order to add all params for each modality
         params_size = [1, batch_size, self.latent_size]
         mu, logvar = self.init_params(params_size)
-
+        self.modality_size = len(input_modalities)
         for i in range(0, self.modality_size):
             if input_modalities[i] is not None:
                 temp_mu, temp_logvar = self.sub_encoders[i].forward(input_modalities[i], cond)
