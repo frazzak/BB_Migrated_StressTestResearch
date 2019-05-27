@@ -198,7 +198,7 @@ class RNN(nn.Module):
         for i in range(0, epcho):
             #print(input.shape, input[0,:,:].shape, hidden.shape, hidden[0,:,:].shape)
             #output, hidden = self.gru(input, hidden)
-            input_tmp = input[0,:,:].unsqueeze(0).transpose(0,1)
+            input_tmp = input[i,:,:].unsqueeze(0).transpose(0,1)
             #print(input[0,:,:].shape, input_tmp.shape)
             #input_tmp.shape
             #hidden.shape

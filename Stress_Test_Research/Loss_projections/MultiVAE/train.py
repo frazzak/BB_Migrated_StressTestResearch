@@ -8,19 +8,13 @@ import os
 import numpy as np
 import pandas as pd
 import itertools
-import matplotlib.pyplot as plt
 
 import torch
-import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
-from torch.autograd import Variable
-from torchvision import transforms
 #from CGAN import CGAN
 #from GAN import GAN .
-from MultiVAE import m_MCVAE
+from MultiVAE import m_MCVAE, m_CGAN
 from MultiVAE import m_LSTM
-from GAN_CGAN import m_CGAN
 #
 # import importlib
 # importlib.reload(m_CGAN)
@@ -1052,7 +1046,7 @@ def train_GAN(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rat
 
 
                 forward_logws_test, backward_logws_test, lower_bounds_test, upper_bounds_test = ais_bdmc_lld(
-                    generator,
+                    discriminator,
                     mod_test[j],
                     latent_size,
                     cond=cond_test,
@@ -1078,7 +1072,7 @@ def train_GAN(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rat
 
 
                 forward_logws_test, backward_logws_test, lower_bounds_test, upper_bounds_test = ais_bdmc_lld(
-                    generator,
+                    discriminator,
                     mod_test[j],
                     latent_size,
                     cond=cond_test,
@@ -1551,7 +1545,7 @@ def GenerativeModels_ScenarioGen(traintest_sets_dict,cond_name = None,learning_r
 #TODO: Train window must be above 0. Add logic to get min and max for the window.
 
 
-def LSTM_BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativemodel = ["mcvae"]
+def BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativemodel = ["mcvae"]
                       , lstm_lr = 1e-2, threshold = 1e-4, modelTarget = "Y",
                       exclude = ["trainset_data_cond"], basetraindataset = "trainset_data_X" , basetestdataset = "testset_data_X"
                       , epoch = 1000,splittype = "timesplit", include = None, predictmodel = 'LSTM'):
@@ -1739,15 +1733,18 @@ def LSTM_BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativem
                 print("Training LSTM model")
                 model, train_loss, train_rmse, train_trainhist = m_LSTM.train(inputs_train, targets_train, epoch, lstm_lr, threshold)
                 train_trainhist_dict["_".join([tmp_dict_name,"trainhist",predictmodel])] = train_trainhist
-            elif predictmodel in ['LR','LinearRegression','LinReg','linreg']:
+                model_trained = m_LSTM
+            elif predictmodel.lower() in ['lr','linearregression','linreg']:
                 print("Training Linear Regression Model")
                 model, train_loss, train_rmse, train_trainhist = m_LinReg.train(inputs_train, targets_train, epoch,lstm_lr, threshold)
                 #train_trainhist_dict["_".join([tmp_dict_name, "trainhist", predictmodel])] = train_trainhist
+                model_trained = m_LinReg
             elif predictmodel.lower() in ['gru']:
                 print("Training GRU")
                 model, train_loss, train_rmse, train_trainhist = m_GRU.train(inputs_train, targets_train, epoch,
                                                                                 lstm_lr, threshold)
                 train_trainhist_dict["_".join([tmp_dict_name, "trainhist", predictmodel])] = train_trainhist
+                model_trained = m_GRU
             else:
                 print("No Prediction Model Found:",predictmodel)
                 return
@@ -1783,18 +1780,21 @@ def LSTM_BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativem
                     inputs_test[:, :, i] = raw_eval_inputs[ :,i, :]
                     targets_test[:, i, :] = raw_eval_targets[:, i, :]
 ######### Add more Prediction Models
-            if predictmodel in ['LSTM']:
-                print("Running Predictions on Inputs using Trained Model: Testing Error")
-                pred = m_LSTM.predict(model, inputs_test)
-            elif predictmodel in ['LR', 'LinearRegression', 'LinReg', 'linreg']:
-                print("Running Predictions on Inputs using Trained Model: Testing Error")
-                pred = m_LinReg.predict(model, inputs_test)
-            elif predictmodel.lower() in ['gru']:
-                pred = m_GRU.predict(model, inputs_test)
-            else:
-                print("No Prediction Model Found:", predictmodel)
-                return
+            #TODO: Consolidate the models into a loop for training and testing.
 
+            # if predictmodel in ['LSTM']:
+            #     print("Running Predictions on Inputs using Trained Model: Testing Error")
+            #     pred = m_LSTM.predict(model, inputs_test)
+            # elif predictmodel.lower() in ['lr', 'linearregression', 'linreg']:
+            #     print("Running Predictions on Inputs using Trained Model: Testing Error")
+            #     pred = m_LinReg.predict(model, inputs_test)
+            # elif predictmodel.lower() in ['gru']:
+            #     pred = m_GRU.predict(model, inputs_test)
+            # else:
+            #     print("No Prediction Model Found:", predictmodel)
+            #     return
+
+            pred = model_trained.predict(model, inputs_test)
             print("Calculating Testing RMSE")
             #print(pred.shape, targes_test.shape)
             mse = torch.nn.functional.mse_loss(pred, targets_test)
@@ -1934,14 +1934,17 @@ mod_test[0].shape
 cond_test.shape
 importlib.reload(simulate)
 importlib.reload(ais)
+
+from MultiVAE import m_CGAN
 importlib.reload(m_CGAN)
 importlib.reload(m_MCVAE)
 importlib.reload(m_LSTM)
 importlib.reload(ais)
 importlib.reload(hmc)
+
 #,"cvae","vae","cgan","gan"
 ScenarioGenResults_dict_timesplit = GenerativeModels_ScenarioGen(traintest_sets_dict = traintest_sets_dict_timesplit, learning_rate = 1e-3 , iterations = 1, epoch = 1000,
-                                                                  models=["mcvae","cgan"], splittype = "timesplit", verbose = False, bdmc_run = False, chain_length = 1000, n_batch = 1)
+                                                                  models=["mcvae","vae","cgan","gan"], splittype = "timesplit", verbose = False, bdmc_run = True, chain_length = 100, n_batch = 1)
 
 
 
@@ -1962,27 +1965,31 @@ ScenarioGenResults_dict_timesplit = GenerativeModels_ScenarioGen(traintest_sets_
 
 
 
-from MultiVAE import m_GRU
+#from MultiVAE import m_GRU
 #importlib.reload(m_GRU)
 #Working ["LSTM", "GRU",]
 
+importlib.reload(m_GRU)
+importlib.reload(m_LinReg)
 
-BankPredEval_timesplit, BankPredEval_timesplit_trainhist = LSTM_BankPerfPred(ScenarioGenResults_dict = ScenarioGenResults_dict_timesplit,
+BankPredEval_timesplit, BankPredEval_timesplit_trainhist = BankPerfPred(ScenarioGenResults_dict = ScenarioGenResults_dict_timesplit,
                                            traintest_sets_dict = traintest_sets_dict_timesplit,
-                                           generativemodel = ["mcvae", "cgan"]
-                                           ,modelTarget= "CapRatios_timesplit",
-                                           exclude = ["trainset_data_X_loancat_timesplit"],
-                                           epoch = 1,
+                                           generativemodel = ["mcvae"]
+                                           ,modelTarget= "Y_nco_timesplit",
+                                           exclude = ["trainset_data_X_loancat_timesplit","trainset_data_CapRatios_timesplit"
+                                                      ,"trainset_data_X_ppnr_timesplit"],
+
+                                           epoch = 10,
                                            basetraindataset = "trainset_data_X_loancat_tminus1_timesplit",
                                            basetestdataset = "testset_data_X_loancat_tminus1_timesplit",
                                            splittype= "timesplit",
                                            include = ["trainset_data_mod_timesplit",
-                                                      "trainset_data_Y_nco_timesplit",
-                                                      "trainset_data_X_ppnr_timesplit",
+                                                      "trainset_data_Y_nco_tminus1_timesplit",
+                                                      "trainset_data_X_ppnr_tminus1_timesplit",
                                                       "trainset_data_X_loancat_tminus1_timesplit",
-
+                                                      "trainset_data_CapRatios_tminus1_timesplit"
                                                       ],
-                                            lstm_lr = 1e-2, threshold = 1e-4, predictmodel = "gru")
+                                            lstm_lr = 1e-2, threshold = 1e-100, predictmodel = "LR")
 
 
 
@@ -2006,6 +2013,18 @@ BankPredEval_timesplit, BankPredEval_timesplit_trainhist = LSTM_BankPerfPred(Sce
 
 # ScenarioGenResults_dict_timesplit_1 = GenerativeModels_ScenarioGen(traintest_sets_dict = traintest_sets_dict_timesplit, learning_rate = 1e-2 , iterations = 30, epoch = 1000,
 #                                                                  models=["cgan","mcvae"], splittype = "timesplit", verbose = True, bdmc = True,chain_length = 10)
+
+
+
+#Plot for True vs. Predicted Code.
+#Find Banks that have the lowest MSE and use these as figures.
+# final_y_pred = predict(enc, dec, data, **da_rnn_kwargs)
+#
+# plt.figure()
+# plt.plot(final_y_pred, label='Predicted')
+# plt.plot(data.targs[(da_rnn_kwargs["T"]-1):], label="True")
+# plt.legend(loc='upper left')
+# utils.save_or_show_plot("final_predicted_reloaded.png", save_plots)
 
 
 #TODO: Make into Model Compare Bar Plot

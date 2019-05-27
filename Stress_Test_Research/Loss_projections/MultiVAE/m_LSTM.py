@@ -18,16 +18,10 @@ class mLSTM(nn.Module):
     def __init__(self, dim_batch, dim_inputs, dim_out, dim_hidden):
         
         super(mLSTM, self).__init__()
-        #super(mLSTM, lstminit).__init__()
         self.lstm1 = nn.LSTMCell(dim_inputs, dim_hidden)
         self.lstm2 = nn.LSTMCell(dim_hidden, dim_hidden)
         self.hidden_linear = nn.Linear(dim_hidden, dim_inputs)
         self.time_linear = nn.Linear(dim_batch, dim_out)
-
-        # lstm1 = nn.LSTMCell(dim_inputs, dim_hidden)
-        # lstm2 = nn.LSTMCell(dim_hidden, dim_hidden)
-        # hidden_linear = nn.Linear(dim_hidden, dim_inputs)
-        # time_linear = nn.Linear(dim_batch, dim_out)
 
         t_constant = 1e-2
         Init.constant_(self.lstm1.weight_hh.data, t_constant)
@@ -36,23 +30,10 @@ class mLSTM(nn.Module):
         Init.constant_(self.lstm2.weight_ih.data, t_constant)
         Init.constant_(self.hidden_linear.weight.data, t_constant)
         Init.constant_(self.time_linear.weight.data, t_constant)
-        #
-        # Init.constant_(lstm1.weight_hh.data, t_constant)
-        # Init.constant_(lstm1.weight_ih.data, t_constant)
-        # Init.constant_(lstm2.weight_hh.data, t_constant)
-        # Init.constant_(lstm2.weight_ih.data, t_constant)
-        # Init.constant_(hidden_linear.weight.data, t_constant)
-        # Init.constant_(time_linear.weight.data, t_constant)
-        #
         self.h_t1 = torch.zeros(dim_batch, dim_hidden)
         self.c_t1 = torch.zeros(dim_batch, dim_hidden)
         self.h_t2 = torch.zeros(dim_batch, dim_hidden)
         self.c_t2 = torch.zeros(dim_batch, dim_hidden)
-
-        # h_t1 = torch.zeros(dim_batch, dim_hidden)
-        # c_t1 = torch.zeros(dim_batch, dim_hidden)
-        # h_t2 = torch.zeros(dim_batch, dim_hidden)
-        # c_t2 = torch.zeros(dim_batch, dim_hidden)
 
     def forward(self, inputs):
         
@@ -64,19 +45,8 @@ class mLSTM(nn.Module):
             outputs[i, :, :] = torch.t(self.hidden_linear.forward(self.h_t2))
         outputs = self.time_linear.forward(outputs)
 
-
-
-        for i in range(0, epcho):
-            print(inputs[i,:,:].shape, h_t1.shape, c_t1.shape)
-            h_t1, c_t1 = lstm1(inputs[i,:,:], (h_t1, c_t1))
-            h_t2, c_t2 = lstm2(h_t1, (h_t2, c_t2))
-            print(h_t2.shape , hidden_linear.forward(h_t2).shape, torch.t(hidden_linear.forward(h_t2)).shape)
-            outputs[i, :, :] = torch.t(hidden_linear.forward(h_t2))
-
-        print(outputs.shape)
-        outputs = time_linear.forward(outputs)
         return outputs
-    
+
 
 
 

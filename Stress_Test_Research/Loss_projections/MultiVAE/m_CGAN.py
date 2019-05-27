@@ -59,9 +59,11 @@ class Generator(nn.Module):
         else:
             latent_inputs = z
         gen_outputs = self.MLP(latent_inputs)
+        mu = self.linear_mu(gen_outputs)
+        logvar = self.linear_lagvar(gen_outputs)
         # reconstruct modalities based on sample
 
-        return gen_outputs
+        return gen_outputs , mu, logvar
 
     def train(self):
         # set model in train mode
@@ -108,7 +110,7 @@ class Discriminator(nn.Module):
         super(Discriminator, self).__init__()
         self.input_size = input_size
         self.MLP = nn.Sequential()
-        
+        self.latent_dim = input_size
         layer_size = [self.input_size] + layer_size + [output_size]
 
         self.MLP.add_module(name="S0", module=nn.Sigmoid())
@@ -121,6 +123,23 @@ class Discriminator(nn.Module):
                 self.MLP.add_module(name="A{:d}".format(i), module=nn.Sigmoid())
         self.linear_mu = nn.Linear(layer_size[-1], self.input_size)
         self.linear_lagvar = nn.Linear(layer_size[-1], self.input_size)
+
+    def train(self):
+        # set model in train mode
+        self.training = True
+
+    def test(self):
+        # set model in eval mode
+        self.training = False
+
+
+    def decode(self, z, cond=None):
+        validity = self.MLP(z)
+        mu = self.linear_mu(validity)
+        logvar = self.linear_lagvar(validity)
+        return validity, mu, logvar
+
+
 
     def forward(self, inputs):
         

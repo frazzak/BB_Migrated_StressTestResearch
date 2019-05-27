@@ -14,48 +14,67 @@ import pandas as pd
 
 
 
-
-# dim_batch = m1
-# dim_inputs = n
-# dim_out = m2
-# dim_hidden
-class mLinReg(nn.Module):
-
-    # inputs.shape: t * n, t = dim_batch, n = dim_inputs
-    def __init__(self, dim_batch, dim_inputs, dim_out, dim_hidden):
+class mLinReg(torch.nn.Module):
+    def __init__(self, dim_batch, inputSize, outputSize, dim_hidden):
         super(mLinReg, self).__init__()
-        #self.linreg1 = nn.Linear(dim_inputs, dim_hidden)
-        #self.linreg2= nn.Linear(dim_hidden, dim_hidden)
-        # self.hidden_linear = nn.Linear(dim_hidden, dim_inputs)
-        self.linear = nn.Linear(dim_batch, dim_out)
-        self.dim_out = dim_out
-        self.dim_batch = dim_batch
-        self.dim_inputs = dim_inputs
-        self.dim_hidden = dim_hidden
-        #nn.Linear.
-        # t_constant = 1e-2
-        # Init.constant_(self.linreg1.weight_hh.data, t_constant)
-        # Init.constant_(self.linreg1.weight_ih.data, t_constant)
-        # Init.constant_(self.linreg2.weight_hh.data, t_constant)
-        # Init.constant_(self.linreg2.weight_ih.data, t_constant)
-        # Init.constant_(self.hidden_linear.weight.data, t_constant)
-        # Init.constant_(self.time_linear.weight.data, t_constant)
-
-        # self.h_t1 = torch.zeros(dim_batch, dim_hidden)
-        # self.c_t1 = torch.zeros(dim_batch, dim_hidden)
-        # self.h_t2 = torch.zeros(dim_batch, dim_hidden)
-        # self.c_t2 = torch.zeros(dim_batch, dim_hidden)
-
-    def forward(self, inputs):
-        epcho, t, n = inputs.shape
-        outputs = torch.zeros(epcho, n, self.dim_out)
+        self.outputSize = outputSize
+        self.linear = nn.Linear(inputSize , inputSize)
+        self.hidden_regressor = nn.Linear(outputSize, inputSize)
+        self.regressor = nn.Linear(dim_batch, outputSize)
+    def forward(self, input):
+        epcho, t_1, n = input.shape
+        outputs = torch.zeros(epcho, n, t_1)
+        #print(outputs.shape)
         for i in range(0, epcho):
-            for j in range(0,n):
-            #self.h_t1, self.c_t1 = self.linreg1(inputs[i, :, :], self.h_t1, self.c_t1))
-                print("LinReg Bank Count:", j, "Quarter Number:",i)
-                outputs[i, j, :] = self.linear(inputs[i, :, j])
-        #outputs = self.time_linear.forward(outputs)
+             input_tmp = input[i, :, :]
+             #print(input_tmp.shape)
+             #hidden = self.linear(input_tmp)
+
+             output = self.linear(input_tmp)
+             #print(output.shape)
+             #output_tmp = self.regressor(output)
+             #print(output.shape)
+             outputs[i, :, :] = torch.t(output) #torch.t(self.hidden_regressor(output))
+        #print(outputs.shape)
+        outputs = self.regressor(outputs)
+        #print(outputs.shape)
         return outputs
+
+
+#
+# class mLinReg(nn.Module):
+#
+#     # inputs.shape: t * n, t = dim_batch, n = dim_inputs
+#     def __init__(self, dim_batch, dim_inputs, dim_out, dim_hidden):
+#         super(mLinReg, self).__init__()
+#         #self.linreg1 = nn.Linear(dim_inputs, dim_hidden)
+#         #self.linreg2= nn.Linear(dim_hidden, dim_hidden)
+#         # self.hidden_linear = nn.Linear(dim_hidden, dim_inputs)
+#         self.linear = nn.Linear(dim_batch, dim_out)
+#         self.dim_out = dim_out
+#         self.dim_batch = dim_batch
+#         self.dim_inputs = dim_inputs
+#         self.dim_hidden = dim_hidden
+#         #nn.Linear.
+#         # t_constant = 1e-2
+#         # Init.constant_(self.linreg1.weight_hh.data, t_constant)
+#         # Init.constant_(self.linreg1.weight_ih.data, t_constant)
+#         # Init.constant_(self.linreg2.weight_hh.data, t_constant)
+#         # Init.constant_(self.linreg2.weight_ih.data, t_constant)
+#         # Init.constant_(self.hidden_linear.weight.data, t_constant)
+#         # Init.constant_(self.time_linear.weight.data, t_constant)
+#
+#         # self.h_t1 = torch.zeros(dim_batch, dim_hidden)
+#         # self.c_t1 = torch.zeros(dim_batch, dim_hidden)
+#         # self.h_t2 = torch.zeros(dim_batch, dim_hidden)
+#         # self.c_t2 = torch.zeros(dim_batch, dim_hidden)
+#
+#     def forward(self, inputs):
+#         epcho, t, n = inputs.shape
+#         outputs = torch.zeros(epcho, n, self.dim_out)
+#         outputs[i, j, :] = self.linear(inputs[i, :, j])
+#         #outputs = self.time_linear.forward(outputs)
+#         return outputs
 
 
 
@@ -73,13 +92,14 @@ def train(inputs, targets, epcho, linreg_lr, threshold):
     m_loss = torch.nn.MSELoss()
     m_loss_list = []
     #print(m_loss)
-    m_optimizer = torch.optim.SGD(model.parameters(), lr=linreg_lr)
+    m_optimizer = torch.optim.ASGD(model.parameters(), lr=linreg_lr)
     t_loss = np.inf
     t_loss_rmse = np.inf
     for i in range(0, epcho):
         print("LinReg Training Epoch:", i)
         m_optimizer.zero_grad()
         outputs = model.forward(inputs)
+
         loss = m_loss(outputs, targets)
         loss_rmse = torch.sqrt(m_loss(outputs, targets))
         loss_rmse.backward(retain_graph=True)
