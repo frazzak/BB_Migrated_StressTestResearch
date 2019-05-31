@@ -1690,11 +1690,25 @@ BankPerf = StressTestData().X_Y_bankingchar_perf_process(groupfunction=np.mean, 
 #TODO: Functionalize this part. Preprocessing for transformations.
 
 #TODO:Filter for RSSD_IDs that actually exisit in 2016.
-RSSD_IDS = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]['RSSD_ID'][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]['ReportingDate'].isin(['2016-12-31'])].unique()
+RSSD_IDS = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]['RSSD_ID'][(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]['ReportingDate'] > '1990-01-31') & ((BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]['ReportingDate'] < '2017-12-31'))].unique()
+
+test = BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][["RSSD_ID", "ReportingDate",'Other items:Risk-weighted assets','Other items:Consolidated assets']]
+test = test[test['RSSD_ID'].isin(RSSD_IDS)]
+RSSD_IDS =(test.groupby('RSSD_ID')
+ .agg({'ReportingDate':'count', 'Other items:Risk-weighted assets': 'mean', 'Other items:Consolidated assets' : 'mean'})
+ .reset_index()
+ .rename(columns={'ReportingDate':'ReportingDate_count','Other items:Risk-weighted assets':'RWA_avg','Other items:Consolidated assets':'ConsolidatedAssets_avg'})
+ ).sort_values(['ConsolidatedAssets_avg','ReportingDate_count'], ascending=False).head(1000).reset_index(drop = True)["RSSD_ID"]
+#Consider only 1000 banks.
+#Consider banks exist between certain dates
+
+
+
 # This way , not to consider nan or filled values, but actual values.
 BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf_2016Q4"] = \
-    BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]['RSSD_ID'].isin(RSSD_IDS)]
+    BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"][BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf"]['RSSD_ID'].isin(list(RSSD_IDS))]
 #Joins and creates dataframe to dates avaialble.
+
 
 RepordingDate_Df = pd.DataFrame(BankPerf["BankPerf_ConsecutiveReduced_XYcalc_Subset_BankPerf_2016Q4"]["ReportingDate"].unique())
 RepordingDate_Df = RepordingDate_Df.rename({0:"ReportingDate"}, axis = 1)
@@ -1751,7 +1765,7 @@ Preprocess_Dict['X_ppnr'] = Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [
 
 #Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ncoR:')]].sum(axis = 1).describe()
 
-(Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ncoR:')]].sum(axis = 1) - Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ppnrRatio:')]].sum(axis = 1)).describe()
+#(Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ncoR:')]].sum(axis = 1) - Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ppnrRatio:')]].sum(axis = 1)).describe()
 
 #Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ncoR:')]].sum(axis = 1).describe()
 
@@ -1795,13 +1809,17 @@ Preprocess_Dict['CapRatios'][collist] = Preprocess_Dict['CapRatios'][collist] * 
 #Preprocess_Dict['CapRatios'][collist].describe()
 #outlier_preprocess(Preprocess_Dict['CapRatios'],quantiles = [.086,.832],verbose = False).round(2).describe()
 
+Preprocess_Dict['CapRatios'].shape
+#outlier_preprocess(Preprocess_Dict['CapRatios'],quantiles = [.086,.832],verbose = False).round(2).describe()
+
 Preprocess_Dict['CapRatios'] = outlier_preprocess(Preprocess_Dict['CapRatios'],quantiles = [.086,.832],verbose = False).round(2)
 
 
 #Preprocess_Dict['CapRatios'] .keys()
 #Preprocess_Dict['Y'].keys()
 #Preprocess_Dict["Y_Cap"] = Preprocess_Dict['Y'].merge(Preprocess_Dict['CapRatios'][["RSSD_ID","ReportingDate",'Other items: CapRatios_T1RiskCR_coalesced']])
-Preprocess_Dict['CapRatios']  = Preprocess_Dict['CapRatios'][["RSSD_ID","ReportingDate","Other items: CapRatios_T1RiskCR_coalesced"]]
+Preprocess_Dict['CapRatios']["Other items: CapRatios_CET1CR_coalesced"].describe()
+Preprocess_Dict['CapRatios']  = Preprocess_Dict['CapRatios'][["RSSD_ID","ReportingDate","Other items: CapRatios_CET1CR_coalesced"]]
 #Preprocess_Dict["Y_Cap"].round(4).describe()
 
 
@@ -1860,18 +1878,18 @@ for keyname in [x for x in Preprocess_Dict.keys() if x in keylist]:
 #target = 'Other items: CapRatios_T1RiskCR_coalesced'
 #interpolatefill = True
 #Preprocess_Dict['PCA_DF'][pca_colist]
-Preprocess_Dict['PCA_DF_1'] = Preprocess_Dict['PCA_DF'][pca_colist]
+#Preprocess_Dict['PCA_DF_1'] = Preprocess_Dict['PCA_DF'][pca_colist]
 
-Preprocess_Dict['PCA_DF_1'] = outlier_preprocess(Preprocess_Dict['PCA_DF_1'], interpolate=True, interpolate_method='polynomial')
-
-
-Preprocess_One = process_raw_bankdat_PCA_Norm(Preprocess_Dict, keyname = 'PCA_DF_1', target_list =  ['Other items: CapRatios_T1RiskCR_coalesced'], n_components = 20, visualizations = False)
-
-Preprocess_One.keys()
+#Preprocess_Dict['PCA_DF_1'] = outlier_preprocess(Preprocess_Dict['PCA_DF_1'], interpolate=True, interpolate_method='polynomial')
 
 
-Preprocess_One['CapRatios'] = Preprocess_One.pop('PCA_DF_1_target')
-Preprocess_One['CapRatios'] = outlier_preprocess(Preprocess_One['CapRatios'])
+#Preprocess_One = process_raw_bankdat_PCA_Norm(Preprocess_Dict, keyname = 'PCA_DF_1', target_list =  ['Other items: CapRatios_T1RiskCR_coalesced'], n_components = 20, visualizations = False)
+
+#Preprocess_One.keys()
+
+
+#Preprocess_One['CapRatios'] = Preprocess_One.pop('PCA_DF_1_target')
+#Preprocess_One['CapRatios'] = outlier_preprocess(Preprocess_One['CapRatios'])
 #Normalize only
 # df_raw = Preprocess_Dict['CapRatios']
 # exclude = ["ReportingDate", "RSSD_ID"]
@@ -1907,12 +1925,12 @@ Preprocess_One['CapRatios'] = outlier_preprocess(Preprocess_One['CapRatios'])
 
 #df_norm_df = outlier_preprocess(df_norm_df, quantiles = [.21,1])
 
-Preprocess_Dict['CapRatios'] = df_norm_df
+#Preprocess_Dict['CapRatios'] = df_norm_df
 #Preprocess_One['CapRatios'] = df_norm_df
 
-Preprocess_One['X_Y_NCO_pca'] = Preprocess_One.pop('PCA_DF_1_normalized_2_pca')
-Preprocess_One['X_Y_NCO_all_pca'] = Preprocess_One.pop('PCA_DF_1_normalized_pca')
-Preprocess_One['X_Y_NCO_norm'] = Preprocess_One.pop('PCA_DF_1_normalized')
+#Preprocess_One['X_Y_NCO_pca'] = Preprocess_One.pop('PCA_DF_1_normalized_2_pca')
+#Preprocess_One['X_Y_NCO_all_pca'] = Preprocess_One.pop('PCA_DF_1_normalized_pca')
+#Preprocess_One['X_Y_NCO_norm'] = Preprocess_One.pop('PCA_DF_1_normalized')
 
 
 
@@ -1939,7 +1957,7 @@ Preprocess_One['X_Y_NCO_norm'] = Preprocess_One.pop('PCA_DF_1_normalized')
 
 ####Process Modalities
 Z_micro = init_ST.Z_micro_process()
-Z_micro["Z_Micro"]
+#Z_micro["Z_Micro"]
 Z_micro_dict_1 = process_raw_modality_PCA_Norm(Z_micro, keyname = "Z_Micro")
 Preprocess_Dict['zmicro_pca_all'] = preprocess_load_wrapper(Z_micro_dict_1, keyname = 'PCA_DF', collist = 'PCA', datatype = "zmicro")
 
@@ -2100,15 +2118,15 @@ data_Reporting_Ref = pd.Series(Preprocess_Dict['X_loancat']["ReportingDate"][Pre
 Preprocess_Dict['data_DateIdx']  = data_Reporting_Ref
 
 #"sectidx_pca_all","sbidx_pca_all"
-keylist = ['zmacro_domestic_pca_all','zmacro_international_pca_all',"zmicro_pca_all"]
-for keyname in [x for x in Preprocess_Dict.keys() if x in keylist]:
-    os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/data")
-    print(keyname)
-    data, data_quarter = pd_raw_to_numpy_moda(Preprocess_Dict[keyname], fulldatescombine= False,  ReportingDate_Start = "1976 Q1", ReportingDate_End = "2017 Q4")
-    print(keyname, ":", data.shape, keyname, "_quarter:", data_quarter.shape)
-    print("Saving objects to file")
-    np.save("./data_moda_" + keyname + ".npy", data)
-    np.save("./quarter_based/data_moda_" + keyname + "_quarter.npy", data_quarter)
+# keylist = ['zmacro_domestic_pca_all','zmacro_international_pca_all',"zmicro_pca_all"]
+# for keyname in [x for x in Preprocess_Dict.keys() if x in keylist]:
+#     os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/data")
+#     print(keyname)
+#     data, data_quarter = pd_raw_to_numpy_moda(Preprocess_Dict[keyname], fulldatescombine= False,  ReportingDate_Start = "1976 Q1", ReportingDate_End = "2017 Q4")
+#     print(keyname, ":", data.shape, keyname, "_quarter:", data_quarter.shape)
+#     print("Saving objects to file")
+#     np.save("./data_moda_" + keyname + ".npy", data)
+#     np.save("./quarter_based/data_moda_" + keyname + "_quarter.npy", data_quarter)
 
 
 

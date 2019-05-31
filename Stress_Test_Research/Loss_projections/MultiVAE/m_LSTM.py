@@ -39,6 +39,7 @@ class mLSTM(nn.Module):
         
         epcho, t, n = inputs.shape
         outputs = torch.zeros(epcho, n, t)
+        #outputs.shape
         for i in range(0, epcho):
             self.h_t1, self.c_t1 = self.lstm1(inputs[i,:,:], (self.h_t1, self.c_t1))
             self.h_t2, self.c_t2 = self.lstm2(self.h_t1, (self.h_t2, self.c_t2))
@@ -57,12 +58,12 @@ def train(inputs, targets, epcho, lstm_lr, threshold):
     t, m1, n = inputs.shape
     m2 = targets.shape[2]
     dim_hidden = 64
-    print(m1, n,m2,dim_hidden)
+    #print(m1, n,m2,dim_hidden)
     m_LSTM = mLSTM(dim_batch= m1, dim_inputs= n,dim_out= m2,dim_hidden= dim_hidden)
     m_loss = torch.nn.MSELoss()
     m_loss_list = []
     #print(m_loss)
-    m_optimizer = torch.optim.ASGD(m_LSTM.parameters(), lr=lstm_lr)
+    m_optimizer = torch.optim.Adam(m_LSTM.parameters(), lr=lstm_lr)
     t_loss = np.inf
     t_loss_rmse = np.inf
     for i in range(0, epcho):

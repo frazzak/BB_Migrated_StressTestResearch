@@ -238,7 +238,7 @@ def train(inputs, targets, epcho, lstm_lr, threshold):
     m_loss = torch.nn.MSELoss()
     m_loss_list = []
     #print(m_loss)
-    m_optimizer = torch.optim.ASGD(model.parameters(), lr=lstm_lr)
+    m_optimizer = torch.optim.Adam(model.parameters(), lr=lstm_lr)
     t_loss = np.inf
     t_loss_rmse = np.inf
 
@@ -255,7 +255,7 @@ def train(inputs, targets, epcho, lstm_lr, threshold):
         loss.backward(retain_graph=True)
         m_optimizer.step()
         m_loss_list.append(loss.item())
-        print("LSTM Training Loss at Epoch:",i,"Loss:",str(loss.item()))
+        print("GRU Training Loss at Epoch:",i,"Loss:",str(loss.item()))
 
         if t_loss > loss.data and np.abs(t_loss - loss.data) > threshold:
             t_loss = loss.data
