@@ -395,8 +395,8 @@ def build_datasets(data_dict, data_train_window, data_test_window,  moda_train_w
     elif splittype == "banksplit":
 
         for condkey in [x for x in data_dict.keys() if x.startswith("data_cond_")]:
-            dataset_dict["_".join(["trainset", condkey, "banksplit"])] = data_dict[condkey]
-            dataset_dict["_".join(["testset", condkey, "banksplit"])] = data_dict[condkey]
+            dataset_dict["_".join(["trainset", condkey, "banksplit"])] = data_dict[condkey][moda_train_window[0]:moda_train_window[1] + 1, :]
+            dataset_dict["_".join(["testset", condkey, "banksplit"])] = data_dict[condkey][moda_train_window[0]:moda_train_window[1] + 1, :]
 
         print("Initialize Modality Lists")
         mod_train = []
@@ -405,12 +405,12 @@ def build_datasets(data_dict, data_train_window, data_test_window,  moda_train_w
         for modlstkey in [x for x in data_dict.keys() if x.startswith("modalities_")]:
 
             for mod in data_dict[modlstkey]:
-                mod_train.extend([mod])
-                mod_test.extend([mod])
+                mod_train.extend([mod[moda_train_window[0]:moda_train_window[1] + 1, :]])
+                mod_test.extend([mod[moda_train_window[0]:moda_train_window[1] + 1, :]])
             dataset_dict["trainset_data_mod_banksplit"] = mod_train
             dataset_dict["testset_data_mod_banksplit"] = mod_test
 
-    print('Building datasets for LSTM component')
+    print('Building datasets for Forecasting component')
 
     for datakey in [x for x in data_dict.keys() if x.startswith("data_") if not x.startswith(("data_cond", "data_mod"))]:
         print(datakey.split('_')[1])
@@ -434,15 +434,15 @@ def build_datasets(data_dict, data_train_window, data_test_window,  moda_train_w
             train_window_bs = [1,round(traintest_pct[0] * data_dict[datakey].shape[0]) + 1]
             test_window_bs = [train_window_bs[1] + 1, data_dict[datakey].shape[0] - 1]
             print("Generating Training and Testing for Bank Split:", tmp_data_obj)
-            dataset_dict["_".join(["trainset",datakey,"banksplit"])] = data_dict[datakey][train_window_bs[0]:train_window_bs[1], : , :]
-            dataset_dict["_".join(["testset",datakey,"banksplit"])] = data_dict[datakey][test_window_bs[0] :test_window_bs[1], : ,  :]
+            dataset_dict["_".join(["trainset",datakey,"banksplit"])] = data_dict[datakey][train_window_bs[0]:train_window_bs[1], data_train_window[0]:data_train_window[1] + 1 , :]
+            dataset_dict["_".join(["testset",datakey,"banksplit"])] = data_dict[datakey][test_window_bs[0] :test_window_bs[1],  data_train_window[0]:data_train_window[1] + 1 ,  :]
 
 
 
     print("Summary of objects.")
     for key in dataset_dict.keys():
         print("key:", key)
-        if type(dataset_dict[key]) == list:
+        if isinstance(dataset_dict[key],list):
             for listkey in dataset_dict[key]:
                 #  print(listkey.size())
                 print(listkey.shape)
@@ -714,7 +714,7 @@ def train_CVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_ra
             best_loss = torch.FloatTensor(min(m_loss.detach().numpy(), best_loss.numpy()))
             if is_best:
                 train_best_checkpoint = {
-                    'epoch': 0 + epoch,
+                    'epoch': 0 + j,
                     'state_dict': mVAE.state_dict(),
                     'best_loss': best_loss
                 }
@@ -896,7 +896,7 @@ def train_MCVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_r
         best_loss = torch.FloatTensor(min(m_loss.detach().numpy(), best_loss.numpy()))
         if is_best:
             train_best_checkpoint = {
-                'epoch': 0 + epoch,
+                'epoch': 0 + i,
                 'state_dict': mcvae.state_dict(),
                 'best_loss': best_loss
             }
@@ -921,6 +921,7 @@ def train_MCVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_r
     training_history_df.columns = ["mcvae_modality_total_loss"]
 
     results_dict["TrainHist"] = training_history_df
+    results_dict['TrainBestModel'] = train_best_checkpoint
     print("Testing of Estimations Started")
 
     mcvae.test()
@@ -958,7 +959,7 @@ def train_MCVAE(num_cond, cond_train, cond_test, mod_train, mod_test, learning_r
         print(lower_bounds_test, upper_bounds_test)
         results_dict['AIS_BDMC_LLD'] = pd.DataFrame([tuple([lower_bounds_test, upper_bounds_test])])
         results_dict['AIS_BDMC_LLD'].columns = ["lower_bounds_test", "upper_bounds_test"]
-        results_dict['TrainBestModel'] = train_best_checkpoint
+        #results_dict['TrainBestModel'] = train_best_checkpoint
     # results_dict["Train"]
     if not conditional:
         print("Reassigning Mods")
@@ -978,6 +979,8 @@ def train_GAN(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rat
     modality_num = len(mod_train)
     #modality_size = 1  # here refers to single modality
     estimations_lst = list()
+    training_history_loss = list()
+    testing_history_loss = list()
     training_history_gen = list()
     training_history_dis = list()
     training_history_disreal = list()
@@ -999,7 +1002,8 @@ def train_GAN(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rat
         print('''
                 Train
                 ''')
-
+        #testing_history_loss_tmp = list()
+        #training_history_loss_tmp = list()
         training_history_gen_tmp = list()
         training_history_dis_tmp = list()
         training_history_disreal_tmp = list()
@@ -1092,7 +1096,7 @@ def train_GAN(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rat
             best_loss = torch.FloatTensor(min(d_loss.detach().numpy(), best_loss.numpy()))
             if is_best:
                 train_discrim_best_checkpoint = {
-                    'epoch': 0 + epoch,
+                    'epoch': 0 + i,
                     'state_dict': discriminator.state_dict(),
                     'best_loss': best_loss
                 }
@@ -1110,8 +1114,9 @@ def train_GAN(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rat
                 print("Training Discriminator Real Modality \tloss:%.2f\tMSE:%.2f\tKLD:%.2f\tRMSE:%.2f" % ( m_loss_disreal.data, MSE_disreal, KLD_disreal, RMSE_disreal))
                 print("Training Discriminator Fake Modality \tloss:%.2f\tMSE:%.2f\tKLD:%.2f\tRMSE:%.2f" % ( m_loss_disfake.data, MSE_disfake, KLD_disfake, RMSE_disfake))
                 print("Training Discriminator Total Loss \tloss:%.2f" % (d_loss.data))
-
-
+            #estimations, test_mu, test_logvar = generator(mod_test[j], cond_test)
+            #tepoch_error = torch.nn.functional.mse_loss(estimations, mod_test[j])
+            #training_history_loss_tmp.append(tepoch_error)
             #results_dict['TrainBestModel'] = train_best_checkpoint
 
 
@@ -1120,6 +1125,7 @@ def train_GAN(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rat
         training_history_disreal.append(training_history_disreal_tmp)
         training_history_disfake.append(training_history_disfake_tmp)
         training_history_distotal.append(training_history_disfake_tmp)
+
         print("Training Done")
         print('''
             evaluation
@@ -1128,9 +1134,10 @@ def train_GAN(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rat
         #z = torch.from_numpy(np.random.normal(0, 1, (test_batch_size, latent_size))).float()
         #Use Discriminator ?
         estimations, test_mu, test_logvar = generator(mod_test[j], cond_test)
-        #t_loss_gen, MSE_gen_test, KLD_gen_test, RMSE_gen_test = elbo_loss([mod_test[j]], estimations, test_mu, test_logvar)
+        # t_loss_gen, MSE_gen_test, KLD_gen_test, RMSE_gen_test = elbo_loss([mod_test[j]], estimations, test_mu, test_logvar)
         t_error = torch.nn.functional.mse_loss(estimations, mod_test[j])
         m_error = m_error + t_error
+        #testing_history_loss_tmp.append(t_error)
         print("Testing Done!")
         print("Saving Modality:", j, "Estimations")
         estimations_lst.append(estimations)
@@ -1204,43 +1211,101 @@ def train_GAN(num_cond, cond_train, cond_test, mod_train, mod_test, learning_rat
         results_dict['AIS_BDMC_LLD'].columns = ["lower_bounds_test", "upper_bounds_test"]
     training_history_dict = dict()
 
+    # training_history_loss = pd.DataFrame(training_history_loss_tmp).transpose().astype('float')
+    # training_history_loss.index.names = ['EPOCH']
+    # training_history_loss.columns = ["_".join(["modality", str(x)]) for x in
+    #                                 range(0, training_history_loss.columns.__len__())]
+    #
+    # if conditional:
+    #     training_history_dict['cgan_total_modality_loss'] = training_history_loss.mean(axis=1)
+    # else:
+    #     training_history_dict['gan_total_modality_loss'] = training_history_loss.mean(axis=1)
+
+
     training_history_gen = pd.DataFrame(training_history_gen).transpose().astype('float')
     training_history_gen.index.names = ['EPOCH']
     training_history_gen.columns = ["_".join(["modality", str(x)]) for x in
                                    range(0, training_history_gen.columns.__len__())]
 
-    training_history_dict['TrainingGenerator'] = training_history_gen.mean(axis = 1)
+    if conditional:
+        training_history_dict['cgan_TrainingGenerator_loss'] = training_history_gen.mean(axis=1)
+    else:
+        training_history_dict['gan_TrainingGenerator_loss'] = training_history_gen.mean(axis=1)
+
+
+    
+
 
     training_history_dis = pd.DataFrame(training_history_dis).transpose().astype('float')
     training_history_dis.index.names = ['EPOCH']
     training_history_dis.columns = ["_".join(["modality", str(x)]) for x in
                                     range(0, training_history_dis.columns.__len__())]
+    if conditional:
+        training_history_dict['cgan_TrainingGeneratorFoolDiscrim_loss'] = training_history_dis.mean(axis = 1)
+    else:
+        training_history_dict['gan_TrainingGeneratorFoolDiscrim_loss'] = training_history_dis.mean(axis = 1)
 
-    training_history_dict['TrainingGeneratorFoolDiscrim'] = training_history_dis.mean(axis = 1)
+
 
     training_history_disreal = pd.DataFrame(training_history_disreal).transpose().astype('float')
     training_history_disreal.index.names = ['EPOCH']
     training_history_disreal.columns = ["_".join(["modality", str(x)]) for x in
                                     range(0, training_history_disreal.columns.__len__())]
-    training_history_dict['TrainingDiscriminator_RealMod'] = training_history_disreal.mean(axis = 1)
+
+    if conditional:
+        training_history_dict['cgan_TrainingDiscriminator_RealMod_loss'] =  training_history_disreal.mean(axis = 1)
+    else:
+        training_history_dict['gan_TrainingDiscriminator_RealMod_loss'] =  training_history_disreal.mean(axis = 1)
+
 
     training_history_disfake = pd.DataFrame(training_history_disfake).transpose().astype('float')
     training_history_disfake.index.names = ['EPOCH']
     training_history_disfake.columns = ["_".join(["modality", str(x)]) for x in
                                     range(0, training_history_disfake.columns.__len__())]
-    training_history_dict['TrainingDiscriminator_FakeMod'] = training_history_disfake.mean(axis = 1)
+
+
+    if conditional:
+        training_history_dict['cgan_TrainingDiscriminator_FakeMod_loss'] =  training_history_disfake.mean(axis = 1)
+    else:
+        training_history_dict['gan_TrainingDiscriminator_FakeMod_loss'] =  training_history_disfake.mean(axis = 1)
+
+
+
 
     training_history_distotal = pd.DataFrame(training_history_distotal).transpose().astype('float')
     training_history_distotal.index.names = ['EPOCH']
     training_history_distotal.columns = ["_".join(["modality", str(x)]) for x in
                                         range(0, training_history_distotal.columns.__len__())]
 
-    training_history_dict['TrainingDiscriminator_TotalLoss'] = training_history_distotal.mean(axis = 1)
+    if conditional:
+        training_history_dict['cgan_TrainingDiscriminator_TotalLoss'] = training_history_distotal.mean(axis = 1)
+    else:
+        training_history_dict['gan_TrainingDiscriminator_TotalLoss'] = training_history_distotal.mean(axis = 1)
 
-    training_history_df = pd.concat([training_history_dict['TrainingGenerator'],training_history_dict['TrainingGeneratorFoolDiscrim'],training_history_dict['TrainingDiscriminator_RealMod']
-                             ,training_history_dict['TrainingDiscriminator_FakeMod'],training_history_dict['TrainingDiscriminator_TotalLoss']], axis = 1)
+    # testing_history_gen = pd.DataFrame(testing_history_gen).transpose().astype('float')
+    # testing_history_gen.index.names = ['EPOCH']
+    # testing_history_gen.columns = ["_".join(["modality", str(x)]) for x in
+    #                                 range(0, testing_history_gen.columns.__len__())]
+    #
+    # if conditional:
+    #     training_history_dict['cgan_TestingGenerator_loss'] = testing_history_gen.mean(axis=1)
+    # else:
+    #     training_history_dict['gan_TestingGenerator_loss'] = testing_history_gen.mean(axis=1)
 
-    training_history_df.columns = ['TrainingGenerator','TrainingGeneratorFoolDiscrim','TrainingDiscriminator_RealMod','TrainingDiscriminator_FakeMod','TrainingDiscriminator_TotalLoss']
+
+    if conditional:
+        training_history_df = pd.concat([training_history_dict['cgan_TrainingGenerator_loss'],training_history_dict['cgan_TrainingGeneratorFoolDiscrim_loss'],training_history_dict['cgan_TrainingDiscriminator_RealMod_loss']
+                             ,training_history_dict['cgan_TrainingDiscriminator_FakeMod_loss'],training_history_dict['cgan_TrainingDiscriminator_TotalLoss']], axis = 1)
+        training_history_df.columns = ['cgan_TrainingGenerator_loss','cgan_TrainingGeneratorFoolDiscrim_loss','cgan_TrainingDiscriminator_RealMod_loss','cgan_TrainingDiscriminator_FakeMod_loss','cgan_TrainingDiscriminator_TotalLoss']
+    else:
+        training_history_df = pd.concat([training_history_dict['gan_TrainingGenerator_loss'],
+                                         training_history_dict['gan_TrainingGeneratorFoolDiscrim_loss'],
+                                         training_history_dict['gan_TrainingDiscriminator_RealMod_loss']
+                                            , training_history_dict['gan_TrainingDiscriminator_FakeMod_loss'],
+                                         training_history_dict['gan_TrainingDiscriminator_TotalLoss']], axis=1)
+        training_history_df.columns = ['gan_TrainingGenerator_loss', 'gan_TrainingGeneratorFoolDiscrim_loss',
+                                   'gan_TrainingDiscriminator_RealMod_loss', 'gan_TrainingDiscriminator_FakeMod_loss',
+                                   'gan_TrainingDiscriminator_TotalLoss']
 
     print("Calculating Testing Error")
     #print("m_error:", m_error)
@@ -1408,7 +1473,7 @@ def GenerativeModels_ScenarioGen(traintest_sets_dict,cond_name = None,learning_r
             print("Saving Training and Testing Probability Distributions")
             result_dict["_".join([model.lower(), "train_pdf"])] = tmp_train_pdf
             result_dict["_".join([model.lower(), "test_pdf"])] = tmp_test_pdf
-            #result_dict["_".join([model.lower(), "results_dict"])] = tmp_results_dict
+            result_dict["_".join([model.lower(), "results_dict"])] = tmp_results_dict
 
         print("Adding to Results List")
         tmp_result_obj = torch.stack(tmp_error_obj)
@@ -1839,7 +1904,7 @@ def BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativemodel 
             if predictmodel.lower() in ['lstm']:
 
                 model, train_loss, train_rmse, train_trainhist = m_LSTM.train(inputs_train, targets_train, epoch, lstm_lr, threshold)
-                train_trainhist_dict["_".join([tmp_dict_name,"trainhist",predictmodel])] = train_trainhist
+                train_trainhist_dict["_".join([tmp_dict_name,"trainhist",predictmodel,modelTarget])] = train_trainhist
                 model_trained = m_LSTM
             elif predictmodel.lower() in ['lr','linearregression','linreg']:
 
@@ -1850,14 +1915,14 @@ def BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativemodel 
 
                 model, train_loss, train_rmse, train_trainhist = m_GRU.train(inputs_train, targets_train, epoch,
                                                                                 lstm_lr, threshold)
-                train_trainhist_dict["_".join([tmp_dict_name, "trainhist", predictmodel])] = train_trainhist
+                train_trainhist_dict["_".join([tmp_dict_name, "trainhist", predictmodel,modelTarget])] = train_trainhist
                 model_trained = m_GRU
 
 
             elif predictmodel.lower() in ['darnn',"da-rnn","dualstagelstm","dual-stage-lstm"]:
-
+                #importlib.reload(m_DA_RNN)
                 model, train_loss, train_rmse, train_trainhist = m_DA_RNN.train(inputs_train, targets_train, epoch, lstm_lr , threshold)
-                train_trainhist_dict["_".join([tmp_dict_name, "trainhist", predictmodel])] = train_trainhist
+                train_trainhist_dict["_".join([tmp_dict_name, "trainhist", predictmodel,modelTarget])] = train_trainhist
                 model_trained = m_DA_RNN
 
 
@@ -1865,7 +1930,7 @@ def BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativemodel 
                 print("No Prediction Model Found:",predictmodel)
                 return
 
-            print("Calculating Training RMSE")
+            print("Calculating Training RMSE:\t",modelTarget)
             mse_train_list.append(train_loss)
             rmse_train_list.append(train_rmse)
             print("%s\tMSEerror:\t%.5f\tRMSEerror:\t%.5f" % (tmp_dict_name, train_loss, train_rmse))
@@ -1913,7 +1978,7 @@ def BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativemodel 
                 pred = model_trained.predict(model, inputs = inputs_test, targets = targets_train)
             else:
                 pred = model_trained.predict(model, inputs_test)
-            print("Calculating Testing RMSE")
+            print("Calculating Testing RMSE:\t",modelTarget)
             #print(pred.shape, targes_test.shape)
             mse = torch.nn.functional.mse_loss(pred, targets_test)
             rmse = torch.sqrt(torch.nn.functional.mse_loss(pred, targets_test))
@@ -1953,8 +2018,11 @@ def BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativemodel 
     rmse_lst_sk = torch.stack(rmse_lst)
     rmse_list_final = [rmse_train_lst_sk, rmse_lst_sk.data]
     result_obj = pd.DataFrame(rmse_list_final, columns = learn_types_list, index = ["TrainErr","TestErr"])
-    print("Minimum Training Error:",result_obj.astype(float).idxmin(axis = 1)[0], result_obj.min(axis=1)[0], "Minimum Testing Error:",result_obj.astype(float).idxmin(axis = 1)[1], result_obj.min(axis=1)[1])
-    return result_obj,train_trainhist_dict
+
+
+    print("Target:",modelTarget,"\nPredictModel:",predictmodel,"\nMinimum Training Error:",result_obj.astype(float).idxmin(axis = 1)[0]
+        , result_obj.min(axis=1)[0], "\nMinimum Testing Error:",result_obj.astype(float).idxmin(axis = 1)[1], result_obj.min(axis=1)[1])
+    return result_obj,train_trainhist_dict, model
 
 
 
@@ -1969,14 +2037,32 @@ def BankPerfPred(ScenarioGenResults_dict , traintest_sets_dict, generativemodel 
 
 
 
-#Setup All Experiments.
+
+#For quarter_id Quarterly and Yearly
+#For splittype in ['Time', 'Bank']
+#IMBSTP Experiment 1 Modality Train 1976Q1-2007Q4, Test 2008Q1-2016Q4
+#                    BankData Train 1990Q1-2007Q4, Test 2008Q1-2016Q4
 
 
+#IMBSTP Experiment 2 Modality Train 1976Q1-2015Q4, Test 2008Q1-2016Q4
+#                    BankData Train 1990Q1-2015Q4, Test 2016Q1-2017Q1
+
+
+
+
+#ECE Experiments.
 # Experiment 1    1976 Q1 - 2007 Q4 2008 Q1 - 2009 Q4    Financial Crisis
 # Experiment 2    1976 Q1 - 2015 Q4 2016 Q1 - 2017 Q4    All Econ Data
 # Experiment 3 1990 Q1 - 2007 Q4    2008 Q1 - 2009 Q4   Aligned Bank Data & Financial Crisis
 # Experiment 4    1990 Q1 - 2015 Q4 2016 Q1 - 2017 Q4    Aligned Bank & Econ Data
-
+#
+# #Load PreprocessDict
+os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/")
+tmp_name = os.path.join(os.getcwd(),"data","BankPerf_Preprocess.pkl")
+f = open(tmp_name, "rb")
+Preprocess_Dict = pickle.load(f)
+f.close()
+#del Preprocess_Dict1
 
 path_dict = {"path_root": os.path.join(os.getcwd(), "data/"),
              "X": "data_X.npy",
@@ -1985,6 +2071,8 @@ path_dict = {"path_root": os.path.join(os.getcwd(), "data/"),
              "Y": "data_Y.npy",
              "Y_nco": "data_Y_nco.npy",
              "Y_Cap": "data_Y_Cap.npy",
+             "Y_target_CapRatio" : "data_Y_target_CapRatio.npy",
+             "Y_target_ncoR" : "data_Y_target_ncoR.npy",
               "X_Y_NCO_norm": 'data_X_Y_NCO_norm.npy',
              "X_Y_NCO_pca": 'data_X_Y_NCO_pca.npy',
              "X_Y_NCO_all_pca": 'data_X_Y_NCO_all_pca.npy',
@@ -2001,6 +2089,8 @@ path_qtr_dict = {"path_root": os.path.join(os.getcwd(), "data/quarter_based/"),
                  "Y": "data_Y_quarter.npy",
                  "Y_nco": "data_Y_nco_quarter.npy",
                  "Y_Cap": "data_Y_Cap_quarter.npy",
+                 "Y_target_CapRatio": "data_Y_target_CapRatio_quarter.npy",
+                 "Y_target_ncoR": "data_Y_target_ncoR_quarter.npy",
                  "X_Y_NCO_norm_quarter": 'data_X_Y_NCO_norm_quarter.npy',
                  "X_Y_NCO_pca": 'data_X_Y_NCO_pca_quarter.npy',
                  "X_Y_NCO_all_pca": 'data_X_Y_NCO_all_pca_quarter.npy',
@@ -2011,91 +2101,168 @@ path_qtr_dict = {"path_root": os.path.join(os.getcwd(), "data/quarter_based/"),
 
                  }
 
-
-
-ECE_Experiment_Wrapper(DataInterval = ["Quarterly","Yearly"], experiments = experiments, iteration_num = 1, epoch = 10, models = ["mcvae", "vae", "cgan", "gan"], chain_length =50, bdmc_run = False )
-
-
 experiments = {
-                'Experiment 1' : {
-                    'Experiment_Info' : {'ExperimentNum' : 1
+                'ECE_Experiment 1' : {
+                    'Experiment_Info' : {'Experiment_Type' :'ECE','ExperimentNum' : 1
                                          ,'Description' : "Financial Crisis"},
                     'get_raw_train_data' : {'moda_train_date' : ["1976 Q1","2007 Q4"]
                                             ,'datamoda_test_date' : ["2008 Q1","2009 Q4"]}},
 
-                'Experiment 2' : {
-                    'Experiment_Info' : {'ExperimentNum' : 2
+                'ECE_Experiment 2' : {
+                    'Experiment_Info' : {'Experiment_Type' :'ECE','ExperimentNum' : 2
                                         ,'Description' : "All Econ Data"},
                     'get_raw_train_data' : {'moda_train_date' : ["1976 Q1","2015 Q4"], 'datamoda_test_date' : ["2016 Q1","2017 Q4"]}},
 
-                'Experiment 3' : {
-                    'Experiment_Info' : {'ExperimentNum' : 3,'Description' : "Aligned Bank Data & Financial Crisis"},
+                'ECE_Experiment 3' : {
+                    'Experiment_Info' : {'Experiment_Type' :'ECE','ExperimentNum' : 3,'Description' : "Aligned Bank Data & Financial Crisis"},
                     'get_raw_train_data' : {'moda_train_date' : ["1990 Q1","2007 Q4"],'datamoda_test_date' : ["2008 Q1","2009 Q4"]}},
 
-                'Experiment 4': {
-                    'Experiment_Info': {'ExperimentNum': 4,'Description': "Aligned Bank & Econ Data"},
-                    'get_raw_train_data': {'moda_train_date': ["1990 Q1", "2015 Q4"],'datamoda_test_date': ["2016 Q1", "2017 Q4"]}}
+                'ECE_Experiment 4': {
+                    'Experiment_Info': {'Experiment_Type' :'ECE','ExperimentNum': 4,'Description': "Aligned Bank & Econ Data"},
+                    'get_raw_train_data': {'moda_train_date': ["1990 Q1", "2015 Q4"],'datamoda_test_date': ["2016 Q1", "2017 Q4"]}},
 
+                # 'BCLP_Experiment 1': {
+                #     'Experiment_Info': {'Experiment_Type' :'BCLP','ExperimentNum': 1,'Description': "Projections After Financial Crisis"},
+                #     'get_raw_train_data': {'moda_train_date': ["1990 Q1", "2007 Q4"],'data_train_date': ["1990 Q1", "2007 Q4"], 'datamoda_test_date': ["2008 Q1", "2016 Q4"], 'data_names': ["X_loancat", "X_ppnr", "Y_nco", "CapRatios","Y_target_CapRatio","Y_target_ncoR"]},
+                #     'GenerativeModels_ScenarioGen' : {'models':['mcvae'],'bdmc_run' : False },
+                #     'BankPerfPred' : {'generativemodel':['mcvae'],"predictmodels" : ['darnn'],'epoch': 5, 'modelTargets': ["Y_target_CapRatio","Y_target_ncoR"],'lstm_lr': 1e-3,
+                #      'threshold': 1e-4}},
+                'BCLP_Experiment 2': {
+                    'Experiment_Info': {'Experiment_Type' :'BCLP','ExperimentNum': 2,'Description': "Projections After Financial Crisis"},
+                    'get_raw_train_data': {'moda_train_date': ["1990 Q1", "2015 Q4"],'data_train_date': ["1990 Q1", "2015 Q4"], 'datamoda_test_date': ["2016 Q1", "2017 Q1"],'data_names': ["X_loancat", "X_ppnr", "Y_nco", "CapRatios","Y_target_CapRatio","Y_target_ncoR"]},
+                    'BankPerfPred' : {'generativemodel':['mcvae'], "predictmodels" : ['darnn'],'epoch': 5, 'modelTargets': ["Y_target_CapRatio","Y_target_ncoR"], 'lstm_lr': 1e-3,
+                     'threshold': 1e-4}}
                 }
 
+
+
+
+#
+# experiment_base_dict_orig = {
+#         'Experiment_Info': {'Experiment_Type': "ECE", "ExperimentNum": 0, "Description": 'Financial Crisis',
+#                             "Interval": 'Quarterly', 'savedir': "./Images/Table_Data"},
+#         'get_raw_train_data': {
+#             'quarter_ID': None,
+#             'cond_name': 'zmacro_domestic',
+#             'moda_names': ['zmacro_domestic', 'zmacro_international', "zmicro", "sectsbidx"],
+#             'data_names': ["X_loancat", "X_ppnr", "Y_nco", "CapRatios"],
+#             'path_dict': path_dict,
+#             'path_qtr_dict': path_qtr_dict,
+#             'modaDateIdx': Preprocess_Dict['moda_DateIdx'],
+#             'dataDateIdx': Preprocess_Dict['data_DateIdx'],
+#             'moda_train_date': ["1976 Q1", "2007 Q4"],
+#             'datamoda_test_date': ["2008 Q1", "2009 Q4"],
+#             'data_train_date': ["1990 Q1", "2015 Q4"],
+#             'splittype': 'timesplit'},
+#         'GenerativeModels_ScenarioGen': {
+#             'learning_rate': 1e-3,
+#             'iterations': 1,
+#             'epoch': 1000,
+#             'data_names': ["X_loancat", "X_ppnr", "Y_nco", "CapRatios"],
+#             'models': ["mcvae", "cvae", "vae", "cgan", "gan"],
+#             'verbose': False,
+#             'bdmc_run': True,
+#             'chain_length': 50,
+#             'n_batch': 1,
+#             'splittype': 'timesplit'}
+#     }
+#
 
 experiment_base_dict_orig = {
-        'Experiment_Info': {'Experiment_Type': "ECE", "ExperimentNum": 0, "Description": 'Financial Crisis',
-                            "Interval": 'Quarterly', 'savedir': "./Images/Table_Data"},
-        'get_raw_train_data': {
-            'quarter_ID': None,
-            'cond_name': 'zmacro_domestic',
-            'moda_names': ['zmacro_domestic', 'zmacro_international', "zmicro", "sectsbidx"],
-            'data_names': ["X_loancat", "X_ppnr", "Y_nco", "CapRatios"],
-            'path_dict': path_dict,
-            'path_qtr_dict': path_qtr_dict,
-            'modaDateIdx': Preprocess_Dict['moda_DateIdx'],
-            'dataDateIdx': Preprocess_Dict['data_DateIdx'],
-            'moda_train_date': ["1976 Q1", "2007 Q4"],
-            'datamoda_test_date': ["2008 Q1", "2009 Q4"],
-            'data_train_date': ["1990 Q1", "2015 Q4"],
-            'splittype': 'timesplit'},
-        'GenerativeModels_ScenarioGen': {
-            'learning_rate': 1e-3,
-            'iterations': 1,
-            'epoch': 1000,
-            'data_names': ["X_loancat", "X_ppnr", "Y_nco", "CapRatios"],
-            'models': ["mcvae", "cvae", "vae", "cgan", "gan"],
-            'verbose': False,
-            'bdmc_run': True,
-            'chain_length': 50,
-            'n_batch': 1,
-            'splittype': 'timesplit'}
-    }
+    'Experiment_Info': {'Experiment_Type': "ECE", "ExperimentNum": 0, "Description": 'Financial Crisis',
+                        "Interval": 'Quarterly', 'savedir': "./Images/Table_Data"},
+    'get_raw_train_data': {
+        'quarter_ID': None,
+        'cond_name': 'zmacro_domestic',
+        'moda_names': ['zmacro_domestic', 'zmacro_international', "zmicro", "sectsbidx"],
+        'data_names': ["X_loancat", "X_ppnr", "Y_nco", "CapRatios"],
+        'path_dict': path_dict,
+        'path_qtr_dict': path_qtr_dict,
+        'modaDateIdx': Preprocess_Dict['moda_DateIdx'],
+        'dataDateIdx': Preprocess_Dict['data_DateIdx'],
+        'moda_train_date': ["1976 Q1", "2007 Q4"],
+        'datamoda_test_date': ["2008 Q1", "2009 Q4"],
+        'data_train_date': ["1990 Q1", "2015 Q4"],
+        'splittype': 'timesplit'},
+    'GenerativeModels_ScenarioGen': {
+        'learning_rate': 1e-3,
+        'iterations': 1,
+        'epoch': 1000,
+        'models': ["mcvae", "cvae", "vae", "cgan", "gan"],
+        'verbose': False,
+        'bdmc_run': True,
+        'chain_length': 50,
+        'n_batch': 1,
+        'splittype': 'timesplit'},
+    'BankPerfPred': {'ScenarioGenResults_dict': None,
+                     'traintest_sets_dict': None,
+                     'generativemodel': None,
+                     'modelTarget': "CapRatios_timesplit",
+                     'exclude': ["trainset_data_X_loancat_timesplit", "trainset_data_X_ppnr_timesplit",
+                                 "trainset_data_Y_nco_timesplit"],
+                     'epoch': 10,
+                     'basetraindataset': "trainset_data_X_loancat_tminus1_timesplit",
+                     'basetestdataset': "testset_data_X_loancat_tminus1_timesplit",
+                     'splittype': "timesplit",
+                     'include': ["trainset_data_mod_timesplit", "trainset_data_Y_nco_tminus1_timesplit",
+                                 "trainset_data_X_ppnr_tminus1_timesplit", "trainset_data_X_loancat_tminus1_timesplit",
+                                 "trainset_data_CapRatios_tminus1_timesplit"],
+                     'lstm_lr': 1e-2,
+                     'threshold': 1e-10,
+                     'predictmodel': None,
+                     "predictmodels" : ['gru','lstm','darnn']
 
+                     }
+}
+
+
+#Setup All Experiments.
 def ECE_Experiment_Wrapper(experiment_base_dict_orig = {
-        'Experiment_Info': {'Experiment_Type': "ECE", "ExperimentNum": 0, "Description": 'Financial Crisis',
-                            "Interval": 'Quarterly', 'savedir': "./Images/Table_Data"},
-        'get_raw_train_data': {
-            'quarter_ID': None,
-            'cond_name': 'zmacro_domestic',
-            'moda_names': ['zmacro_domestic', 'zmacro_international', "zmicro", "sectsbidx"],
-            'data_names': ["X_loancat", "X_ppnr", "Y_nco", "CapRatios"],
-            'path_dict': path_dict,
-            'path_qtr_dict': path_qtr_dict,
-            'modaDateIdx': Preprocess_Dict['moda_DateIdx'],
-            'dataDateIdx': Preprocess_Dict['data_DateIdx'],
-            'moda_train_date': ["1976 Q1", "2007 Q4"],
-            'datamoda_test_date': ["2008 Q1", "2009 Q4"],
-            'data_train_date': ["1990 Q1", "2015 Q4"],
-            'splittype': 'timesplit'},
-        'GenerativeModels_ScenarioGen': {
-            'learning_rate': 1e-3,
-            'iterations': 1,
-            'epoch': 1000,
-            'data_names': ["X_loancat", "X_ppnr", "Y_nco", "CapRatios"],
-            'models': ["mcvae", "cvae", "vae", "cgan", "gan"],
-            'verbose': False,
-            'bdmc_run': True,
-            'chain_length': 50,
-            'n_batch': 1,
-            'splittype': 'timesplit'}
-    }, experiments = {
+    'Experiment_Info': {'Experiment_Type': "ECE", "ExperimentNum": 0, "Description": 'Financial Crisis',
+                        "Interval": 'Quarterly', 'savedir': "./Images/Table_Data"},
+    'get_raw_train_data': {
+        'quarter_ID': None,
+        'cond_name': 'zmacro_domestic',
+        'moda_names': ['zmacro_domestic', 'zmacro_international', "zmicro", "sectsbidx"],
+        'data_names': ["X_loancat", "X_ppnr", "Y_nco", "CapRatios"],
+        'path_dict': path_dict,
+        'path_qtr_dict': path_qtr_dict,
+        'modaDateIdx': Preprocess_Dict['moda_DateIdx'],
+        'dataDateIdx': Preprocess_Dict['data_DateIdx'],
+        'moda_train_date': ["1976 Q1", "2007 Q4"],
+        'datamoda_test_date': ["2008 Q1", "2009 Q4"],
+        'data_train_date': ["1990 Q1", "2015 Q4"],
+        'splittype': 'timesplit'},
+    'GenerativeModels_ScenarioGen': {
+        'learning_rate': 1e-3,
+        'iterations': 1,
+        'epoch': 1000,
+        'models': ["mcvae", "cvae", "vae", "cgan", "gan"],
+        'verbose': False,
+        'bdmc_run': True,
+        'chain_length': 50,
+        'n_batch': 1,
+        'splittype': 'timesplit'},
+    'BankPerfPred': {'ScenarioGenResults_dict': None,
+                     'traintest_sets_dict': None,
+                     'generativemodel': None,
+                     'modelTarget': "CapRatios_timesplit",
+                     'exclude': ["trainset_data_X_loancat_timesplit", "trainset_data_X_ppnr_timesplit",
+                                 "trainset_data_Y_nco_timesplit"],
+                     'epoch': 10,
+                     'basetraindataset': "trainset_data_X_loancat_tminus1_timesplit",
+                     'basetestdataset': "testset_data_X_loancat_tminus1_timesplit",
+                     'splittype': "timesplit",
+                     'include': ["trainset_data_mod_timesplit", "trainset_data_Y_nco_tminus1_timesplit",
+                                 "trainset_data_X_ppnr_tminus1_timesplit", "trainset_data_X_loancat_tminus1_timesplit",
+                                 "trainset_data_CapRatios_tminus1_timesplit"],
+                     'lstm_lr': 1e-2,
+                     'threshold': 1e-10,
+                     'predictmodel': None,
+                     "predictmodels" : ['gru','lstm','darnn']
+
+                     }
+}, experiments = {
                 'Experiment 1' : {
                     'Experiment_Info' : {'ExperimentNum' : 1
                                          ,'Description' : "Financial Crisis"},
@@ -2116,12 +2283,16 @@ def ECE_Experiment_Wrapper(experiment_base_dict_orig = {
                     'get_raw_train_data': {'moda_train_date': ["1990 Q1", "2015 Q4"],'datamoda_test_date': ["2016 Q1", "2017 Q4"]}}
 
                 }
-                          ,iteration_num ,= 1, DataInterval = ["Quarterly","Yearly",]
-                         , epoch = 1000, models = ["mcvae", "cvae", "vae", "cgan", "gan"], chain_length =50,bdmc_run = True ):
+                          ,iteration_num = 1, DataInterval = ["Quarterly","Yearly"]
+                         , epoch = 1000, models = ["mcvae", "cvae", "vae", "cgan", "gan"], chain_length =50,bdmc_run = True, extype  = "BCLP" , splittype= 'timesplit'):
     logger = setup_log("Economic Conditons Estimator Wrapper")
+
+    result_dict = dict()
+    result_dict['Results'] = pd.DataFrame()
+    result_dict['Models'] = pd.DataFrame()
     for interval in DataInterval:
-        for key in experiments.keys():
-            #print(key)
+        for key in [x for x in experiments.keys() if x.startswith(extype)]:
+            print(key)
             print("Resetting Experiment")
             experiment_base_dict = copy.deepcopy(experiment_base_dict_orig)
             experiment_base_dict['Experiment_Info']['Interval'] = interval
@@ -2142,28 +2313,118 @@ def ECE_Experiment_Wrapper(experiment_base_dict_orig = {
             experiment_base_dict["GenerativeModels_ScenarioGen"]["chain_length"] = chain_length
             experiment_base_dict["GenerativeModels_ScenarioGen"]["bdmc_run"] = bdmc_run
             experiment_base_dict["GenerativeModels_ScenarioGen"]["models"] = models
+
+            experiment_base_dict["get_raw_train_data"]["splittype"] = splittype
+            experiment_base_dict["GenerativeModels_ScenarioGen"]["splittype"] = splittype
+            experiment_base_dict["BankPerfPred"]["splittype"] = splittype
             if interval == "Yearly":
                 for qtr_num in range(0,4):
 #                    qtr_num = 2
                     experiment_base_dict_qtr = copy.deepcopy(experiment_base_dict)
                     experiment_base_dict_qtr['get_raw_train_data']['quarter_ID'] = qtr_num
                     logger.info(f"Running with Data Interval:{interval} \t Quarter {qtr_num + 1}")
-                    experiment_base_dict_qtr['get_raw_train_data']['modaDateIdx'] = experiment_base_dict['get_raw_train_data']['modaDateIdx'][experiment_base_dict['get_raw_train_data']['modaDateIdx'].str.endswith(str(qtr_num + 1))].reset_index(drop=True)
-                    #print(experiment_base_dict_qtr['get_raw_train_data']['modaDateIdx'])
 
-                    experiment_base_dict_qtr['get_raw_train_data']['moda_train_date'] = [x.split('Q')[0] + 'Q' + str(qtr_num + 1) for x in experiment_base_dict_qtr['get_raw_train_data']['moda_train_date']]
-                    experiment_base_dict_qtr['get_raw_train_data']['datamoda_test_date'] = [x.split('Q')[0] + 'Q' + str(qtr_num + 1) for x in experiment_base_dict_qtr['get_raw_train_data']['datamoda_test_date']]
+                    experiment_base_dict_qtr['get_raw_train_data']['modaDateIdx'] = \
+                    experiment_base_dict['get_raw_train_data']['modaDateIdx'][
+                        experiment_base_dict['get_raw_train_data']['modaDateIdx'].str.endswith(str(qtr_num + 1))].reset_index(drop=True)
+
+                    experiment_base_dict_qtr['BankPerfPred']['modelTargets'] = ["_".join([x, 'quarter', str(qtr_num)]) for x in
+                                                                                experiment_base_dict_qtr['BankPerfPred']['modelTargets']]
+
+                    experiment_base_dict_qtr['get_raw_train_data']['dataDateIdx'] = \
+                        experiment_base_dict['get_raw_train_data']['dataDateIdx'][
+                            experiment_base_dict['get_raw_train_data']['dataDateIdx'].str.endswith(
+                                str(qtr_num + 1))].reset_index(drop=True)
+                    # print(experiment_base_dict_qtr['get_raw_train_data']['modaDateIdx'])
+
+                    experiment_base_dict_qtr['get_raw_train_data']['moda_train_date'] = [
+                        x.split('Q')[0] + 'Q' + str(qtr_num + 1) for x in
+                        experiment_base_dict_qtr['get_raw_train_data']['moda_train_date']]
+
+                    experiment_base_dict_qtr['get_raw_train_data']['data_train_date'] = [
+                        x.split('Q')[0] + 'Q' + str(qtr_num + 1) for x in
+                        experiment_base_dict_qtr['get_raw_train_data']['moda_train_date']]
+
+                    experiment_base_dict_qtr['get_raw_train_data']['datamoda_test_date'] = [
+                        x.split('Q')[0] + 'Q' + str(qtr_num + 1) for x in
+                        experiment_base_dict_qtr['get_raw_train_data']['datamoda_test_date']]
+
                     experiment = ECE_Experiments(experiment_base_dict_qtr.copy())
                     experiment_base_dict_qtr.clear()
+                    if extype in ['BCLP']:
+                        result_dict['Results'] = pd.concat([result_dict['Results'], experiment['BankPred']['Results']], axis=0)
+                        result_dict['Models'] = experiment['BankPred']['ModelTrained']
             #                    experiment_base_dict_qtr['get_raw_train_data']['dataDateIdx'] = experiment_base_dict['get_raw_train_data']['dataDateIdx'][experiment_base_dict['get_raw_train_data']['dataDateIdx'].str.endswith(str(qtr_num + 1))].reset_index(drop=True)
             else:
                 experiment_base_dict['get_raw_train_data']['quarter_ID'] = None
                 experiment = ECE_Experiments(experiment_base_dict)
-            experiment_base_dict.clear()
-    return('Completed')
+                if extype in ['BCLP']:
+                    result_dict['Results'] = pd.concat([result_dict['Results'], experiment['BankPred']['Results']],
+                                                       axis=0)
+                    result_dict['Models'] = experiment['BankPred']['ModelTrained']
 
-def ECE_Experiments(
-        experiment_base_dict = {
+            # tmp_df = pd.DataFrame([experiment_base_dict['Experiment_Info']['Experiment_Type'],
+            #                        experiment_base_dict['Experiment_Info']['ExperimentNum'],
+            #                        experiment_base_dict['Experiment_Info']['Interval'],
+            #                        experiment_base_dict["get_raw_train_data"]["quarter_ID"], predictmodel,
+            #                        Bank_PredEval.loc['TestErr'].item().item()]).T
+
+            # tmp_df.columns = ['ExperimentType', 'ExpNum', 'Interval', 'QuarterID', 'Model', 'TestRMSE']
+
+
+            experiment_base_dict.clear()
+    return(result_dict)
+
+
+experiment_base_dict = {
+        'Experiment_Info': {'Experiment_Type': "BCLP", "ExperimentNum": 0, "Description": 'Financial Crisis',
+                            "Interval": 'Quarterly', 'savedir': "./Images/Table_Data"},
+        'get_raw_train_data': {
+            'quarter_ID': None,
+            'cond_name': 'zmacro_domestic',
+            'moda_names': ['zmacro_domestic', 'zmacro_international', "zmicro", "sectsbidx"],
+            'data_names': ["X_loancat", "X_ppnr", "Y_nco", "CapRatios"],
+            'path_dict': path_dict,
+            'path_qtr_dict': path_qtr_dict,
+            'modaDateIdx': Preprocess_Dict['moda_DateIdx'],
+            'dataDateIdx': Preprocess_Dict['data_DateIdx'],
+            'moda_train_date': ["1990 Q1", "2015 Q4"],
+            'datamoda_test_date': ["2016 Q1", "2017 Q1"],
+            'data_train_date': ["1990 Q1", "2015 Q4"],
+            'splittype': 'timesplit'},
+        'GenerativeModels_ScenarioGen': {
+            'learning_rate': 1e-3,
+            'iterations': 1,
+            'epoch': 1000,
+            'data_names': ["X_loancat", "X_ppnr", "Y_nco", "CapRatios"],
+            'models': ["mcvae"],
+            'verbose': False,
+            'bdmc_run': False,
+            'chain_length': 50,
+            'n_batch': 1,
+            'splittype': 'timesplit'},
+    'BankPerfPred': {'ScenarioGenResults_dict': None,
+                     'traintest_sets_dict': None,
+                     'generativemodel': ['mcvae'],
+                     'modelTargets': ["CapRatios"],
+                     'exclude': ["trainset_data_X_loancat_timesplit", "trainset_data_X_ppnr_timesplit",
+                                 "trainset_data_Y_nco_timesplit"],
+                     'epoch': 10,
+                     'basetraindataset': "trainset_data_X_loancat_tminus1_timesplit",
+                     'basetestdataset': "testset_data_X_loancat_tminus1_timesplit",
+                     'splittype': "timesplit",
+                     'include': ["trainset_data_mod_timesplit", "trainset_data_Y_nco_tminus1_timesplit",
+                                 "trainset_data_X_ppnr_tminus1_timesplit", "trainset_data_X_loancat_tminus1_timesplit",
+                                 "trainset_data_CapRatios_tminus1_timesplit"],
+                     'lstm_lr': 1e-2,
+                     'threshold': 1e-10,
+                     'predictmodel': None,
+                     "predictmodels": ['lstm']
+
+                     }
+    }
+
+def ECE_Experiments(experiment_base_dict = {
         'Experiment_Info': {'Experiment_Type': "ECE", "ExperimentNum": 0, "Description": 'Financial Crisis',
                             "Interval": 'Quarterly', 'savedir': "./Images/Table_Data"},
         'get_raw_train_data': {
@@ -2228,20 +2489,112 @@ def ECE_Experiments(
                                                                      )
     logger.info(f"Completed: Generative Model Scenario Estimation")
 
+    if experiment_base_dict['Experiment_Info']['Experiment_Type'] in ['BCLP']:
+        PredHist = dict()
+        PredHist['Results'] = pd.DataFrame()
+        PredHist['EvalHist'] = dict()
+        PredHist['TrainHist'] = dict()
+        PredHist['ModelTrained'] = dict()
+        logger.info(f"Started: Banking Capital and Loss Prediction")
+        if isinstance(experiment_base_dict["BankPerfPred"]["predictmodels"], list) and \
+                experiment_base_dict["BankPerfPred"]["predictmodel"] is None:
+
+            for modeltarget in experiment_base_dict["BankPerfPred"]["modelTargets"]:
+
+                if experiment_base_dict["BankPerfPred"]["splittype"] in ['timesplit']:
+                    tmp_model_target = "_".join(
+                        [modeltarget, experiment_base_dict["BankPerfPred"]["splittype"]])
+                    # prepare include, exclude, basesets
+                    tmp_include = [x for x in traintest_sets_dict.keys() if x.startswith('trainset_') if
+                                   x.endswith("_".join(
+                                       ['tminus1', experiment_base_dict["BankPerfPred"]["splittype"]]))] \
+                                  + [x for x in traintest_sets_dict.keys() if
+                                     x.startswith('trainset_data_mod')]
+
+                    tmp_exclude = [x for x in traintest_sets_dict.keys() if x.startswith('trainset_') if not
+                    x.endswith("_".join(['tminus1', experiment_base_dict["BankPerfPred"]["splittype"]])) if
+                                   not x.split('_')[2] in ['cond', 'mod']]
+
+                    tmp_basetraindataset = [x for x in tmp_include if x.split('_')[2] == 'X'][0]
+                    tmp_basetestdataset = tmp_basetraindataset.replace('trainset', 'testset')
+                elif experiment_base_dict["BankPerfPred"]["splittype"] in ['banksplit']:
+                    tmp_model_target = "_".join(
+                        [modeltarget, experiment_base_dict["BankPerfPred"]["splittype"]])
+                    # prepare include, exclude, basesets
+                    tmp_include = [x for x in traintest_sets_dict.keys() if x.startswith('trainset_data_X') if
+                                   x.endswith(experiment_base_dict["BankPerfPred"]["splittype"]) if
+                                   not x.split('_')[2] in ['cond', 'mod']] \
+                                  + [x for x in traintest_sets_dict.keys() if
+                                     x.startswith('trainset_data_mod')]
+
+                    tmp_exclude = [x for x in traintest_sets_dict.keys() if x.startswith('trainset_') if
+                                   not x.startswith('trainset_data_X') if
+                                   not x.split('_')[2] in ['cond', 'mod']]
+
+                    tmp_basetraindataset = [x for x in tmp_include if x.split('_')[2] == 'X'][0]
+                    tmp_basetestdataset = tmp_basetraindataset.replace('trainset', 'testset')
+
+                else:
+                    print("Incorrect Split type or missing.")
+                    break
+                for predictmodel in experiment_base_dict["BankPerfPred"]["predictmodels"]:
+
+                    logger.info(f"{experiment_base_dict['Experiment_Info']['Experiment_Type']}\t{experiment_base_dict['Experiment_Info']['ExperimentNum']}\t{experiment_base_dict['Experiment_Info']['Interval']}\t{experiment_base_dict['get_raw_train_data']['quarter_ID']}\tTarget:{tmp_model_target}\t{predictmodel}")
+
+
+                    Bank_PredEval, BankPredEval_trainhist, BankPredModel = BankPerfPred(
+                        ScenarioGenResults_dict=ScenarioGenResults_dict,
+                        traintest_sets_dict=traintest_sets_dict,
+                        generativemodel=experiment_base_dict["BankPerfPred"]["generativemodel"],
+                        modelTarget=tmp_model_target,
+                        exclude=tmp_exclude,
+                        epoch=experiment_base_dict["BankPerfPred"]["epoch"],
+                        basetraindataset=tmp_basetraindataset,
+                        basetestdataset=tmp_basetestdataset,
+                        splittype=experiment_base_dict["BankPerfPred"]["splittype"],
+                        include=tmp_include,
+                        lstm_lr=experiment_base_dict["BankPerfPred"]["lstm_lr"],
+                        threshold=experiment_base_dict["BankPerfPred"]["threshold"],
+                        predictmodel=predictmodel)
+                    PredHist['EvalHist']["_".join([experiment_base_dict['Experiment_Info']['Experiment_Type'],str(experiment_base_dict['Experiment_Info']['ExperimentNum']), 'PredEval'])] = Bank_PredEval
+                    PredHist['TrainHist']["_".join([experiment_base_dict['Experiment_Info']['Experiment_Type'],str(experiment_base_dict['Experiment_Info']['ExperimentNum']), 'trainhist'])] = BankPredEval_trainhist
+                    PredHist['ModelTrained']["_".join([experiment_base_dict['Experiment_Info']['Experiment_Type'],str(experiment_base_dict['Experiment_Info']['ExperimentNum']),predictmodel,'trained'])] = BankPredModel
+
+                    model_tmp_name = "_".join([experiment_base_dict['Experiment_Info']['Experiment_Type'], "Experiment",
+                                               str(experiment_base_dict['Experiment_Info']['ExperimentNum']),
+                                               experiment_base_dict['Experiment_Info']['Interval'], predictmodel + ".pkl"])
+
+                    #print('Saving Model:',predictmodel, model_tmp_name)
+                    #torch.save(BankPredModel.state_dict(), "_".join(['model',model_tmp_name]))
+                    #print("Saving State")
+                    #torch.save(BankPredModel.state_dict(), model_tmp_name)
+
+                    tmp_df = pd.DataFrame([experiment_base_dict['Experiment_Info']['Experiment_Type'],experiment_base_dict['Experiment_Info']['ExperimentNum'], experiment_base_dict['Experiment_Info']['Interval'], experiment_base_dict["get_raw_train_data"]["quarter_ID"], predictmodel, Bank_PredEval.loc['TestErr'].item().item()]).T
+
+                    tmp_df.columns = ['ExperimentType', 'ExpNum','Interval','QuarterID','Model','TestRMSE']
+                    PredHist['Results'] = pd.concat([PredHist['Results'],tmp_df], axis = 0)
+                    logger.info(f"{experiment_base_dict['Experiment_Info']['Experiment_Type']}\t{experiment_base_dict['Experiment_Info']['ExperimentNum']}\t{experiment_base_dict['Experiment_Info']['Interval']}\t{experiment_base_dict['get_raw_train_data']['quarter_ID']}\tTarget:{tmp_model_target}\t{predictmodel}\t{ Bank_PredEval.loc['TestErr'].item().item()}")
+
+        logger.info(f"Completed: Banking Capital and Loss Prediction")
+
 
     logger.info(f"Saving Evaluation Metrics")
+
     for key in [x for x in ScenarioGenResults_dict.keys() if x.startswith("results_")]:
         if experiment_base_dict["get_raw_train_data"]["quarter_ID"] is None:
             tmp_name = "_".join([experiment_base_dict['Experiment_Info']['Experiment_Type'],"Experiment",str(experiment_base_dict['Experiment_Info']['ExperimentNum']),experiment_base_dict['Experiment_Info']['Interval'],key + ".csv"])
+
         else:
             tmp_name = "_".join([experiment_base_dict['Experiment_Info']['Experiment_Type'], "Experiment",
                                  str(experiment_base_dict['Experiment_Info']['ExperimentNum']),
                                  experiment_base_dict['Experiment_Info']['Interval'], key, "qtr",str(experiment_base_dict["get_raw_train_data"]["quarter_ID"]) + ".csv"])
         tmp_name  = os.path.join(experiment_base_dict['Experiment_Info']['savedir'], tmp_name)
         ScenarioGenResults_dict[key].to_csv(tmp_name)
-
     logger.info(f"Saving Evaluation Metrics to Dict")
     Final_Dict = {"Scenario_Gen" : ScenarioGenResults_dict, "TrainingTesting" : traintest_sets_dict}
+    if experiment_base_dict['Experiment_Info']['Experiment_Type'] in ['BCLP']:
+        Final_Dict['BankPred'] = PredHist
+
     if experiment_base_dict["get_raw_train_data"]["quarter_ID"] is None:
         tmp_name = "_".join([experiment_base_dict['Experiment_Info']['Experiment_Type'], "Experiment",
                   str(experiment_base_dict['Experiment_Info']['ExperimentNum']),
@@ -2252,6 +2605,7 @@ def ECE_Experiments(
                              experiment_base_dict['Experiment_Info']['Interval'], "qtr",str(experiment_base_dict["get_raw_train_data"]["quarter_ID"]) + ".pkl"])
 
     tmp_name = os.path.join(experiment_base_dict['Experiment_Info']['savedir'], tmp_name)
+    print("Saving Final Results Dictionary")
     f = open(tmp_name, "wb")
     pickle.dump(Final_Dict, f)
     f.close()
@@ -2262,25 +2616,375 @@ def ECE_Experiments(
 
 
 
+#importlib.reload(m_DA_RNN)
 
-BankPredEval_timesplit, BankPredEval_timesplit_trainhist = BankPerfPred(ScenarioGenResults_dict = ScenarioGenResults_dict_timesplit,
-                                           traintest_sets_dict = traintest_sets_dict_timesplit,
-                                           generativemodel = ["mcvae"]
-                                           ,modelTarget= "CapRatios_timesplit",
-                                           exclude = ["trainset_data_X_loancat_timesplit"
-                                                      ,"trainset_data_X_ppnr_timesplit","trainset_data_Y_nco_timesplit"],
+#device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+#models = ['cgan','gan']
+models = ['mcvae']
 
-                                           epoch = 10,
-                                           basetraindataset = "trainset_data_X_loancat_tminus1_timesplit",
-                                           basetestdataset = "testset_data_X_loancat_tminus1_timesplit",
-                                           splittype= "timesplit",
-                                           include = ["trainset_data_mod_timesplit",
-                                                      "trainset_data_Y_nco_tminus1_timesplit",
-                                                      "trainset_data_X_ppnr_tminus1_timesplit",
-                                                      "trainset_data_X_loancat_tminus1_timesplit",
-                                                      "trainset_data_CapRatios_tminus1_timesplit"
-                                                      ],
-                                            lstm_lr = 1e-2, threshold = 1e-10, predictmodel = "darnn")
+experiments_transferlearning = {
+                # 'ECE_Experiment 1' : {
+                #     'Experiment_Info' : {'Experiment_Type' :'ECE','ExperimentNum' : 1
+                #                          ,'Description' : "Financial Crisis"},
+                #     'get_raw_train_data' : {'moda_train_date' : ["1976 Q1","2007 Q4"]
+                #                             ,'datamoda_test_date' : ["2008 Q1","2009 Q4"]}},
+
+                # 'ECE_Experiment 2' : {
+                #     'Experiment_Info' : {'Experiment_Type' :'ECE','ExperimentNum' : 2
+                #                         ,'Description' : "All Econ Data"},
+                #     'get_raw_train_data' : {'moda_train_date' : ["1976 Q1","2015 Q4"], 'datamoda_test_date' : ["2016 Q1","2017 Q4"]}},
+
+                # 'ECE_Experiment 3' : {
+                #     'Experiment_Info' : {'Experiment_Type' :'ECE','ExperimentNum' : 3,'Description' : "Aligned Bank Data & Financial Crisis"},
+                #     'get_raw_train_data' : {'moda_train_date' : ["1990 Q1","2007 Q4"],'datamoda_test_date' : ["2008 Q1","2009 Q4"]}},
+
+                'ECE_Experiment 4': {
+                    'Experiment_Info': {'Experiment_Type' :'ECE','ExperimentNum': 4,'Description': "Aligned Bank & Econ Data"},
+                    'get_raw_train_data': {'moda_train_date': ["1990 Q1", "2015 Q4"],'datamoda_test_date': ["2016 Q1", "2017 Q4"]}},
+
+                # 'BCLP_Experiment 1': {
+                #     'Experiment_Info': {'Experiment_Type' :'BCLP','ExperimentNum': 1,'Description': "Projections After Financial Crisis"},
+                #     'get_raw_train_data': {'moda_train_date': ["1990 Q1", "2007 Q4"],'data_train_date': ["1990 Q1", "2007 Q4"], 'datamoda_test_date': ["2008 Q1", "2016 Q4"], 'data_names': ["X_loancat", "X_ppnr", "Y_nco", "CapRatios","Y_target_CapRatio","Y_target_ncoR"]},
+                #     'GenerativeModels_ScenarioGen' : {'models':['mcvae'],'bdmc_run' : False },
+                #     'BankPerfPred' : {'generativemodel':['mcvae'],"predictmodels" : ['darnn'],'epoch': 5, 'modelTargets': ["Y_target_CapRatio","Y_target_ncoR"],'lstm_lr': 1e-3,
+                #      'threshold': 1e-4}},
+                'BCLP_Experiment 2': {
+                    'Experiment_Info': {'Experiment_Type' :'BCLP','ExperimentNum': 2,'Description': "Projections After Financial Crisis"},
+                    'get_raw_train_data': {'moda_train_date': ["1990 Q1", "2015 Q4"],'data_train_date': ["1990 Q1", "2015 Q4"], 'datamoda_test_date': ["2016 Q1", "2017 Q1"],'data_names': ["X_loancat", "X_ppnr", "Y_nco", "CapRatios","Y_target_CapRatio","Y_target_ncoR"]},
+                    'BankPerfPred' : {'generativemodel':['mcvae'], "predictmodels" : ['darnn'],'epoch': 5, 'modelTargets': ["Y_target_CapRatio"], 'lstm_lr': 1e-3,
+                     'threshold': 1e-4}}
+                }
+
+
+
+test = ECE_Experiment_Wrapper(DataInterval = ["Quarterly"], experiments = experiments_transferlearning, iteration_num = 1, epoch = 1000, models = ["mcvae"], chain_length =30, bdmc_run = False,extype = "BCLP", splittype = 'timesplit' )
+
+
+#test['Results'].to_csv('BCLP_Experiments_2_darnn_banksplit.csv', index = False)
+#test['Results'].to_csv('BCLP_Experiments_gru_lstm_banksplit.csv', index = False)
+# DataInterval = ["Quarterly"]
+# splittype = "timesplit"
+# #DataInterval.reverse()
+# extype = "ECE"
+# logger = setup_log("Economic Conditons Estimator Wrapper")
+# PredHist = dict()
+# for interval in DataInterval:
+#     for key in [x for x in experiments.keys() if x.startswith(extype)]:
+#         print(key, interval)
+#         #key = "BCLP_Experiment 2"
+#         #interval = "Quarterly"
+#         print("Resetting Experiment")
+#         experiment_base_dict = copy.deepcopy(experiment_base_dict_orig)
+#         experiment_base_dict['Experiment_Info']['Interval'] = interval
+#
+#         # experiment_base_dict = dict((k,v) for k,v in experiment_base_dict_orig.items())
+#         for key1 in experiments[key].keys():
+#             # print(key1)
+#             # print(experiments[key][key1].keys())
+#             for key2 in experiments[key][key1].keys():
+#                 # print(key2)
+#                 # print(experiments[key][key1][key2])
+#                 #logger.info(f"Updating with Experiment:{key} Parameters")
+#                 experiment_base_dict[key1][key2] = experiments[key][key1][key2]
+#
+#
+#
+#        # logger.info(f"Setting Generative Experiment Parameters  \tEpoch:{epoch}, \titerations:{iteration_num}\tmodels{models}")
+#         experiment_base_dict["GenerativeModels_ScenarioGen"]["epoch"] = epoch
+#         experiment_base_dict["GenerativeModels_ScenarioGen"]["iterations"] = iteration_num
+#         experiment_base_dict["GenerativeModels_ScenarioGen"]["chain_length"] = chain_length
+#         experiment_base_dict["GenerativeModels_ScenarioGen"]["bdmc_run"] = bdmc_run
+#         experiment_base_dict["GenerativeModels_ScenarioGen"]["models"] = models
+#         #experiment_base_dict["BankPerfPred"]["epoch"] = bankperf_epoch
+#         experiment_base_dict["get_raw_train_data"]["splittype"] = splittype
+#         experiment_base_dict["GenerativeModels_ScenarioGen"]["splittype"] = splittype
+#         experiment_base_dict["BankPerfPred"]["splittype"] = splittype
+#
+#
+#
+#         if interval == "Yearly":
+#             for qtr_num in range(0, 4):
+#                 #                    qtr_num = 2
+#                 experiment_base_dict_qtr = copy.deepcopy(experiment_base_dict)
+#                 experiment_base_dict_qtr['get_raw_train_data']['quarter_ID'] = qtr_num
+#                 logger.info(f"Running with Data Interval:{interval} \t Quarter {qtr_num + 1}")
+#
+#                 experiment_base_dict_qtr['get_raw_train_data']['modaDateIdx'] = experiment_base_dict['get_raw_train_data']['modaDateIdx'][
+#                     experiment_base_dict['get_raw_train_data']['modaDateIdx'].str.endswith(str(qtr_num + 1))].reset_index(drop=True)
+#
+#                 experiment_base_dict_qtr['BankPerfPred']['modelTargets'] = ["_".join([x,'quarter',str(qtr_num)]) for x in experiment_base_dict_qtr['BankPerfPred']['modelTargets']]
+#
+#                 experiment_base_dict_qtr['get_raw_train_data']['dataDateIdx'] = \
+#                 experiment_base_dict['get_raw_train_data']['dataDateIdx'][
+#                     experiment_base_dict['get_raw_train_data']['dataDateIdx'].str.endswith(
+#                         str(qtr_num + 1))].reset_index(drop=True)
+#                 # print(experiment_base_dict_qtr['get_raw_train_data']['modaDateIdx'])
+#
+#                 experiment_base_dict_qtr['get_raw_train_data']['moda_train_date'] = [
+#                     x.split('Q')[0] + 'Q' + str(qtr_num + 1) for x in
+#                     experiment_base_dict_qtr['get_raw_train_data']['moda_train_date']]
+#
+#                 experiment_base_dict_qtr['get_raw_train_data']['data_train_date'] = [
+#                     x.split('Q')[0] + 'Q' + str(qtr_num + 1) for x in
+#                     experiment_base_dict_qtr['get_raw_train_data']['moda_train_date']]
+#
+#                 experiment_base_dict_qtr['get_raw_train_data']['datamoda_test_date'] = [
+#                     x.split('Q')[0] + 'Q' + str(qtr_num + 1) for x in
+#                     experiment_base_dict_qtr['get_raw_train_data']['datamoda_test_date']]
+#
+#                 experiment = ECE_Experiments(experiment_base_dict_qtr.copy())
+#
+#                 experiment_base_dict_qtr.clear()
+#         #experiment_base_dict_qtr['get_raw_train_data']['dataDateIdx'] = experiment_base_dict['get_raw_train_data']['dataDateIdx'][experiment_base_dict['get_raw_train_data']['dataDateIdx'].str.endswith(str(qtr_num + 1))].reset_index(drop=True)
+#         else:
+#             experiment_base_dict['get_raw_train_data']['quarter_ID'] = None
+#             experiment = ECE_Experiments(experiment_base_dict)
+#             # os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/")
+#         experiment_base_dict.clear()
+#
+#
+#
+#            #experiment_base_dict = experiment_base_dict_qtr.copy()
+#
+#
+#             traintest_sets_dict = get_raw_train_test_data(quarter_ID=experiment_base_dict["get_raw_train_data"]["quarter_ID"]
+#                                                       , cond_name=experiment_base_dict["get_raw_train_data"]["cond_name"]
+#                                                       , moda_names=experiment_base_dict["get_raw_train_data"]["moda_names"]
+#                                                       , data_names=experiment_base_dict["get_raw_train_data"]["data_names"]
+#                                                       , path_dict=experiment_base_dict["get_raw_train_data"]["path_dict"]
+#                                                       , path_qtr_dict=experiment_base_dict["get_raw_train_data"]["path_qtr_dict"]
+#                                                       , modaDateIdx=experiment_base_dict["get_raw_train_data"]["modaDateIdx"]
+#                                                       , dataDateIdx=experiment_base_dict["get_raw_train_data"]["dataDateIdx"]
+#                                                       , moda_train_date=experiment_base_dict["get_raw_train_data"][ "moda_train_date"]
+#                                                       , data_train_date=experiment_base_dict["get_raw_train_data"]["data_train_date"]
+#                                                       , datamoda_test_date=experiment_base_dict["get_raw_train_data"][ "datamoda_test_date"]
+#                                                       , splittype=experiment_base_dict["get_raw_train_data"]["splittype"])
+#
+#                 ScenarioGenResults_dict = GenerativeModels_ScenarioGen(traintest_sets_dict=traintest_sets_dict
+#                                                                    , learning_rate=experiment_base_dict["GenerativeModels_ScenarioGen"]["learning_rate"]
+#                                                                    ,iterations=experiment_base_dict["GenerativeModels_ScenarioGen"]["iterations"]
+#                                                                    , epoch=1000#experiment_base_dict["GenerativeModels_ScenarioGen"]["epoch"]
+#                                                                    , models=experiment_base_dict["GenerativeModels_ScenarioGen"]["models"]
+#                                                                    , splittype=experiment_base_dict["GenerativeModels_ScenarioGen"]["splittype"]
+#                                                                    , verbose=experiment_base_dict["GenerativeModels_ScenarioGen"]["verbose"]
+#                                                                    , bdmc_run=experiment_base_dict["GenerativeModels_ScenarioGen"]["bdmc_run"]
+#                                                                    , chain_length=experiment_base_dict["GenerativeModels_ScenarioGen"][ "chain_length"]
+#                                                                    , n_batch=experiment_base_dict["GenerativeModels_ScenarioGen"]["n_batch"]
+#                                                                    )
+#
+#
+#
+#                 if experiment_base_dict['Experiment_Info']['Experiment_Type'] in ['BCLP']:
+#                     if isinstance(experiment_base_dict["BankPerfPred"]["predictmodels"], list) and experiment_base_dict["BankPerfPred"]["predictmodel"] is None:
+#                         for modeltarget in experiment_base_dict["BankPerfPred"]["modelTargets"]:
+#
+#                             if experiment_base_dict["BankPerfPred"]["splittype"] in ['timesplit']:
+#                                 tmp_model_target = "_".join(
+#                                     [modeltarget, experiment_base_dict["BankPerfPred"]["splittype"]])
+#                                 # prepare include, exclude, basesets
+#                                 tmp_include = [x for x in traintest_sets_dict.keys() if x.startswith('trainset_') if
+#                                                x.endswith("_".join(
+#                                                    ['tminus1', experiment_base_dict["BankPerfPred"]["splittype"]]))] \
+#                                               + [x for x in traintest_sets_dict.keys() if
+#                                                  x.startswith('trainset_data_mod')]
+#
+#                                 tmp_exclude = [x for x in traintest_sets_dict.keys() if x.startswith('trainset_') if not
+#                                 x.endswith("_".join(['tminus1', experiment_base_dict["BankPerfPred"]["splittype"]])) if
+#                                                not x.split('_')[2] in ['cond', 'mod']]
+#
+#                                 tmp_basetraindataset = [x for x in tmp_include if x.split('_')[2] == 'X'][0]
+#                                 tmp_basetestdataset = tmp_basetraindataset.replace('trainset', 'testset')
+#                             elif experiment_base_dict["BankPerfPred"]["splittype"] in ['banksplit']:
+#                                 #modeltarget = "Y_target_CapRatio_quarter_0"
+#
+#                                 tmp_model_target = "_".join(
+#                                     [modeltarget, experiment_base_dict["BankPerfPred"]["splittype"]])
+#                                 # prepare include, exclude, basesets
+#                                 tmp_include = [x for x in traintest_sets_dict.keys() if x.startswith('trainset_data_X') if
+#                                                x.endswith(experiment_base_dict["BankPerfPred"]["splittype"]) if
+#                                                not x.split('_')[2] in ['cond', 'mod']] \
+#                                               + [x for x in traintest_sets_dict.keys() if
+#                                                  x.startswith('trainset_data_mod')]
+#
+#                                 tmp_exclude = [x for x in traintest_sets_dict.keys() if  x.startswith('trainset_') if not x.startswith('trainset_data_X') if
+#                                                not x.split('_')[2] in ['cond', 'mod']]
+#
+#                                 tmp_basetraindataset = [x for x in tmp_include if x.split('_')[2] == 'X'][0]
+#                                 tmp_basetestdataset = tmp_basetraindataset.replace('trainset', 'testset')
+#
+#                             else:
+#                                 print("Incorrect Split type or missing.")
+#                                 break
+#
+#
+#
+#                             for predictmodel in experiment_base_dict["BankPerfPred"]["predictmodels"]:
+#                                 #predictmodel = 'darnn'
+#
+#                                 #importlib.reload(m_DA_RNN)
+#                                 print('*******************',predictmodel,':\t',tmp_model_target)
+#
+#                                 Bank_PredEval, BankPredEval_trainhist = BankPerfPred(ScenarioGenResults_dict = ScenarioGenResults_dict,
+#                                                                                                         traintest_sets_dict = traintest_sets_dict,
+#                                                                                                          generativemodel = experiment_base_dict["BankPerfPred"]["generativemodel"],
+#                                                                                                         modelTarget= tmp_model_target,
+#                                                                                                         exclude = tmp_exclude,
+#                                                                                                         epoch = experiment_base_dict["BankPerfPred"]["epoch"],
+#                                                                                                        basetraindataset = tmp_basetraindataset,
+#                                                                                                        basetestdataset = tmp_basetestdataset,
+#                                                                                                        splittype= experiment_base_dict["BankPerfPred"]["splittype"],
+#                                                                                                        include = tmp_include,
+#                                                                                                         lstm_lr =experiment_base_dict["BankPerfPred"]["lstm_lr"],
+#                                                                                                         threshold = experiment_base_dict["BankPerfPred"]["threshold"],
+#                                                                                                         predictmodel = predictmodel)
+#                                 PredHist["_".join([key, 'PredEval'])] = Bank_PredEval
+#                                 PredHist["_".join([key, 'trainhist'])] = BankPredEval_trainhist
+#
+#
+#  experiment_base_dict_qtr['get_raw_train_data']['data_train_date']
+#
+#         # if interval == "Yearly":
+#         #     for qtr_num in range(0, 4):
+#         #         #                    qtr_num = 2
+#         #         experiment_base_dict_qtr = copy.deepcopy(experiment_base_dict)
+#         #         experiment_base_dict_qtr['get_raw_train_data']['quarter_ID'] = qtr_num
+#         #         logger.info(f"Running with Data Interval:{interval} \t Quarter {qtr_num + 1}")
+#         #         experiment_base_dict_qtr['get_raw_train_data']['modaDateIdx'] = \
+#         #         experiment_base_dict['get_raw_train_data']['modaDateIdx'][
+#         #             experiment_base_dict['get_raw_train_data']['modaDateIdx'].str.endswith(
+#         #                 str(qtr_num + 1))].reset_index(drop=True)
+#         #         # print(experiment_base_dict_qtr['get_raw_train_data']['modaDateIdx'])
+#         #
+#         #         experiment_base_dict_qtr['get_raw_train_data']['moda_train_date'] = [
+#         #             x.split('Q')[0] + 'Q' + str(qtr_num + 1) for x in
+#         #             experiment_base_dict_qtr['get_raw_train_data']['moda_train_date']]
+#         #         experiment_base_dict_qtr['get_raw_train_data']['datamoda_test_date'] = [
+#         #             x.split('Q')[0] + 'Q' + str(qtr_num + 1) for x in
+#         #             experiment_base_dict_qtr['get_raw_train_data']['datamoda_test_date']]
+#         #
+#         #     os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/")
+#         #     traintest_sets_dict = get_raw_train_test_data(quarter_ID=experiment_base_dict["get_raw_train_data"]["quarter_ID"]
+#         #                                               , cond_name=experiment_base_dict["get_raw_train_data"]["cond_name"]
+#         #                                               , moda_names=experiment_base_dict["get_raw_train_data"]["moda_names"]
+#         #                                               , data_names=experiment_base_dict["get_raw_train_data"]["data_names"]
+#         #                                               , path_dict=experiment_base_dict["get_raw_train_data"]["path_dict"]
+#         #                                               , path_qtr_dict=experiment_base_dict["get_raw_train_data"]["path_qtr_dict"]
+#         #                                               , modaDateIdx=experiment_base_dict["get_raw_train_data"]["modaDateIdx"]
+#         #                                               , dataDateIdx=experiment_base_dict["get_raw_train_data"]["dataDateIdx"]
+#         #                                               , moda_train_date=experiment_base_dict["get_raw_train_data"][ "moda_train_date"]
+#         #                                               , data_train_date=experiment_base_dict["get_raw_train_data"]["data_train_date"]
+#         #                                               , datamoda_test_date=experiment_base_dict["get_raw_train_data"][ "datamoda_test_date"]
+#         #                                               , splittype=experiment_base_dict["get_raw_train_data"]["splittype"])
+#         #
+#         #         ScenarioGenResults_dict = GenerativeModels_ScenarioGen(traintest_sets_dict=traintest_sets_dict
+#         #                                                            , learning_rate=experiment_base_dict["GenerativeModels_ScenarioGen"]["learning_rate"]
+#         #                                                            ,iterations=experiment_base_dict["GenerativeModels_ScenarioGen"]["iterations"]
+#         #                                                            , epoch=experiment_base_dict["GenerativeModels_ScenarioGen"]["epoch"]
+#         #                                                            , models=experiment_base_dict["GenerativeModels_ScenarioGen"]["models"]
+#         #                                                            , splittype=experiment_base_dict["GenerativeModels_ScenarioGen"]["splittype"]
+#         #                                                            , verbose=experiment_base_dict["GenerativeModels_ScenarioGen"]["verbose"]
+#         #                                                            , bdmc_run=experiment_base_dict["GenerativeModels_ScenarioGen"]["bdmc_run"]
+#         #                                                            , chain_length=experiment_base_dict["GenerativeModels_ScenarioGen"][ "chain_length"]
+#         #                                                            , n_batch=experiment_base_dict["GenerativeModels_ScenarioGen"]["n_batch"]
+#         #                                                            )
+#         #
+#         #
+#         #
+#         #         if experiment_base_dict['Experiment_Info']['Experiment_Type'] in ['BCLP']:
+#         #             if isinstance(experiment_base_dict["BankPerfPred"]["predictmodels"], list) and experiment_base_dict["BankPerfPred"]["predictmodel"] is None:
+#         #                 for modeltarget in experiment_base_dict["BankPerfPred"]["modelTargets"]:
+#         #                     tmp_model_target = "_".join([modeltarget,experiment_base_dict["BankPerfPred"]["splittype"]])
+#         #                     #prepare include, exclude, basesets
+#         #                     tmp_include = [ x for x in traintest_sets_dict.keys() if x.startswith('trainset_') if x.endswith("_".join(['tminus1',experiment_base_dict["BankPerfPred"]["splittype"]]))]\
+#         #                     + [ x for x in traintest_sets_dict.keys() if x.startswith('trainset_data_mod')]
+#         #
+#         #                     tmp_exclude = [x for x in traintest_sets_dict.keys() if x.startswith('trainset_') if not
+#         #                      x.endswith("_".join(['tminus1', experiment_base_dict["BankPerfPred"]["splittype"]])) if not x.split('_')[2] in ['cond','mod'] ]
+#         #
+#         #                     tmp_basetraindataset = [x for x in tmp_include if x.split('_')[2] == 'X'][0]
+#         #                     tmp_basetestdataset = tmp_basetraindataset.replace('trainset','testset')
+#         #
+#         #                     for predictmodel in experiment_base_dict["BankPerfPred"]["predictmodels"]:
+#         #                         print('*******************',predictmodel,':\t',tmp_model_target)
+#         #                         Bank_PredEval, BankPredEval_trainhist = BankPerfPred(ScenarioGenResults_dict = ScenarioGenResults_dict,
+#         #                                                                                                 traintest_sets_dict = traintest_sets_dict,
+#         #                                                                                                  generativemodel = experiment_base_dict["BankPerfPred"]["generativemodel"],
+#         #                                                                                                 modelTarget= tmp_model_target,
+#         #                                                                                                 exclude = tmp_exclude,
+#         #                                                                                                 epoch = experiment_base_dict["BankPerfPred"]["epoch"],
+#         #                                                                                                basetraindataset = tmp_basetraindataset,
+#         #                                                                                                basetestdataset = tmp_basetestdataset,
+#         #                                                                                                splittype= experiment_base_dict["BankPerfPred"]["splittype"],
+#         #                                                                                                include = tmp_include,
+#         #                                                                                                 lstm_lr =experiment_base_dict["BankPerfPred"]["lstm_lr"],
+#         #                                                                                                 threshold = experiment_base_dict["BankPerfPred"]["threshold"],
+#         #                                                                                                 predictmodel = predictmodel)
+#         #                         PredHist["_".join([key, 'PredEval'])] = Bank_PredEval
+#         #                         PredHist["_".join([key, 'trainhist'])] = BankPredEval_trainhist
+#         #
+#
+# #TODO Need to populate these fields dynamically.
+# #Will create new inputs that are specific to targets, T1CR, and Loan Loss Rate
+# #modelTarget= experiment_base_dict["BankPerfPred"]["modelTarget"]
+# #Will need to apply logic to determine include and exclude list
+# exclude = experiment_base_dict["BankPerfPred"]["exclude"]
+# include = experiment_base_dict["BankPerfPred"]["include"]
+# #Will need to apply logic to detemine base trainsets.
+# basetraindataset = experiment_base_dict["BankPerfPred"]["basetraindataset"]
+# basetestdataset = experiment_base_dict["BankPerfPred"]["basetestdataset"]
+
+
+
+
+#
+# ScenarioGenResults_dict["mcvae_results_dict"]['TrainBestModel']['best_loss']
+# ScenarioGenResults_dict["mcvae_results_dict"]["TrainHist"].plot()
+#
+# ScenarioGenResults_dict["vae_results_dict"]["TrainBestModel"]["best_loss"]
+# ScenarioGenResults_dict["cgan_results_dict"]["TrainBestModel"]["epoch"]
+#
+# np.sqrt(ScenarioGenResults_dict["cgan_results_dict"]['TrainHist']).min()
+#
+# tmp_file_name = "GenModel_RMSE_TrainHist.pdf"
+# np.sqrt(ScenarioGenResults_dict["mcvae_results_dict"]["TrainHist"]).plot()
+# np.sqrt(ScenarioGenResults_dict["vae_results_dict"]["TrainHist"]['vae_modality_total_loss']).plot()
+# np.sqrt(ScenarioGenResults_dict["cgan_results_dict"]['TrainHist']).plot()
+# np.sqrt(ScenarioGenResults_dict["cgan_results_dict"]['TrainHist']['cgan_TrainingGeneratorFoolDiscrim_loss']).plot()
+# np.sqrt(ScenarioGenResults_dict["gan_results_dict"]['TrainHist']['gan_TrainingGeneratorFoolDiscrim_loss']).plot()
+# plt.title("Economic Conditions Generative Model Training History")
+# plt.ylabel("RMSE")
+# plt.legend()
+# plt.savefig(os.path.join(tmp_file_name), dpi=300, format='pdf', bbox_inches='tight')
+#
+# ScenarioGenResults_dict["cgan_results_dict"]['TrainHist'].plot(subplots = True)
+#
+#
+#
+#
+#
+#
+#
+#
+# traintest_sets_dict_timesplit.keys()
+
+# BankPredEval_timesplit, BankPredEval_timesplit_trainhist = BankPerfPred(ScenarioGenResults_dict = ScenarioGenResults_dict_timesplit,
+#                                            traintest_sets_dict = traintest_sets_dict_timesplit,
+#                                            generativemodel = ["mcvae"]
+#                                            ,modelTarget= "CapRatios_timesplit",
+#                                            exclude = ["trainset_data_X_loancat_timesplit"
+#                                                       ,"trainset_data_X_ppnr_timesplit","trainset_data_Y_nco_timesplit"],
+#
+#                                            epoch = 10,
+#                                            basetraindataset = "trainset_data_X_loancat_tminus1_timesplit",
+#                                            basetestdataset = "testset_data_X_loancat_tminus1_timesplit",
+#                                            splittype= "timesplit",
+#                                            include = ["trainset_data_mod_timesplit",
+#                                                       "trainset_data_Y_nco_tminus1_timesplit",
+#                                                       "trainset_data_X_ppnr_tminus1_timesplit",
+#                                                       "trainset_data_X_loancat_tminus1_timesplit",
+#                                                       "trainset_data_CapRatios_tminus1_timesplit"
+#                                                       ],
+#                                             lstm_lr = 1e-2, threshold = 1e-10, predictmodel = "darnn")
 
 
 
@@ -2429,16 +3133,13 @@ BankPredEval_timesplit, BankPredEval_timesplit_trainhist = BankPerfPred(Scenario
 # BankPredEval_banksplit = LSTM_BankPerfPred(ScenarioGenResults_dict_banksplit,traintest_sets_dict_banksplit, generativemodel = ["mcvae"], modelTarget= "CapRatios_banksplit", epoch = 100, basetraindataset = "trainset_data_X_banksplit", basetestdataset = "testset_data_X_banksplit", splittype = "banksplit")
 #
 #
+#Update to append dictionary Models to get all models.
+# torch.save(test['Models']['BCLP_2_lstm_trained'], './test.pth')
+# model = torch.load('./test.pth')
+
+# torch.save(test['Models']['BCLP_2_gru_trained'], './test_gru.pth')
+# model = torch.load('./test_gru.pth')
 
 
-
-
-
-
-
-
-
-
-
-
-
+torch.save(test['Models']['BCLP_2_darnn_trained'], './test_darnn.pth')
+# model = torch.load('./test_darnn.pth')

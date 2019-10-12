@@ -1735,6 +1735,10 @@ Preprocess_Dict['X_loancat'] = preprocess_loadMySQL(BankPerf["BankPerf_Consecuti
 
 Preprocess_Dict['X_loancat'] = outlier_preprocess(Preprocess_Dict['X_loancat'], quantiles=[0,1], makezero = 1e-10).round(2).interpolate(method = 'polynomial', order = 2)
 
+
+# Preprocess_Dict['X_loancat'].describe().transpose()[["count","mean","std","min","50%","max"]]
+# Preprocess_Dict['X_loancat'][(Preprocess_Dict['X_loancat']["ReportingDate"] >= "1990 Q1") & (Preprocess_Dict['X_loancat']["ReportingDate"] <= "2017 Q4")].describe().transpose()[["count","mean","std","min","50%","max"]]
+
 #Normalize and interpolate
 #Preprocess_Dict['X']  = PandasNormalize(Preprocess_Dict['X'], exclude_columns = ["RSSD_ID", "ReportingDate"], type = "scilearn").interpolate(method = 'linear', order = 2)
 
@@ -1763,6 +1767,10 @@ Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['
 Preprocess_Dict['X_ppnr'] = Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'].keys() if x.startswith(('ppnrRatio:'))]]
 
 
+#(Preprocess_Dict['X_ppnr'][(Preprocess_Dict['X_ppnr']["ReportingDate"] >= "1990 Q1") & (Preprocess_Dict['X_ppnr']["ReportingDate"] <= "2017 Q4")] * 100).describe().transpose()[["count","mean","std","min","50%","max"]]
+
+
+
 #Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ncoR:')]].sum(axis = 1).describe()
 
 #(Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ncoR:')]].sum(axis = 1) - Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ppnrRatio:')]].sum(axis = 1)).describe()
@@ -1770,9 +1778,10 @@ Preprocess_Dict['X_ppnr'] = Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [
 #Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ncoR:')]].sum(axis = 1).describe()
 
 Preprocess_Dict['Y_nco'] = Preprocess_Dict['Y'][["RSSD_ID","ReportingDate"] + [x for x in Preprocess_Dict['Y'].keys() if x.startswith(('ncoR:'))]]
-Preprocess_Dict['Y_nco']["NCO_Combined"] = Preprocess_Dict['Y_nco'][[x for x in Preprocess_Dict['Y_nco'].keys() if x.startswith('ncoR:')]].sum(axis = 1)
+Preprocess_Dict['Y_nco']["NCO_Combined"] = Preprocess_Dict['Y_nco'][[x for x in Preprocess_Dict['Y_nco'].keys() if x.startswith('ncoR:')]].mean(axis = 1)
+Preprocess_Dict['Y_target_ncoR'] = Preprocess_Dict['Y_nco'][["RSSD_ID","ReportingDate","NCO_Combined"]]
 
-Preprocess_Dict['Y_nco'].describe()
+#(Preprocess_Dict['Y_target_ncoR'][(Preprocess_Dict['Y_nco']["ReportingDate"] >= "1990 Q1") & (Preprocess_Dict['Y_nco']["ReportingDate"] <= "2017 Q4")] * 100).describe().transpose()[["count","mean","std","min","50%","max"]]
 
 
 # Preprocess_Dict['Y'][[x for x in Preprocess_Dict['Y'] if x.startswith('ppnrRatio:')]].describe()
@@ -1808,21 +1817,28 @@ Preprocess_Dict['CapRatios'] = Preprocess_Dict['X_Y_Cap'][["RSSD_ID", "Reporting
 Preprocess_Dict['CapRatios'][collist] = Preprocess_Dict['CapRatios'][collist] * .01
 #Preprocess_Dict['CapRatios'][collist].describe()
 #outlier_preprocess(Preprocess_Dict['CapRatios'],quantiles = [.086,.832],verbose = False).round(2).describe()
-
-Preprocess_Dict['CapRatios'].shape
+#
 #outlier_preprocess(Preprocess_Dict['CapRatios'],quantiles = [.086,.832],verbose = False).round(2).describe()
-
 Preprocess_Dict['CapRatios'] = outlier_preprocess(Preprocess_Dict['CapRatios'],quantiles = [.086,.832],verbose = False).round(2)
 
+
+#(Preprocess_Dict['CapRatios'][(Preprocess_Dict['CapRatios']["ReportingDate"] >= "1990 Q1") & (Preprocess_Dict['CapRatios']["ReportingDate"] <= "2017 Q4")] * 100).describe().transpose()[["count","mean","std","min","50%","max"]]
+
+#(Preprocess_Dict['CapRatios'][(Preprocess_Dict['CapRatios']["ReportingDate"] >= "1990 Q1") & (Preprocess_Dict['CapRatios']["ReportingDate"] <= "2017 Q4")] * 100).describe().transpose()[["count","mean","std","min","50%","max"]]
+#pd.pivot_table(temp[temp.columns.difference(["RSSD_ID"])][temp["ReportingDate"] >= "1986 Q1"], index=["ReportingDate"], aggfunc = np.mean).plot()
+# CapitalRatios_plt = pd.pivot_table(Preprocess_Dict['CapRatios'][Preprocess_Dict['CapRatios'].columns.difference(["RSSD_ID",'Other items: CapRatios_T1LR_coalesced'])][Preprocess_Dict['CapRatios']["ReportingDate"] >= "1986-01-01"], index=["ReportingDate"], aggfunc = np.mean)
+#
+# CapitalRatios_plt.plot()
 
 #Preprocess_Dict['CapRatios'] .keys()
 #Preprocess_Dict['Y'].keys()
 #Preprocess_Dict["Y_Cap"] = Preprocess_Dict['Y'].merge(Preprocess_Dict['CapRatios'][["RSSD_ID","ReportingDate",'Other items: CapRatios_T1RiskCR_coalesced']])
-Preprocess_Dict['CapRatios']["Other items: CapRatios_CET1CR_coalesced"].describe()
-Preprocess_Dict['CapRatios']  = Preprocess_Dict['CapRatios'][["RSSD_ID","ReportingDate","Other items: CapRatios_CET1CR_coalesced"]]
+#Preprocess_Dict['CapRatios']["Other items: CapRatios_CET1CR_coalesced"].describe()
+#Preprocess_Dict['CapRatios']
+Preprocess_Dict['Y_target_CapRatio']  = Preprocess_Dict['CapRatios'][["RSSD_ID","ReportingDate","Other items: CapRatios_CET1CR_coalesced"]]
 #Preprocess_Dict["Y_Cap"].round(4).describe()
 
-
+#Preprocess_Dict['CapRatios'].describe()
 #colist  = [ x for x in list(Preprocess_Dict['X_Y_Cap'].keys()) if x.startswith("Other items:Chargeoffs") if x.endswith("_Rate") if not x.endswith("_t-1") ]
 # Preprocess_Dict['NCO'] = Preprocess_Dict['X_Y_Cap'][["RSSD_ID", "ReportingDate", "Other items:Net Charge Offs_Ratio",'Other items:Loan Charge Offs_Ratio']]
 # #'Other items:Net Charge Offs_coalesced'
@@ -1849,8 +1865,113 @@ Preprocess_Dict['CapRatios']  = Preprocess_Dict['CapRatios'][["RSSD_ID","Reporti
 
 
 
+def pd_raw_to_numpy_data(df, fulldatescombine = True, ReportingDate_Start = "1990 Q1", ReportingDate_End = "2016 Q4"):
+    #df = Preprocess_Dict[keyname]
+    #fulldatescombine = False
+    if fulldatescombine:
+        print("Generating Full Mesh RSSD_ID and Reporting Date to left join to.")
+        RepordingDate_Df = pd.DataFrame(df["ReportingDate"].unique())
+        RepordingDate_Df = RepordingDate_Df.rename({0: "ReportingDate"}, axis=1)
+        RepordingDate_Df["key"] = 0
+
+        BankIds_Df = pd.DataFrame(df["RSSD_ID"].unique())
+        BankIds_Df = BankIds_Df.rename({0: "RSSD_ID"}, axis=1)
+        BankIds_Df["key"] = 0
+
+        BankID_Date_Ref = RepordingDate_Df.assign(foo=1).merge(BankIds_Df.assign(foo=1), on="foo", how="outer").drop(
+            ["foo", "key_x", "key_y"], 1)
+
+        df_pd = BankID_Date_Ref.merge(df, left_on=["ReportingDate", "RSSD_ID"],
+                                        right_on=["ReportingDate", "RSSD_ID"], how="left")
+    else:
+        df_pd = df
+
+    print(df_pd.shape)
+    print("Subsetting Dates from Dataframe")
+    df_pd = df_pd[(df_pd["ReportingDate"] >= ReportingDate_Start) & (df_pd["ReportingDate"] <= ReportingDate_End)]
+    print(df_pd.shape)
+
+    print("Pivoting Pandas Table to be Indexed by RSSD_ID and ReportingDate")
+    df_pvt = pd.pivot_table(df_pd, index=["RSSD_ID", "ReportingDate"])
+    print(df_pvt.shape)
+
+    print("Preparing to Reshape and output as Numpy Array")
+    dim1 = df_pvt.index.get_level_values('RSSD_ID').nunique()
+    dim2 = df_pvt.index.get_level_values('ReportingDate').nunique()
+    print("Reshaping into 3 dimensional NumPy array")
+    result_pv = df_pvt.values.reshape((dim1, dim2, df_pvt.shape[1]))
+    print(result_pv.shape)
+
+    print("Quarterization of the Data")
+    qtr_count = result_pv.shape[1]
+    n = result_pv.shape[0]  # - 1
+    # result_pv = result_pv[1:n + 1]
+    results_quarter = np.zeros([4, n, int(qtr_count / 4), df_pvt.shape[1]])
+    print("Transformation for Quarterly Data")
+    for i in range(0, 4):
+        ids = [x for x in range(i, qtr_count, 4)]
+        results_quarter[i, :, :, :] = result_pv[:, ids, :]
+    print(results_quarter.shape)
+
+    return result_pv, results_quarter
+
+
+
+def pd_raw_to_numpy_moda(df, fulldatescombine = True, ReportingDate_Start = "1990 Q1", ReportingDate_End = "2016 Q4"):
+
+    print("Calculating if DataFrame has appropriate length and quarters.")
+    reporting_date_lst = list()
+    for year_num in range(int(ReportingDate_Start.split(" ")[0]), int(ReportingDate_End.split(" ")[0]) + 1):
+        for qtr_num in range(1, 5):
+            reporting_date_lst.append(str(year_num) + " Q" + str(qtr_num))
+    ReportingDate_DF = pd.DataFrame(reporting_date_lst, columns=["ReportingDate"])
+    ReportingDate_DF = pd.DataFrame(list(ReportingDate_DF[(ReportingDate_DF["ReportingDate"] >= ReportingDate_Start) & (ReportingDate_DF["ReportingDate"] <= ReportingDate_End)]["ReportingDate"].unique()),
+                                    columns = ["ReportingDate"])
+
+    if ReportingDate_DF.shape[0] == df.shape[0] and all(elem in list(df.ReportingDate.unique())  for elem in list(ReportingDate_DF.ReportingDate)):
+        print("Dates and Rows Validated")
+        df_pd = df
+    else:
+        df_pd = ReportingDate_DF.merge(df, left_on=["ReportingDate"], right_on=["ReportingDate"],how="left")
+        df_pd.interpolate(method="polynomial", order=2).fillna(method="bfill").fillna(method="ffill").dropna(axis=1,how='all')
+
+
+
+
+    print(df_pd.shape)
+    print("Subsetting Dates from Dataframe")
+    df_pd = df_pd[(df_pd["ReportingDate"] >= ReportingDate_Start) & (df_pd["ReportingDate"] <= ReportingDate_End)]
+    print(df_pd.shape)
+
+    print("Pivoting Pandas Table to be Indexed by RSSD_ID and ReportingDate")
+    df_pvt = pd.pivot_table(df_pd, index=["ReportingDate"])
+    print(df_pvt.shape)
+
+    print("Preparing to Reshape and output as Numpy Array")
+    #dim1 = df_pvt.index.get_level_values('RSSD_ID').nunique()
+    dim1 = df_pvt.index.get_level_values('ReportingDate').nunique()
+    print("Reshaping into 3 dimensional NumPy array")
+    result_pv = df_pvt.values.reshape((1,dim1, df_pvt.shape[1]))
+    print(result_pv.shape)
+
+    print("Quarterization of the Data")
+    qtr_count = result_pv.shape[1]
+    n = result_pv.shape[0]  # - 1
+    # result_pv = result_pv[1:n + 1]
+    results_quarter = np.zeros([4, int(qtr_count / 4), df_pvt.shape[1]])
+    print("Transformation for Quarterly Data")
+    for i in range(0, 4):
+        ids = [x for x in range(i, qtr_count, 4)]
+        results_quarter[i, :, :] = result_pv[:, ids, :]
+    print(results_quarter.shape)
+
+    return result_pv, results_quarter
+
+
+
+
 os.chdir("/Users/phn1x/icdm2018_research_BB/Stress_Test_Research/Loss_projections/data")
-keylist = ["X_loancat","X_ppnr","Y_nco","CapRatios"]
+keylist = ["X_loancat","X_ppnr","Y_nco","CapRatios", "Y_target_CapRatio","Y_target_ncoR"]
 for keyname in [x for x in Preprocess_Dict.keys() if x in keylist]:
     print(keyname)
     data, data_quarter = pd_raw_to_numpy_data(Preprocess_Dict[keyname], fulldatescombine=False,  ReportingDate_Start = "1987 Q1", ReportingDate_End = "2017 Q4")
@@ -2129,5 +2250,17 @@ Preprocess_Dict['data_DateIdx']  = data_Reporting_Ref
 #     np.save("./quarter_based/data_moda_" + keyname + "_quarter.npy", data_quarter)
 
 
+
+
+# tmp_name = os.path.join(os.getcwd(),"./data/BankPerf_Preprocess.pkl")
+# f = open(tmp_name, "wb")
+# pickle.dump(Preprocess_Dict, f)
+# f.close()
+#sys.getsizeof(Preprocess_Dict)
+import pickle
+tmp_name = os.path.join(os.getcwd(),"BankPerf_Preprocess.pkl")
+f = open(tmp_name, "wb")
+pickle.dump(Preprocess_Dict, f)
+f.close()
 
 

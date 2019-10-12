@@ -220,9 +220,9 @@ class RNN(nn.Module):
 
 
 #
-# inputs = inputs_train
+# inputs =  inputs_train_tr
 # targets = targets_train
-# epcho = epoch
+# epcho = 5
 
 def train(inputs, targets, epcho, lstm_lr, threshold):
     

@@ -47,8 +47,13 @@ def preprocess_data(dat, col_names) -> Tuple[TrainData, StandardScaler]:
 
     return TrainData(feats, targs), scale
 
+# inputs  = inputs_train
+# targets = targets_train
+# n_epochs = epoch
+# lr = lstm_lr
+#threshold
 
-def train(inputs, targets, n_epochs, lr, threshold, save_plots=False, debug = False):
+def train(inputs, targets, n_epochs, lr, threshold,save_plots=False, debug = False):
     #Iniit
     #logger = utils.setup_log(tag = "Dual-Attention RNN")
     #logger.info(f"Using computation device: {device}")
@@ -61,6 +66,7 @@ def train(inputs, targets, n_epochs, lr, threshold, save_plots=False, debug = Fa
     m2 = data.targs.shape[2]
     dim_hidden = 64
     da_rnn_kwargs = {"batch_size": m1, "T": 4}
+    #da_rnn_kwargs = {"batch_size": n, "T": 4}
     config, model = da_rnn(data, n_targs=m2, learning_rate=learning_rate, **da_rnn_kwargs)
 
     ##Train
@@ -69,12 +75,13 @@ def train(inputs, targets, n_epochs, lr, threshold, save_plots=False, debug = Fa
     t_cfg = config
 
 
-    iter_per_epoch = int(np.ceil(t_cfg.train_size * 1. / t_cfg.batch_size))
+    iter_per_epoch = 1 #int(np.ceil(t_cfg.train_size * 1. / t_cfg.batch_size))
     iter_losses = np.zeros(n_epochs * iter_per_epoch)
     epoch_losses = np.zeros(n_epochs)
     logger.info(f"Iterations per epoch: {t_cfg.train_size * 1. / t_cfg.batch_size:3.3f} ~ {iter_per_epoch:d}.")
-
+    t_loss = np.inf
     n_iter = 0
+    #e_i = 0
     for e_i in range(n_epochs):
         batch_idx = range(0,train_data.feats.shape[0])
         feats = np.zeros((len(batch_idx), train_data.feats.shape[1],train_data.feats.shape[2]))
@@ -82,11 +89,16 @@ def train(inputs, targets, n_epochs, lr, threshold, save_plots=False, debug = Fa
         y_target = train_data.targs
         feats[:, :, :] = train_data.feats[:, :, :]
         y_history[:,:] = train_data.targs
+
+        # y_history.shape
+        # feats.shape
+        # y_target.shape
         loss = train_iteration(net, t_cfg.loss_func, feats, y_history, y_target)
 
         iter_losses[e_i * iter_per_epoch // t_cfg.batch_size] = loss
         n_iter += 1
         adjust_learning_rate(net, n_iter)
+
 
         epoch_losses[e_i] = np.mean(iter_losses[range(e_i * iter_per_epoch, (e_i + 1) * iter_per_epoch)])
         #logger.info(f"Epoch {e_i:d}, train loss: {epoch_losses[e_i]:4.8f}")
@@ -103,7 +115,13 @@ def train(inputs, targets, n_epochs, lr, threshold, save_plots=False, debug = Fa
                                t_cfg.train_size, t_cfg.batch_size, t_cfg.T,
                                on_train=True)
 
+        if t_loss > loss.data and np.abs(t_loss - loss.data) > threshold:
+            t_loss = loss.data
 
+        else:
+            print(loss.item())
+            print("Done!")
+            break
 
     train_loss = pred_loss
     train_rmse = torch.sqrt(pred_loss)
@@ -259,8 +277,15 @@ class Encoder(nn.Module):
         # input_weighted = Variable(torch.zeros(input_data.size(0), self.T - 1, self.input_size))
         # input_encoded = Variable(torch.zeros(input_data.size(0), self.T - 1, self.hidden_size))
 
+#        else:
         input_weighted = Variable(torch.zeros(input_data.size(0), self.input_size,input_data.shape[1]))
+
         input_encoded = Variable(torch.zeros(input_data.size(0),self.input_size, self.hidden_size))
+
+        #if input_data.shape[1] != input_encoded.shape[1]:
+        #    input_data =  input_data.permute(0, 2, 1)
+
+
 
         #input_weighted = Variable(torch.zeros(input_data.size(0), input_size ,input_data.shape[1]))
         #input_encoded = Variable(torch.zeros(input_data.size(0),input_size, hidden_size))
@@ -282,9 +307,10 @@ class Encoder(nn.Module):
 
 
 # #        for t in range(self.T - 1):
-        for t in range(input_data.shape[1]):
+        for t in range(0,min([input_data.shape[1],input_encoded.shape[1]])):
             #print(t)
             #Eqn. 8: concatenate the hidden states with each predictor
+            #TODO, handling for quarterly, banksplit.  Find proper logic to handle.
             x = torch.cat((hidden.repeat(self.input_size, 1, 1).permute(1, 0, 2),
                            cell.repeat(self.input_size, 1, 1).permute(1, 0, 2),
                            input_data.permute(0, 2, 1)), dim=2)  # batch_size * input_size * (2*hidden_size + T - 1)
@@ -329,6 +355,7 @@ class Encoder(nn.Module):
 
 
             input_weighted[:, :, t] = weighted_input
+            #print(t, input_data.shape,input_encoded.shape, hidden.shape)
             input_encoded[:, t, :] = hidden
             gc.collect()
             torch.cuda.empty_cache()
@@ -462,8 +489,8 @@ class Decoder(nn.Module):
 
 
 
-
-
+# train_data = data
+# batch_size = m1
 
 def da_rnn(train_data: TrainData, n_targs: int, encoder_hidden_size=64, decoder_hidden_size=64,
            T=10, learning_rate=0.01, batch_size=128):
@@ -472,6 +499,7 @@ def da_rnn(train_data: TrainData, n_targs: int, encoder_hidden_size=64, decoder_
     train_cfg = TrainConfig(T, int(train_data.feats.shape[0] * 0.7), batch_size, nn.MSELoss())
     #logger.info(f"Training size: {train_cfg.train_size:d}.")
 
+    #TODO: Need switch to handle bank split quarterly vs. timesplits.
     enc_kwargs = {"input_size": train_data.feats.shape[2], "input_size_attn": train_data.feats.shape[1],"hidden_size": encoder_hidden_size, "T": T}
     encoder = Encoder(**enc_kwargs).to(device)
     with open(os.path.join("data", "enc_kwargs.json"), "w") as fi:

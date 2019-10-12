@@ -52,7 +52,8 @@ class mLSTM(nn.Module):
 
 
 
-
+#inputs = inputs_train
+#targets = targets_train
 def train(inputs, targets, epcho, lstm_lr, threshold):
     
     t, m1, n = inputs.shape
@@ -69,6 +70,7 @@ def train(inputs, targets, epcho, lstm_lr, threshold):
     for i in range(0, epcho):
         m_optimizer.zero_grad()
         outputs = m_LSTM.forward(inputs)
+
         loss = m_loss(outputs, targets)
         loss_rmse = torch.sqrt(m_loss(outputs, targets))
         loss_rmse.backward(retain_graph=True)
