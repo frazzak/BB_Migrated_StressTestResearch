@@ -206,21 +206,65 @@ class BHC_CSMAR_TLF():
                 self.BHC_Data_Raw.to_csv(existspath, sep = ',', index = False)
 
         return
-    def BHC_MarcoEcon_Load(self):
+    def BHC_MarcoEcon_Load(self,exclude_columns = ["Date"]):
         # Load EconData BHC
-        self.logger.info(f"BHC EconData Loading and Clearning: Started")
-        print("Loading BHC EconData Files")
+        # Load Files
+        self.logger.info(f"BHC EconData Loading and Cleaning: Started")
         tmp_dict = {}
-
-        for k, v in self.file_dict.items():
+        for k, v in test.file_dict.items():
             if k.startswith("BHC_MacroData"):
                 print("Initializing:", k)
                 print("Loading File:", v)
-                tmp_dict[k] = pd.read_csv(v, skiprows=1)
+                tmp_dict[k] = pd.read_csv(v)
                 print("Loading Complete")
 
 
+        if len(tmp_dict.keys()) > 0:
+            # Clean both, alter date formatting, subset, combine, normalize, dim reduction.
+            print("Combine and Merge")
+            dfs = list()
+            for k in tmp_dict.keys():
+                print(k)
+                tmp_dict[k]["Date"] = pd.to_datetime(tmp_dict[k]["Date"].apply(
+                    lambda x: x.replace(' Q1', "-03-31").replace(" Q2", '-06-30').replace(" Q3", '-09-30').replace(" Q4","-12-31")),errors='coerce')
+                dfs.append(tmp_dict[k])
 
+            print("Combine List with Left Merge")
+            tmp_final_df = reduce(lambda left, right: pd.merge(left, right, on="Date", how="left"), dfs)
+
+            print("Drop Columns")
+            tmp_final_df = tmp_final_df[tmp_final_df.columns.difference([x for x in tmp_final_df.columns if x.startswith("Scenario Name")])]
+
+            print("Normalize DF")
+
+            print("Interpolate")
+            # df = tmp_final_df.fillna(method= 'bfill').fillna(method= 'ffill')
+            df = tmp_final_df.interpolate(method='linear')
+            df = df.fillna(method='bfill').fillna(method='ffill')
+
+            print("Normalizing Data Frame")
+            df_tmp = df[tmp_final_df.columns.difference(exclude_columns)]
+            df_tmp = df_tmp.astype(float)
+            scale = StandardScaler()
+            x_train = df_tmp
+            columns = x_train.columns
+            x_train = scale.fit_transform(x_train)
+            x_train_normalized = pd.DataFrame(x_train)  # It is required to have X converted into a data frame to later plotting need
+            # print("Reapplying Column Names")
+            x_train_normalized.columns = columns
+            df_norm = x_train_normalized
+            print("Recombining Excluded Columns")
+            df_norm = pd.concat([tmp_final_df[exclude_columns].reset_index(drop=True), df_norm.reset_index(drop=True)],axis=1)
+
+            # PCA
+            print("Performing PCA dimension reduction")
+            x_train_normalized = df_norm[df_norm.columns.difference(exclude_columns)]
+            pca = PCA(n_components=n_components)
+            x_train_projected = pca.fit_transform(x_train_normalized)
+            pca_cols = ['PCA_' + str(i) for i in range(0, x_train_projected.shape[1])]
+            pca_df = pd.DataFrame(x_train_projected, columns=pca_cols).reset_index(drop=True)
+            pca_normalized = pd.concat([df_norm[exclude_columns].reset_index(drop=True), pca_df], axis=1)
+            self.BHC_EconData_PCA = pca_normalized
 
         return
 
@@ -317,26 +361,8 @@ gc.collect()
 # #Load EconData CSMAR
 test.CSMAR_MacroEcon_Load()
 
+test.CSMAR_EconData_PCA
+
 #Load EconData BHC
-
-tmp_dict = {}
-
-for k, v in test.file_dict.items():
-    if k.startswith("BHC_MacroData"):
-        print("Initializing:", k)
-        print("Loading File:", v)
-        tmp_dict[k] = pd.read_csv(v)
-        print("Loading Complete")
-
-
-tmp_dict.keys()
-
-#Clean both, alter date formatting, subset, combine, normalize, dim reduction.
-
-
-
-
-
-
-
+test.BHC_MarcoEcon_Load()
 
