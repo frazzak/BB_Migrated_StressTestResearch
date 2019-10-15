@@ -338,6 +338,13 @@ class BHC_CSMAR_TLF():
             self.CSMAR_EconData_PCA = pca_normalized
         return
 
+    def Input_Target_Subsetting(self):
+        return
+
+    def Pd_to_3dNumpy(selfs):
+        return
+
+
 
 #Loading Initi Class
 test = BHC_CSMAR_TLF()
@@ -348,11 +355,11 @@ test = BHC_CSMAR_TLF()
 #Configure BHC Codes Method to then subset CSMAR and BHC
 test.load_BHC_CSMAR_Codes()
 
-
+test.Codes_Dict
 
 #Load CSMAR Files , Merge (Comp Profile, Balance Sheet and Income Statement), Subset.
 test.CSMAR_Data_MergeLoad()
-#test.CSMAR_Data_Raw
+#test.CSMAR_Data_Raw['A003105000']
 
 #Load BHC files, Filter based on consecutive qtrs, top banksm data formatting and subsetting.
 test.BHC_Data_Load()
@@ -363,6 +370,124 @@ test.CSMAR_MacroEcon_Load()
 
 test.CSMAR_EconData_PCA
 
-#Load EconData BHC
+#Load EconData BHC #TODO: Get newest US Macroeconomics data
 test.BHC_MarcoEcon_Load()
+
+#Transform Data into appropirate Tensor Formatting
+
+
+    #Extract target and domain target values and input values. #TODO: Need to isolate target and input variables accordingly.
+    BHC_X
+    BHC_Y
+        #target
+        test.BHC_Data_Raw['BHCT3247'].describe()
+
+
+
+    CSMAR_X
+    CSMAR_Y
+        #target
+        #test.CSMAR_Data_Raw['A003105000']
+    #Tranform to 3 dimension array for EconData and Banking Data
+
+    #Save them to a Dictionary to be used for splitting and modeling later.
+
+
+    #Modeling, Cross Validation for time series incorporated.
+
+
+#def pd_raw_to_numpy_data(df, fulldatescombine = True, ReportingDate_Start = "1990 Q1", ReportingDate_End = "2016 Q4"):
+df = test.BHC_Data_Raw
+
+#test.CSMAR_Data_Raw[datecol] = pd.to_datetime(df[datecol], format = '%Y%m%d')
+
+#df = test.CSMAR_Data_Raw
+
+
+datecol = "RSSD9999"
+
+#datecol = "ACCPER"
+
+fulldatescombine = True
+
+ReportingDate_Start = "1990-01-01"
+ReportingDate_End = "2018-12-31"
+
+idcol = 'RSSD9001'
+#idcol = 'STKCD'
+
+df[datecol].nunique()
+
+#TODO: May need to extract target vector before converting.
+
+#Date Merge to have meshed dates
+if fulldatescombine:
+    #print("Generating Full Mesh RSSD_ID and Reporting Date to left join to.")
+    RepordingDate_Df = pd.DataFrame(df[datecol].unique())
+    RepordingDate_Df = RepordingDate_Df.rename({0: datecol}, axis=1)
+    RepordingDate_Df["key"] = 0
+
+    BankIds_Df = pd.DataFrame(df[idcol].unique())
+    BankIds_Df = BankIds_Df.rename({0: idcol}, axis=1)
+    BankIds_Df["key"] = 0
+
+    BankID_Date_Ref = RepordingDate_Df.assign(foo=1).merge(BankIds_Df.assign(foo=1), on="foo", how="outer").drop(
+        ["foo", "key_x", "key_y"], 1)
+
+
+
+    df_pd = BankID_Date_Ref.merge(df, left_on=[datecol, idcol],
+                                    right_on=[datecol, idcol], how="left")
+
+else:
+    df_pd = df
+
+
+
+
+    #df_pd.columns
+    #print(df_pd.shape)
+    print("Subsetting Dates from Dataframe")
+    df_pd = df_pd[(df_pd[datecol] >= ReportingDate_Start) & (df_pd[datecol] <= ReportingDate_End)]
+    print(df_pd.shape)
+
+    print("Pivoting Pandas Table to be Indexed by RSSD_ID and ReportingDate")
+    df_pvt = pd.pivot_table(df_pd, index=[idcol, datecol], dropna = False)
+    print(df_pvt.shape)
+
+    print("Preparing to Reshape and output as Numpy Array")
+    dim1 = df_pvt.index.get_level_values(idcol).nunique()
+    dim2 = df_pvt.index.get_level_values(datecol).nunique()
+    print("Reshaping into 3 dimensional NumPy array")
+
+
+    result_pv = df_pvt.values.reshape((dim1, dim2, df_pvt.shape[1]))
+    print(result_pv.shape)
+
+
+
+    print("Quarterization of the Data")
+    qtr_count = result_pv.shape[1]
+    n = result_pv.shape[0]  # - 1
+    # result_pv = result_pv[1:n + 1]
+    results_quarter = np.zeros([4, n, int(qtr_count / 4), df_pvt.shape[1]])
+
+
+    print("Transformation for Quarterly Data")
+    for i in range(0, 4):
+        ids = [x for x in range(i, qtr_count, 4)]
+        results_quarter[i, :, :, :] = result_pv[:, ids, :]
+    print(results_quarter.shape)
+
+    return result_pv, results_quarter
+
+
+
+
+
+
+#Split the Data for Training, Validation, Testing.(Seperate Input Training\Testing from Target Training and Target Testing
+
+#Modeling, (Linear, Deep Models, then try Transfer Learing straight forward methods
+
 
