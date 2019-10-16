@@ -137,6 +137,10 @@ class BHC_CSMAR_TLF():
             df  = df[[idcol.upper(), "ACCPER"] + test.Codes_Dict["CSMAR_Codes"]]
             self.logger.info(f"CSMAR Data Filtering and Object Merging: Completed")
 
+            df['ACCPER'] = pd.to_datetime(df['ACCPER'], format = '%Y%m%d')
+            df['ACCPER'][(pd.to_datetime(df['ACCPER']).dt.day == 1) & (pd.to_datetime(df['ACCPER']).dt.month == 1)] = df['ACCPER'][(pd.to_datetime(df['ACCPER']).dt.day == 1) & (pd.to_datetime(df['ACCPER']).dt.month == 1)].apply(
+                lambda x: pd.to_datetime(str(pd.to_datetime(x).year - 1) + '-12-31'))
+
             gc.collect()
             self.CSMAR_Data_Raw = df
             self.CSMAR_Data_Raw.to_csv(existspath, sep = ',', index = False)
@@ -206,7 +210,7 @@ class BHC_CSMAR_TLF():
                 self.BHC_Data_Raw.to_csv(existspath, sep = ',', index = False)
 
         return
-    def BHC_MarcoEcon_Load(self,exclude_columns = ["Date"]):
+    def BHC_MarcoEcon_Load(self,exclude_columns = ["Date"], n_components = 12):
         # Load EconData BHC
         # Load Files
         self.logger.info(f"BHC EconData Loading and Cleaning: Started")
@@ -338,10 +342,54 @@ class BHC_CSMAR_TLF():
             self.CSMAR_EconData_PCA = pca_normalized
         return
 
-    def Input_Target_Subsetting(self):
+    def Bank_Data_Subsetting(self,bhc_id_cols = ['RSSD9001', 'RSSD9999'], bhc_target_cols = ['BHCT3247'], bhc_exclude_cols = ['RSSD9017'],csmar_id_cols = ['STKCD', 'ACCPER'], csmar_target_cols = ['A003105000'], csmar_exclude_cols = [],
+                             bank_dates = ['1991-12-31','2018-12-31'], econ_dates = ['1991-12-31','2018-12-31']):
+        self.logger.info(f"Subsetting Bank Input and Target Data: Started")
+        print("Subsetting Inputs and Targets for BHC")
+        # inputs
+        BHC_X = self.BHC_Data_Raw[self.BHC_Data_Raw.columns.difference(bhc_target_cols + bhc_exclude_cols)]
+        BHC_X = BHC_X.rename({bhc_id_cols[0]:"ID", bhc_id_cols[1]:"DATE"}, axis = 1)
+
+        # target
+        BHC_Y = self.BHC_Data_Raw[bhc_id_cols + bhc_target_cols]
+        BHC_Y = BHC_Y.rename({bhc_id_cols[0]: "ID", bhc_id_cols[1]: "DATE"}, axis=1)
+
+
+
+        print("Subsetting Inputs and Targets for CSMAR")
+        CSMAR_X = self.CSMAR_Data_Raw[self.CSMAR_Data_Raw.columns.difference(csmar_target_cols + csmar_exclude_cols)]
+        CSMAR_X = CSMAR_X.rename({csmar_id_cols[0]: "ID", csmar_id_cols[1]: "DATE"}, axis=1)
+
+        CSMAR_Y = self.CSMAR_Data_Raw[csmar_id_cols + csmar_target_cols]
+        CSMAR_Y = CSMAR_Y.rename({csmar_id_cols[0]: "ID", csmar_id_cols[1]: "DATE"}, axis=1)
+
+
+
+        print("Saving to Data Dict")
+        self.Data_Dict = dict()
+        self.Data_Dict['BHC_X'] = BHC_X
+        self.Data_Dict['BHC_Y'] = BHC_Y
+        self.Data_Dict['BHC_ECON_X'] = self.BHC_EconData_PCA.rename({'Date': "DATE"}, axis=1)
+
+        self.Data_Dict['CSMAR_X'] = CSMAR_X
+        self.Data_Dict['CSMAR_Y'] = CSMAR_Y
+        self.Data_Dict['CSMAR_ECON_X'] = self.CSMAR_EconData_PCA.rename({'q_dates_data': "DATE"}, axis=1)
+
+
+        print('Subsetting Dataset Dates')
+
+        for k in self.Data_Dict.keys():
+            print(k, 'Processing')
+            if 'ECON' in k:
+
+                self.Data_Dict[k] = self.Data_Dict[k][(self.Data_Dict[k]['DATE'] >= econ_dates[0]) & (self.Data_Dict[k]['DATE'] <= econ_dates[1])]
+                print(k,'Completed')
+            else:
+                self.Data_Dict[k] = self.Data_Dict[k][(self.Data_Dict[k]['DATE'] >= bank_dates[0]) & (self.Data_Dict[k]['DATE'] <= bank_dates[1])]
+                print(k, 'Completed')
         return
 
-    def Pd_to_3dNumpy(selfs):
+    def Pd_to_3dNumpy(self):
         return
 
 
@@ -349,137 +397,170 @@ class BHC_CSMAR_TLF():
 #Loading Initi Class
 test = BHC_CSMAR_TLF()
 
-
-
-
 #Configure BHC Codes Method to then subset CSMAR and BHC
 test.load_BHC_CSMAR_Codes()
 
-test.Codes_Dict
-
 #Load CSMAR Files , Merge (Comp Profile, Balance Sheet and Income Statement), Subset.
-test.CSMAR_Data_MergeLoad()
-#test.CSMAR_Data_Raw['A003105000']
+test.CSMAR_Data_MergeLoad(checkfileexists=False)
 
 #Load BHC files, Filter based on consecutive qtrs, top banksm data formatting and subsetting.
 test.BHC_Data_Load()
 
-gc.collect()
-# #Load EconData CSMAR
+#Load EconData CSMAR
 test.CSMAR_MacroEcon_Load()
-
-test.CSMAR_EconData_PCA
 
 #Load EconData BHC #TODO: Get newest US Macroeconomics data
 test.BHC_MarcoEcon_Load()
 
 #Transform Data into appropirate Tensor Formatting
+#Extract target and domain target values and input values. #TODO: Need to isolate target and input variables accordingly.
+test.Bank_Data_Subsetting()
 
 
-    #Extract target and domain target values and input values. #TODO: Need to isolate target and input variables accordingly.
-    BHC_X
-    BHC_Y
-        #target
-        test.BHC_Data_Raw['BHCT3247'].describe()
+test.Data_Dict.keys()
+
+fulldatescombine = True
+qtr_data = True
+datecol = 'DATE'
+idcol = 'ID'
+
+dates = ["2002-12-31", "2018-09-30"]
+econ_dates = ["2002-12-31", "2018-09-30"]
+test.Data_Dict_NPY = dict()
+
+#Tranform to 3 dimension array for EconData and Banking Data
+for k in test.Data_Dict.keys():
+    #print(k)
+    #k = 'BHC_ECON_X'
+    if 'ECON' not in k:
+        df = test.Data_Dict[k]
+        if fulldatescombine:
+            # print("Generating Full Mesh RSSD_ID and Reporting Date to left join to.")
+            RepordingDate_Df = pd.DataFrame(df[datecol].unique())
+            RepordingDate_Df = RepordingDate_Df.rename({0: datecol}, axis=1)
+            RepordingDate_Df["key"] = 0
+
+            BankIds_Df = pd.DataFrame(df[idcol].unique())
+            BankIds_Df = BankIds_Df.rename({0: idcol}, axis=1)
+            BankIds_Df["key"] = 0
+
+            BankID_Date_Ref = RepordingDate_Df.assign(foo=1).merge(BankIds_Df.assign(foo=1), on="foo", how="outer").drop(
+                ["foo", "key_x", "key_y"], 1)
+
+            df_pd = BankID_Date_Ref.merge(df, left_on=[datecol, idcol],
+                                          right_on=[datecol, idcol], how="left")
+    else:
+        df_pd = test.Data_Dict[k]
 
 
 
-    CSMAR_X
-    CSMAR_Y
-        #target
-        #test.CSMAR_Data_Raw['A003105000']
-    #Tranform to 3 dimension array for EconData and Banking Data
+    if 'ECON' not in k:
+        print("Subsetting Dates from Dataframe")
+        df_pd = df_pd[(df_pd[datecol] >= dates[0]) & (df_pd[datecol] <= dates[1])]
+        print(df_pd.shape)
 
+        print("Pivoting Pandas Table to be Indexed by RSSD_ID and ReportingDate")
+        df_pvt = pd.pivot_table(df_pd, index=[idcol, datecol], dropna=False)
+        print(df_pvt.shape)
+
+        print("Preparing to Reshape and output as Numpy Array")
+        dim1 = df_pvt.index.get_level_values(idcol).nunique()
+        dim2 = df_pvt.index.get_level_values(datecol).nunique()
+        print("Reshaping into 3 dimensional NumPy array")
+
+        result_pv = df_pvt.values.reshape((dim1, dim2, df_pvt.shape[1]))
+        print(result_pv.shape)
+
+        if qtr_data:
+            print("Quarterization of the Data")
+            qtr_count = result_pv.shape[1]
+            n = result_pv.shape[0]  # - 1
+            # result_pv = result_pv[1:n + 1]
+            results_quarter = np.zeros([4, n, int(qtr_count / 4), df_pvt.shape[1]])
+
+
+            print("Transformation for Quarterly Data")
+            for i in range(0, 4):
+                ids = [x for x in range(i, qtr_count, 4)]
+                results_quarter[i, :, :, :] = result_pv[:, ids, :]
+            print(results_quarter.shape)
+
+    else:
+        print(k, df_pd.shape)
+        print("Subsetting Dates from Dataframe")
+        df_pd = df_pd[(df_pd[datecol] >= econ_dates[0]) & (df_pd[datecol] <= econ_dates[1])]
+        print(df_pd.shape)
+
+        print("Pivoting Pandas Table to be Indexed by ReportingDate")
+        df_pvt = pd.pivot_table(df_pd, index=[datecol],dropna = False)
+        print(df_pvt.shape)
+
+        print("Preparing to Reshape and output as Numpy Array")
+        # dim1 = df_pvt.index.get_level_values('RSSD_ID').nunique()
+        dim1 = df_pvt.index.get_level_values('DATE').nunique()
+        print("Reshaping into 3 dimensional NumPy array")
+        result_pv = df_pvt.values.reshape((1, dim1, df_pvt.shape[1]))
+        print(result_pv.shape)
+
+
+
+        if qtr_data:
+            print("Quarterization of the Data")
+            qtr_count = result_pv.shape[1]
+            n = result_pv.shape[0]  # - 1
+            # result_pv = result_pv[1:n + 1]
+            results_quarter = np.zeros([4, int(qtr_count / 4), df_pvt.shape[1]])
+            print("Transformation for Quarterly Data")
+            for i in range(0, 4):
+                ids = [x for x in range(i, qtr_count, 4)]
+                results_quarter[i, :, :] = result_pv[:, ids, :]
+            print(results_quarter.shape)
+
+    print("Exporting and Saving :", k)
     #Save them to a Dictionary to be used for splitting and modeling later.
+    print("Saving objects to file")
+    np.save(k + ".npy", result_pv)
+    if qtr_data:
+        np.save(k + "_qtr.npy", results_quarter)
 
+    print("Saving to class dict")
+    test.Data_Dict_NPY[k] = result_pv
+    if qtr_data:
+        test.Data_Dict_NPY[k + '_qtr'] = results_quarter
+    #return
+
+
+
+test.Data_Dict_NPY['BHC_X'].shape
+test.Data_Dict_NPY['BHC_Y'].shape
+test.Data_Dict_NPY['BHC_ECON_X'].shape
+
+
+test.Data_Dict_NPY['BHC_X_qtr'].shape
+test.Data_Dict_NPY['BHC_Y_qtr'].shape
+test.Data_Dict_NPY['BHC_ECON_X_qtr'].shape
+
+
+
+test.Data_Dict_NPY['CSMAR_X_qtr'].shape
+test.Data_Dict_NPY['CSMAR_Y_qtr'].shape
+test.Data_Dict_NPY['CSMAR_ECON_X_qtr'].shape
+
+
+
+    #Data Train Test splitting
 
     #Modeling, Cross Validation for time series incorporated.
 
 
-#def pd_raw_to_numpy_data(df, fulldatescombine = True, ReportingDate_Start = "1990 Q1", ReportingDate_End = "2016 Q4"):
-df = test.BHC_Data_Raw
-
-#test.CSMAR_Data_Raw[datecol] = pd.to_datetime(df[datecol], format = '%Y%m%d')
-
-#df = test.CSMAR_Data_Raw
-
-
-datecol = "RSSD9999"
-
-#datecol = "ACCPER"
-
-fulldatescombine = True
-
-ReportingDate_Start = "1990-01-01"
-ReportingDate_End = "2018-12-31"
-
-idcol = 'RSSD9001'
-#idcol = 'STKCD'
-
-df[datecol].nunique()
-
-#TODO: May need to extract target vector before converting.
-
-#Date Merge to have meshed dates
-if fulldatescombine:
-    #print("Generating Full Mesh RSSD_ID and Reporting Date to left join to.")
-    RepordingDate_Df = pd.DataFrame(df[datecol].unique())
-    RepordingDate_Df = RepordingDate_Df.rename({0: datecol}, axis=1)
-    RepordingDate_Df["key"] = 0
-
-    BankIds_Df = pd.DataFrame(df[idcol].unique())
-    BankIds_Df = BankIds_Df.rename({0: idcol}, axis=1)
-    BankIds_Df["key"] = 0
-
-    BankID_Date_Ref = RepordingDate_Df.assign(foo=1).merge(BankIds_Df.assign(foo=1), on="foo", how="outer").drop(
-        ["foo", "key_x", "key_y"], 1)
-
-
-
-    df_pd = BankID_Date_Ref.merge(df, left_on=[datecol, idcol],
-                                    right_on=[datecol, idcol], how="left")
-
-else:
-    df_pd = df
 
 
 
 
-    #df_pd.columns
-    #print(df_pd.shape)
-    print("Subsetting Dates from Dataframe")
-    df_pd = df_pd[(df_pd[datecol] >= ReportingDate_Start) & (df_pd[datecol] <= ReportingDate_End)]
-    print(df_pd.shape)
-
-    print("Pivoting Pandas Table to be Indexed by RSSD_ID and ReportingDate")
-    df_pvt = pd.pivot_table(df_pd, index=[idcol, datecol], dropna = False)
-    print(df_pvt.shape)
-
-    print("Preparing to Reshape and output as Numpy Array")
-    dim1 = df_pvt.index.get_level_values(idcol).nunique()
-    dim2 = df_pvt.index.get_level_values(datecol).nunique()
-    print("Reshaping into 3 dimensional NumPy array")
-
-
-    result_pv = df_pvt.values.reshape((dim1, dim2, df_pvt.shape[1]))
-    print(result_pv.shape)
 
 
 
-    print("Quarterization of the Data")
-    qtr_count = result_pv.shape[1]
-    n = result_pv.shape[0]  # - 1
-    # result_pv = result_pv[1:n + 1]
-    results_quarter = np.zeros([4, n, int(qtr_count / 4), df_pvt.shape[1]])
 
-
-    print("Transformation for Quarterly Data")
-    for i in range(0, 4):
-        ids = [x for x in range(i, qtr_count, 4)]
-        results_quarter[i, :, :, :] = result_pv[:, ids, :]
-    print(results_quarter.shape)
-
-    return result_pv, results_quarter
 
 
 
@@ -491,3 +572,55 @@ else:
 #Modeling, (Linear, Deep Models, then try Transfer Learing straight forward methods
 
 
+
+
+
+
+
+        # print("Calculating if DataFrame has appropriate length and quarters.")
+        # reporting_date_lst = list()
+        # for year_num in range(int(ReportingDate_Start.split(" ")[0]), int(ReportingDate_End.split(" ")[0]) + 1):
+        #     for qtr_num in range(1, 5):
+        #         reporting_date_lst.append(str(year_num) + " Q" + str(qtr_num))
+        # ReportingDate_DF = pd.DataFrame(reporting_date_lst, columns=["ReportingDate"])
+        # ReportingDate_DF = pd.DataFrame(list(ReportingDate_DF[
+        #                                          (ReportingDate_DF["ReportingDate"] >= ReportingDate_Start) & (
+        #                                                      ReportingDate_DF["ReportingDate"] <= ReportingDate_End)][
+        #                                          "ReportingDate"].unique()),
+        #                                 columns=["ReportingDate"])
+        #
+        # if ReportingDate_DF.shape[0] == df.shape[0] and all(
+        #         elem in list(df.ReportingDate.unique()) for elem in list(ReportingDate_DF.ReportingDate)):
+        #     print("Dates and Rows Validated")
+        #     df_pd = df
+        # else:
+        #     df_pd = ReportingDate_DF.merge(df, left_on=["ReportingDate"], right_on=["ReportingDate"], how="left")
+        #     df_pd.interpolate(method="polynomial", order=2).fillna(method="bfill").fillna(method="ffill").dropna(axis=1,
+        #                                                                                                          how='all')
+
+        print(df_pd.shape)
+        print("Subsetting Dates from Dataframe")
+        df_pd = df_pd[(df_pd["ReportingDate"] >= ReportingDate_Start) & (df_pd["ReportingDate"] <= ReportingDate_End)]
+        print(df_pd.shape)
+
+        print("Pivoting Pandas Table to be Indexed by RSSD_ID and ReportingDate")
+        df_pvt = pd.pivot_table(df_pd, index=["ReportingDate"])
+        print(df_pvt.shape)
+
+        print("Preparing to Reshape and output as Numpy Array")
+        # dim1 = df_pvt.index.get_level_values('RSSD_ID').nunique()
+        dim1 = df_pvt.index.get_level_values('ReportingDate').nunique()
+        print("Reshaping into 3 dimensional NumPy array")
+        result_pv = df_pvt.values.reshape((1, dim1, df_pvt.shape[1]))
+        print(result_pv.shape)
+
+        print("Quarterization of the Data")
+        qtr_count = result_pv.shape[1]
+        n = result_pv.shape[0]  # - 1
+        # result_pv = result_pv[1:n + 1]
+        results_quarter = np.zeros([4, int(qtr_count / 4), df_pvt.shape[1]])
+        print("Transformation for Quarterly Data")
+        for i in range(0, 4):
+            ids = [x for x in range(i, qtr_count, 4)]
+            results_quarter[i, :, :] = result_pv[:, ids, :]
+        print(results_quarter.shape)
