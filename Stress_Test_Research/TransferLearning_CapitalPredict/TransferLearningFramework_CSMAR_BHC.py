@@ -1,7 +1,9 @@
 import logging
+import torch
 from functools import reduce
-import gc
-
+import os,sys,gc
+import pandas as pd
+import numpy as np
 
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
@@ -389,7 +391,110 @@ class BHC_CSMAR_TLF():
                 print(k, 'Completed')
         return
 
-    def Pd_to_3dNumpy(self):
+    def Data_Process_PD_Numpy3d(self, fulldatescombine = True, qtr_data = True, datecol = 'DATE', idcol = 'ID', dates = ["2002-12-31", "2018-09-30"], econ_dates = ["2002-12-31", "2018-09-30"]):
+
+        self.logger.info(f"Tranform to 3 dimension array for EconData and Banking Data: Started")
+
+        self.Data_Dict_NPY = dict()
+
+
+        for k in self.Data_Dict.keys():
+            # print(k)
+            # k = 'BHC_ECON_X'
+            if 'ECON' not in k:
+                df = self.Data_Dict[k]
+
+                if fulldatescombine:
+                    print("Generating Full Mesh", idcol," and ",datecol, " to left join to.")
+                    RepordingDate_Df = pd.DataFrame(df[datecol].unique())
+                    RepordingDate_Df = RepordingDate_Df.rename({0: datecol}, axis=1)
+                    RepordingDate_Df["key"] = 0
+
+                    BankIds_Df = pd.DataFrame(df[idcol].unique())
+                    BankIds_Df = BankIds_Df.rename({0: idcol}, axis=1)
+                    BankIds_Df["key"] = 0
+
+                    BankID_Date_Ref = RepordingDate_Df.assign(foo=1).merge(BankIds_Df.assign(foo=1), on="foo",
+                                                                           how="outer").drop(["foo", "key_x", "key_y"], 1)
+
+                    df_pd = BankID_Date_Ref.merge(df, left_on=[datecol, idcol],
+                                                  right_on=[datecol, idcol], how="left")
+                    print("Merge Completed")
+            else:
+                print("No Dates Merging needed for ECON data")
+                df_pd = test.Data_Dict[k]
+
+            if 'ECON' not in k:
+                print("Subsetting Dates from Dataframe")
+                df_pd = df_pd[(df_pd[datecol] >= dates[0]) & (df_pd[datecol] <= dates[1])]
+                print(df_pd.shape)
+
+                print("Pivoting Pandas Table to be Indexed by RSSD_ID and ReportingDate")
+                df_pvt = pd.pivot_table(df_pd, index=[idcol, datecol], dropna=False)
+                print(df_pvt.shape)
+
+                print("Preparing to Reshape and output as Numpy Array")
+                dim1 = df_pvt.index.get_level_values(idcol).nunique()
+                dim2 = df_pvt.index.get_level_values(datecol).nunique()
+                print("Reshaping into 3 dimensional NumPy array")
+
+                result_pv = df_pvt.values.reshape((dim1, dim2, df_pvt.shape[1]))
+                print(result_pv.shape)
+
+                if qtr_data:
+                    print("Quarterization of the Data")
+                    qtr_count = result_pv.shape[1]
+                    n = result_pv.shape[0]  # - 1
+                    # result_pv = result_pv[1:n + 1]
+                    results_quarter = np.zeros([4, n, int(qtr_count / 4), df_pvt.shape[1]])
+
+                    print("Transformation for Quarterly Data")
+                    for i in range(0, 4):
+                        ids = [x for x in range(i, qtr_count, 4)]
+                        results_quarter[i, :, :, :] = result_pv[:, ids, :]
+                    print(results_quarter.shape)
+
+            else:
+                print(k, df_pd.shape)
+                print("Subsetting Dates from Dataframe")
+                df_pd = df_pd[(df_pd[datecol] >= econ_dates[0]) & (df_pd[datecol] <= econ_dates[1])]
+                print(df_pd.shape)
+
+                print("Pivoting Pandas Table to be Indexed by ReportingDate")
+                df_pvt = pd.pivot_table(df_pd, index=[datecol], dropna=False)
+                print(df_pvt.shape)
+
+                print("Preparing to Reshape and output as Numpy Array")
+                # dim1 = df_pvt.index.get_level_values('RSSD_ID').nunique()
+                dim1 = df_pvt.index.get_level_values('DATE').nunique()
+                print("Reshaping into 3 dimensional NumPy array")
+                result_pv = df_pvt.values.reshape((1, dim1, df_pvt.shape[1]))
+                print(result_pv.shape)
+
+                if qtr_data:
+                    print("Quarterization of the Data")
+                    qtr_count = result_pv.shape[1]
+                    n = result_pv.shape[0]  # - 1
+                    # result_pv = result_pv[1:n + 1]
+                    results_quarter = np.zeros([4, int(qtr_count / 4), df_pvt.shape[1]])
+                    print("Transformation for Quarterly Data")
+                    for i in range(0, 4):
+                        ids = [x for x in range(i, qtr_count, 4)]
+                        results_quarter[i, :, :] = result_pv[:, ids, :]
+                    print(results_quarter.shape)
+
+            print("Exporting and Saving :", k)
+            # Save them to a Dictionary to be used for splitting and modeling later.
+            print("Saving objects to file")
+            np.save(k + ".npy", result_pv)
+            if qtr_data:
+                np.save(k + "_qtr.npy", results_quarter)
+
+            print("Saving to class dict")
+            self.Data_Dict_NPY[k] = result_pv
+            if qtr_data:
+                self.Data_Dict_NPY[k + '_qtr'] = results_quarter
+
         return
 
 
@@ -401,7 +506,7 @@ test = BHC_CSMAR_TLF()
 test.load_BHC_CSMAR_Codes()
 
 #Load CSMAR Files , Merge (Comp Profile, Balance Sheet and Income Statement), Subset.
-test.CSMAR_Data_MergeLoad(checkfileexists=False)
+test.CSMAR_Data_MergeLoad()
 
 #Load BHC files, Filter based on consecutive qtrs, top banksm data formatting and subsetting.
 test.BHC_Data_Load()
@@ -417,138 +522,14 @@ test.BHC_MarcoEcon_Load()
 test.Bank_Data_Subsetting()
 
 
-test.Data_Dict.keys()
+test.Data_Process_PD_Numpy3d()
 
-fulldatescombine = True
-qtr_data = True
-datecol = 'DATE'
-idcol = 'ID'
+test.Data_Dict_NPY.keys()
 
-dates = ["2002-12-31", "2018-09-30"]
-econ_dates = ["2002-12-31", "2018-09-30"]
-test.Data_Dict_NPY = dict()
-
-#Tranform to 3 dimension array for EconData and Banking Data
-for k in test.Data_Dict.keys():
-    #print(k)
-    #k = 'BHC_ECON_X'
-    if 'ECON' not in k:
-        df = test.Data_Dict[k]
-        if fulldatescombine:
-            # print("Generating Full Mesh RSSD_ID and Reporting Date to left join to.")
-            RepordingDate_Df = pd.DataFrame(df[datecol].unique())
-            RepordingDate_Df = RepordingDate_Df.rename({0: datecol}, axis=1)
-            RepordingDate_Df["key"] = 0
-
-            BankIds_Df = pd.DataFrame(df[idcol].unique())
-            BankIds_Df = BankIds_Df.rename({0: idcol}, axis=1)
-            BankIds_Df["key"] = 0
-
-            BankID_Date_Ref = RepordingDate_Df.assign(foo=1).merge(BankIds_Df.assign(foo=1), on="foo", how="outer").drop(
-                ["foo", "key_x", "key_y"], 1)
-
-            df_pd = BankID_Date_Ref.merge(df, left_on=[datecol, idcol],
-                                          right_on=[datecol, idcol], how="left")
-    else:
-        df_pd = test.Data_Dict[k]
+#Data Train Test splitting
+#Consider Index to Dates
 
 
-
-    if 'ECON' not in k:
-        print("Subsetting Dates from Dataframe")
-        df_pd = df_pd[(df_pd[datecol] >= dates[0]) & (df_pd[datecol] <= dates[1])]
-        print(df_pd.shape)
-
-        print("Pivoting Pandas Table to be Indexed by RSSD_ID and ReportingDate")
-        df_pvt = pd.pivot_table(df_pd, index=[idcol, datecol], dropna=False)
-        print(df_pvt.shape)
-
-        print("Preparing to Reshape and output as Numpy Array")
-        dim1 = df_pvt.index.get_level_values(idcol).nunique()
-        dim2 = df_pvt.index.get_level_values(datecol).nunique()
-        print("Reshaping into 3 dimensional NumPy array")
-
-        result_pv = df_pvt.values.reshape((dim1, dim2, df_pvt.shape[1]))
-        print(result_pv.shape)
-
-        if qtr_data:
-            print("Quarterization of the Data")
-            qtr_count = result_pv.shape[1]
-            n = result_pv.shape[0]  # - 1
-            # result_pv = result_pv[1:n + 1]
-            results_quarter = np.zeros([4, n, int(qtr_count / 4), df_pvt.shape[1]])
-
-
-            print("Transformation for Quarterly Data")
-            for i in range(0, 4):
-                ids = [x for x in range(i, qtr_count, 4)]
-                results_quarter[i, :, :, :] = result_pv[:, ids, :]
-            print(results_quarter.shape)
-
-    else:
-        print(k, df_pd.shape)
-        print("Subsetting Dates from Dataframe")
-        df_pd = df_pd[(df_pd[datecol] >= econ_dates[0]) & (df_pd[datecol] <= econ_dates[1])]
-        print(df_pd.shape)
-
-        print("Pivoting Pandas Table to be Indexed by ReportingDate")
-        df_pvt = pd.pivot_table(df_pd, index=[datecol],dropna = False)
-        print(df_pvt.shape)
-
-        print("Preparing to Reshape and output as Numpy Array")
-        # dim1 = df_pvt.index.get_level_values('RSSD_ID').nunique()
-        dim1 = df_pvt.index.get_level_values('DATE').nunique()
-        print("Reshaping into 3 dimensional NumPy array")
-        result_pv = df_pvt.values.reshape((1, dim1, df_pvt.shape[1]))
-        print(result_pv.shape)
-
-
-
-        if qtr_data:
-            print("Quarterization of the Data")
-            qtr_count = result_pv.shape[1]
-            n = result_pv.shape[0]  # - 1
-            # result_pv = result_pv[1:n + 1]
-            results_quarter = np.zeros([4, int(qtr_count / 4), df_pvt.shape[1]])
-            print("Transformation for Quarterly Data")
-            for i in range(0, 4):
-                ids = [x for x in range(i, qtr_count, 4)]
-                results_quarter[i, :, :] = result_pv[:, ids, :]
-            print(results_quarter.shape)
-
-    print("Exporting and Saving :", k)
-    #Save them to a Dictionary to be used for splitting and modeling later.
-    print("Saving objects to file")
-    np.save(k + ".npy", result_pv)
-    if qtr_data:
-        np.save(k + "_qtr.npy", results_quarter)
-
-    print("Saving to class dict")
-    test.Data_Dict_NPY[k] = result_pv
-    if qtr_data:
-        test.Data_Dict_NPY[k + '_qtr'] = results_quarter
-    #return
-
-
-
-test.Data_Dict_NPY['BHC_X'].shape
-test.Data_Dict_NPY['BHC_Y'].shape
-test.Data_Dict_NPY['BHC_ECON_X'].shape
-
-
-test.Data_Dict_NPY['BHC_X_qtr'].shape
-test.Data_Dict_NPY['BHC_Y_qtr'].shape
-test.Data_Dict_NPY['BHC_ECON_X_qtr'].shape
-
-
-
-test.Data_Dict_NPY['CSMAR_X_qtr'].shape
-test.Data_Dict_NPY['CSMAR_Y_qtr'].shape
-test.Data_Dict_NPY['CSMAR_ECON_X_qtr'].shape
-
-
-
-    #Data Train Test splitting
 
     #Modeling, Cross Validation for time series incorporated.
 
