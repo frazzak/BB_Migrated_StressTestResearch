@@ -1011,7 +1011,6 @@ class BHC_CSMAR_TLF():
         self.TransferLearningExp_Dict['pre_exp_tr_params'] = tr_params
 
         return(tr_params)
-
     def Modeling_TransferLearning_Experiment(self,tr_params, predictmodel_list = ['m_LSTMN', 'm_GRU', 'm_LinReg', 'arima'],epoch = 1000, lstm_lr = 1e-2, threshold = 1e-4, learnseq = ['Target', 'Source', 'Transfer']):
         print("Initialize Results Objects")
         rmse_train_list = []
@@ -1320,8 +1319,21 @@ class BHC_CSMAR_TLF():
             self.TransferLearningExp_Dict = dict()
 
         self.TransferLearningExp_Dict['Results_DF'] = result_obj.astype(float).transpose().sort_index()
+        print('Formalizing Results')
+        self.TransferLearningExp_Dict['Results_DF'] = self.TransferLearningExp_Dict['Results_DF'].reset_index(False).rename({'index': 'modelnamestring'}, axis=1)
+
+        self.TransferLearningExp_Dict['Results_DF']['modelnamestring'] = self.TransferLearningExp_Dict['Results_DF']['modelnamestring'].apply(
+            lambda x: x.replace('_pretrainedTR&Source', '&pretrainedTR'))
+        self.TransferLearningExp_Dict['Results_DF']['modelname'] = self.TransferLearningExp_Dict['Results_DF']['modelnamestring'].apply(lambda x: x.split('&')[0])
+        self.TransferLearningExp_Dict['Results_DF']['domain'] = self.TransferLearningExp_Dict['Results_DF']['modelnamestring'].apply(lambda x: x.split('&')[1])
+        self.TransferLearningExp_Dict['Results_DF']['features'] = self.TransferLearningExp_Dict['Results_DF']['modelnamestring'].apply(lambda x: ','.join(x.split('&')[2:]))
+
+        fin_df = self.TransferLearningExp_Dict['Results_DF'][['modelname', 'domain', 'TestErr']].pivot(index='modelname', columns='domain', values='TestErr')
+
+        fin_df['%Improvement'] = (fin_df['Target'] - fin_df['pretrainedTR']) / (fin_df['Target']) * 100
+        self.TransferLearningExp_Dict['Results_DF_Fin'] = fin_df
         self.TransferLearningExp_Dict['tr_params'] = tr_params
-        return
+        return(fin_df)
 
 
 
@@ -1372,6 +1384,8 @@ tr_params = test.Modeling_TransferLearning_ParamsSetup()
 
 
 #Run Experiment
-test.Modeling_TransferLearning_Experiment(test.TransferLearningExp_Dict['pre_exp_tr_params'])
+test.Modeling_TransferLearning_Experiment(test.TransferLearningExp_Dict['pre_exp_tr_params'], predictmodel_list = ['m_LSTMN', 'm_GRU', 'm_LinReg'])
 
-test.TransferLearningExp_Dict['Results_DF']
+
+
+
