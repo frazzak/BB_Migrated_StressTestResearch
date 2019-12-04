@@ -16,6 +16,11 @@ from pmdarima.arima import auto_arima
 from math import sqrt
 from sklearn.metrics import mean_squared_error
 
+from MultiVAE import m_LSTMN
+import importlib
+#importlib.reload(m_LSTMN)
+
+
 # from statsmodels.tsa.api import VAR
 # from statsmodels.tsa.stattools import adfuller
 # from statsmodels.tools.eval_measures import rmse, aic
@@ -735,7 +740,7 @@ class BHC_CSMAR_TLF():
 
         print("Experiment Object Permutations:", dataset_subsets.__len__())
 
-        print("Must Include Following Inputs", include)
+        print("Must Include Following Inputs", includes)
         if len(includes) > 0:
             print("Filtering out Datasubsets based on include logic:", include)
             dataset_subsets = [x for x in dataset_subsets if set(include) <= set(x)]
@@ -960,10 +965,369 @@ class BHC_CSMAR_TLF():
               , result_obj.min(axis=1)[0], "\nMinimum Testing Error:", result_obj.astype(float).idxmin(axis=1)[1],
               result_obj.min(axis=1)[1])
         return(result_obj.astype(float))
+    def Modeling_TransferLearning_ParamsSetup(self, cmsar_modelTarget='CSMAR_Y', csmar_exclude= ['Tminus2_CSMAR_X', 'Tminus3_CSMAR_X', 'Tminus4_CSMAR_X',
+                                              'Tminus2_CSMAR_Y', 'Tminus2_CSMAR_Y', 'Tminus3_CSMAR_Y',
+                                              'Tminus4_CSMAR_Y', 'Tminus2_CSMAR_ECON_X', 'Tminus3_CSMAR_ECON_X',
+                                              'Tminus4_CSMAR_ECON_X'], bhc_modelTarget='BHC_Y',
+                                     bhc_exclude=['BHC_X', 'Tminus2_BHC_X', 'Tminus3_BHC_X', 'Tminus4_BHC_X',
+                                              'Tminus2_BHC_Y', 'Tminus2_BHC_Y', 'Tminus3_BHC_Y', 'Tminus4_BHC_Y',
+                                              'Tminus2_BHC_ECON_X', 'Tminus3_BHC_ECON_X', 'Tminus4_BHC_ECON_X']):
+        # CSMAR
+        self.Modeling_DatasetSubsets(modelTarget= cmsar_modelTarget,
+                                     exclude= csmar_exclude)
+        target_tmp_dict_name = "&".join(["_".join(x.split("train_")[1:]) for x in self.dataset_subsets[-1]])
+        csmar_inputs_train, csmar_targets_train, csmar_inputs_test, csmar_targets_test = self.Modeling_DataFormattingIO(
+            self.dataset_subsets[-1])
+        target_inputs_train, target_targets_train, target_inputs_test, target_targets_test = self.Modeling_DataFormattingIO(
+            self.dataset_subsets[-1])
+
+        # BHC
+        self.Modeling_DatasetSubsets(modelTarget=bhc_modelTarget,
+                                     exclude = bhc_exclude)
+        source_tmp_dict_name = "&".join(["_".join(x.split("train_")[1:]) for x in self.dataset_subsets[-1]])
+        inputs_train, targets_train, inputs_test, targets_test = self.Modeling_DataFormattingIO(
+            self.dataset_subsets[-1])
+        source_inputs_train, source_targets_train, source_inputs_test, source_targets_test = self.Modeling_DataFormattingIO(
+            self.dataset_subsets[-1])
+
+        tr_params = {'Source': {'name': source_tmp_dict_name,
+                                'inputs_train': source_inputs_train,
+                                'targets_train': source_targets_train,
+                                'inputs_test': source_inputs_test,
+                                'targets_test': source_targets_test},
+
+                     'Target': {'name': target_tmp_dict_name,
+                                'inputs_train': target_inputs_train,
+                                'targets_train': target_targets_train,
+                                'inputs_test': target_inputs_test,
+                                'targets_test': target_targets_test},
+
+                     'Transfer': {}
+
+                     }
+
+        if 'TransferLearningExp_Dict' not in self.__dict__.keys():
+            self.TransferLearningExp_Dict = dict()
+        self.TransferLearningExp_Dict['pre_exp_tr_params'] = tr_params
+
+        return(tr_params)
+
+    def Modeling_TransferLearning_Experiment(self,tr_params, predictmodel_list = ['m_LSTMN', 'm_GRU', 'm_LinReg', 'arima'],epoch = 1000, lstm_lr = 1e-2, threshold = 1e-4, learnseq = ['Target', 'Source', 'Transfer']):
+        print("Initialize Results Objects")
+        rmse_train_list = []
+        rmse_lst = []
+        mse_train_list = []
+        mse_lst = []
+        learn_types_list = []
+        train_trainhist_dict = dict()
+        # Model training for output.
+        for learn in learnseq:
+            print("Learning for:", learn)
+
+            for predictmodel in predictmodel_list:
+
+                if learn in ['Target', 'Source']:
+                    tmp_dict_name = learn + '&' + tr_params[learn]['name']
+                    inputs_train = tr_params[learn]['inputs_train']
+                    targets_train = tr_params[learn]['targets_train']
+                    inputs_test = tr_params[learn]['inputs_test']
+                    targets_test = tr_params[learn]['targets_test']
+
+                elif learn in ['Transfer']:
+                    # print("code to be developed")
+                    # break
+
+                    if len([x for x in tr_params['Source'].keys() if 'model_trained' in x if x.startswith('m_')]) > 0:
+                        for pretrainedmodel in [x for x in tr_params['Source'].keys() if 'model_trained' in x if
+                                                x.startswith('m_')]:
+                            print(pretrainedmodel)
+                            pretrnmodel = tr_params['Source'][pretrainedmodel]
+
+                            print("Freeze Parameters")
+                            for param in pretrnmodel.parameters():
+                                param.requires_grad = False
+
+                            print("Transforming Input Data for Pre-trained Models.")
+                            hidden_batch_size = tr_params['Source']['inputs_train'].shape[1]
+                            hidden_first = torch.nn.Linear(tr_params['Target']['inputs_train'].shape[1],
+                                                           hidden_batch_size)
+                            inputs_train_tr = torch.zeros(tr_params['Target']['inputs_train'].shape[0],
+                                                          hidden_batch_size,
+                                                          tr_params['Target']['inputs_train'].shape[2])
+                            inputs_test_tr = torch.zeros(tr_params['Target']['inputs_test'].shape[0], hidden_batch_size,
+                                                         tr_params['Target']['inputs_train'].shape[2])
+                            for i in range(0, tr_params['Target']['inputs_train'].shape[2]):
+                                # print(inputs_train[:,:,i].shape)
+                                inputs_train_tr[:, :, i] = hidden_first.forward(
+                                    tr_params['Target']['inputs_train'][:, :, i])
+                                inputs_test_tr[:, :, i] = hidden_first.forward(
+                                    tr_params['Target']['inputs_test'][:, :, i])
+
+                        if pretrainedmodel.startswith('m_GRU'):
+                            print('GRU IO layer updating')
+                            pretrnmodel.gru = torch.nn.GRU(inputs_train_tr.shape[2], 64, batch_first=True, dropout=0.2)
+                            # pretrnmodel.lstm2 = torch.nn.LSTMCell(64, 64)
+                            pretrnmodel.hidden_regressor = torch.nn.Linear(in_features=64,
+                                                                           out_features=inputs_train_tr.shape[2],
+                                                                           bias=True)
+                            # pretrnmodel.time_linear = torch.nn.Linear(in_features=inputs_train_tr.shape[1], out_features=csmar_targets_train.shape[2])
+                            # Set optimizer
+                            hidden = pretrnmodel.init_hidden()
+                            # hidden.shape
+                            m_optimizer = torch.optim.Adam(pretrnmodel.parameters(), lr=lstm_lr)
+                        elif pretrainedmodel.startswith('m_LSTMN'):
+                            print('LSTMN IO layer updating')
+                            # Update First layer to take CSMAR inputs inputs instead of 1000
+                            pretrnmodel.lstm = torch.nn.LSTM(inputs_train_tr.shape[2], 64, 1)
+                            # pretrnmodel.lstm2 = torch.nn.LSTMCell(64, 64)
+                            # pretrnmodel.hidden_linear = torch.nn.Linear(in_features=64, out_features=inputs_train_tr.shape[2],
+                            #                                           bias=True)
+                            pretrnmodel.linear = torch.nn.Linear(in_features=inputs_train_tr.shape[1],
+                                                                 out_features=
+                                                                 tr_params['Target']['targets_train'].shape[2])
+                            # Set optimizer
+                            m_optimizer = torch.optim.Adam(pretrnmodel.parameters(), lr=lstm_lr)
+
+                        elif pretrainedmodel.startswith('m_LSTM'):
+                            print('LSTM IO layer updating')
+                            # Update First layer to take CSMAR inputs inputs instead of 1000
+                            pretrnmodel.lstm1 = torch.nn.LSTMCell(inputs_train_tr.shape[2], 64)
+                            # pretrnmodel.lstm2 = torch.nn.LSTMCell(64, 64)
+                            pretrnmodel.hidden_linear = torch.nn.Linear(in_features=64,
+                                                                        out_features=inputs_train_tr.shape[2],
+                                                                        bias=True)
+                            pretrnmodel.time_linear = torch.nn.Linear(in_features=inputs_train_tr.shape[1],
+                                                                      out_features=tr_params['Target']['targets_train'])
+                            # Set optimizer
+                            m_optimizer = torch.optim.Adam(pretrnmodel.parameters(), lr=lstm_lr)
+
+                        elif pretrainedmodel.startswith('m_LinReg'):
+                            print('LinReg IO layer updating')
+                            pretrnmodel.linear = torch.nn.Linear(in_features=inputs_train_tr.shape[2],
+                                                                 out_features=inputs_train_tr.shape[2], bias=True)
+                            # pretrnmodel.lstm2 = torch.nn.LSTMCell(64, 64)
+                            pretrnmodel.hidden_regressor = torch.nn.Linear(in_features=1,
+                                                                           out_features=inputs_train_tr.shape[2],
+                                                                           bias=True)
+                            # pretrnmodel.time_linear = torch.nn.Linear(in_features=inputs_train_tr.shape[1], out_features=csmar_targets_train.shape[2])
+                            # Set optimizer
+                            # hidden = pretrnmodel.init_hidden()
+                            # hidden.shape
+                            m_optimizer = torch.optim.Adam(pretrnmodel.parameters(), lr=lstm_lr)
+
+                        else:
+                            print("No code for this model")
+
+                        m_loss = torch.nn.MSELoss()
+                        m_loss_list = []
+                        t_loss = np.inf
+                        t_loss_rmse = np.inf
+                        for i in range(0, epoch):
+                            # if model_name in ['m_DARNN_pretrained']:
+                            #     m_optimizer_enc.zero_grad()
+                            #     m_optimizer_dec.zero_grad()
+                            #
+                            if pretrainedmodel.startswith('m_LSTM'):
+                                outputs = pretrnmodel.forward(inputs_train_tr)
+
+                            if pretrainedmodel.startswith('m_GRU'):
+                                outputs = pretrnmodel(inputs_train_tr, hidden)
+
+                            if pretrainedmodel.startswith('m_LinReg'):
+                                # outputs = pretrnmodel(inputs_train_tr, hidden)
+                                outputs = pretrnmodel.forward(inputs_train_tr)
+
+                            loss = m_loss(outputs, tr_params['Target']['targets_train'])
+                            loss_rmse = torch.sqrt(m_loss(outputs, tr_params['Target']['targets_train']))
+                            loss_rmse.backward(retain_graph=True)
+                            loss.backward(retain_graph=True)
+                            m_optimizer.step()
+                            m_loss_list.append(loss.item())
+                            print(predictmodel + '_pretrained', "Training Loss at Epoch:", i, "Loss:", str(loss.item()))
+
+                            if t_loss > loss.data and np.abs(t_loss - loss.data) > threshold:
+                                t_loss = loss.data
+                                t_loss_rmse = loss_rmse
+                            else:
+                                print(loss.item())
+                                print("Done!")
+                                break
+
+                        training_hist = pd.DataFrame(m_loss_list)
+                        training_hist.index.name = "EPOCH"
+                        training_hist.columns = ["MSE_Loss"]
+
+                        model_tmp = pretrnmodel
+                        train_loss = loss.data
+                        train_rmse = loss_rmse
+                        train_loss = train_loss.item()
+                        train_rmse = train_rmse.item()
+                        train_trainhist = training_hist
+                        mse_train_list.append(torch.tensor(train_loss))
+                        rmse_train_list.append(torch.tensor(train_rmse))
+                        if pretrainedmodel.startswith('m_GRU'):
+                            pred = model_tmp.forward(inputs_test_tr, hidden)
+                        else:
+                            pred = model_tmp.forward(inputs_test_tr)
+
+                        print("Calculating MSE and RMSE")
+                        mse = torch.nn.functional.mse_loss(pred, tr_params['Target']['targets_test']).item()
+                        rmse = torch.sqrt(
+                            torch.nn.functional.mse_loss(pred, tr_params['Target']['targets_test'])).item()
+                        print("Model:", predictmodel + '_pretrainedTR' '&' + tmp_dict_name, "\tMSE:", mse, "\tRMSE:",
+                              rmse)
+                        tr_params[learn][predictmodel + '_pretrainedTR' + '_' + 'model_trained'] = model_tmp
+                        rmse_lst.append(torch.tensor(rmse))
+                        mse_lst.append(torch.tensor(mse))
+                        learn_types_list.append(predictmodel + '_pretrainedTR' '&' + tmp_dict_name)
+                        gc.collect()
+                    else:
+                        print("No pretrained model found for Source")
+                        break
+
+                else:
+                    break
+                if learn in ['Source', 'Target']:
+                    print("Formulate Model Training String")
+                    # predictmodel = 'm_GRU'
+                    if predictmodel.startswith('m_'):
+                        # First Train and get Results for Target, then Source, transfer\edit Source to fit target, then Results.
+                        model, train_loss, train_rmse, train_trainhist = eval(
+                            predictmodel + '.train(inputs_train, targets_train, epoch, lstm_lr, threshold)')
+                        model_trained = eval(predictmodel)
+
+                        print("Predicitng on Testing Data")
+                        pred = model_trained.predict(model, inputs_test)
+                        # print("Calculating Testing RMSE")
+                        mse = torch.nn.functional.mse_loss(pred, targets_test)
+                        rmse = torch.sqrt(torch.nn.functional.mse_loss(pred, targets_test))
+
+                    elif predictmodel.lower() in ["arima"]:
+                        # Setup Auto Arima
+                        # from pmdarima.arima import auto_arima
+                        # from math import sqrt
+                        # from sklearn.metrics import mean_squared_error
+                        tmp_mse_list = list()
+                        tmp_rmse_list = list()
+                        tmp_var_mse = list()
+                        tmp_var_rmse = list()
+                        train_tmp_mse_list = list()
+                        train_tmp_rmse_list = list()
+                        train_tmp_var_mse = list()
+                        train_tmp_var_rmse = list()
+                        print('Fitting ARIMA model')
+                        if targets_train.shape[2] == 1:
+                            for b in range(0, targets_train.shape[1]):
+                                train_tmp = pd.DataFrame(targets_train[:, b, :].numpy())
+                                model = auto_arima(train_tmp, trace=True, error_action='ignore', suppress_warnings=True)
+                                model.fit(train_tmp)
+                                # Getting Training Error
+                                train_valid_tmp = pd.DataFrame(targets_train[:, b, :].numpy())
+                                train_forecast = model.predict(n_periods=len(train_valid_tmp))
+                                train_pred = pd.DataFrame(train_forecast, index=train_valid_tmp.index,
+                                                          columns=['Prediction'])
+                                train_mse_tmp = mean_squared_error(train_valid_tmp, train_pred)
+                                train_tmp_mse_list.append(train_mse_tmp)
+                                train_rmse_tmp = sqrt(train_mse_tmp)
+                                train_tmp_rmse_list.append(train_rmse_tmp)
+                                # Getting Testing Error
+                                valid_tmp = pd.DataFrame(targets_test[:, b, :].numpy())
+                                forecast = model.predict(n_periods=len(valid_tmp))
+                                test_pred = pd.DataFrame(forecast, index=valid_tmp.index, columns=['Prediction'])
+                                mse_tmp = mean_squared_error(valid_tmp, test_pred)
+                                tmp_mse_list.append(mse_tmp)
+                                rmse_tmp = sqrt(mse_tmp)
+                                tmp_rmse_list.append(rmse_tmp)
+
+                            train_loss = torch.tensor(np.mean(train_tmp_mse_list))
+                            train_rmse = torch.tensor(np.mean(train_tmp_rmse_list))
+                            mse = torch.tensor(np.mean(tmp_mse_list))
+                            rmse = torch.tensor(np.mean(tmp_rmse_list))
+                            # print(self.tmp_dict_name, 'MSE:', mse.item(), 'RMSE:', rmse.item())
+
+                        else:
+                            for j in range(0, targets_train.shape[2]):
+                                for b in range(0, targets_train.shape[1]):
+                                    train_tmp = pd.DataFrame(targets_train[:, b, j].numpy())
+                                    model = auto_arima(train_tmp, trace=True, error_action='ignore',
+                                                       suppress_warnings=True)
+                                    model.fit(train_tmp)
+                                    # Train Error
+                                    train_valid_tmp = pd.DataFrame(targets_train[:, b, j].numpy())
+                                    train_forecast = model.predict(n_periods=len(train_valid_tmp))
+                                    train_pred = pd.DataFrame(train_forecast, index=train_valid_tmp.index,
+                                                              columns=['Prediction'])
+                                    train_mse_tmp = mean_squared_error(train_valid_tmp, train_pred)
+                                    train_tmp_mse_list.append(train_mse_tmp)
+                                    train_rmse_tmp = sqrt(train_mse_tmp)
+                                    train_tmp_rmse_list.append(train_rmse_tmp)
+                                    # Test Error
+                                    valid_tmp = pd.DataFrame(targets_test[:, b, j].numpy())
+                                    forecast = model.predict(n_periods=len(valid_tmp))
+                                    test_pred = pd.DataFrame(forecast, index=valid_tmp.index, columns=['Prediction'])
+                                    mse_tmp = mean_squared_error(valid_tmp, test_pred)
+                                    tmp_mse_list.append(mse_tmp)
+                                    rmse_tmp = sqrt(mse_tmp)
+                                    tmp_rmse_list.append(rmse_tmp)
+
+                                mse = np.mean(tmp_mse_list)
+                                tmp_var_mse.append(mse)
+                                rmse = np.mean(tmp_rmse_list)
+                                tmp_var_rmse.append(rmse)
+                                train_mse = np.mean(train_tmp_mse_list)
+                                train_tmp_var_mse.append(train_mse)
+                                train_rmse = np.mean(train_tmp_rmse_list)
+                                train_tmp_var_rmse.append(train_rmse)
+
+                            train_loss = torch.tensor(np.mean(train_tmp_mse))
+                            train_rmse = torch.tensor(np.mean(train_tmp_rmse))
+                            mse = torch.tensor(np.mean(tmp_var_mse))
+                            rmse = torch.tensor(np.mean(tmp_var_rmse))
+                            # print("%s\tMSEerror:\t%.5f\tRMSEerror:\t%.5f" % (predictmodel + '&' +  tmp_dict_name, train_loss, train_rmse))
+
+                    else:
+                        print("No Deep Learning Prediction Model Code Found:", predictmodel)
+                        train_loss = torch.tensor(np.nan)
+                        train_rmse = torch.tensor(np.nan)
+
+                    print("Calculating Training RMSE")
+                    mse_train_list.append(train_loss)
+                    rmse_train_list.append(train_rmse)
+                    print("%s\tMSEerror:\t%.5f\tRMSEerror:\t%.5f" % (
+                    predictmodel + '&' + tmp_dict_name, train_loss, train_rmse))
+
+                    print("Calculating Testing RMSE:")
+                    rmse_lst.append(rmse)
+                    mse_lst.append(mse)
+                    learn_types_list.append(predictmodel + '&' + tmp_dict_name)
+                    print("%s\tMSEerror:\t%.5f\tRMSEerror:\t%.5f" % (predictmodel + '&' + tmp_dict_name, mse, rmse))
+
+                    print("Saving Trained Model for :", learn)
+                    tr_params[learn][predictmodel + '_' + 'model_trained'] = model
+
+                    gc.collect()
+                # elif learn in ['Target']:
+                # Set Loss Functions
+
+                else:
+                    print("No Modeling code for this learn type")
+                rmse_train_lst_sk = torch.stack(rmse_train_list)
+                rmse_lst_sk = torch.stack(rmse_lst)
+                rmse_list_final = [rmse_train_lst_sk, rmse_lst_sk.data]
+                result_obj = pd.DataFrame(rmse_list_final, columns=learn_types_list, index=["TrainErr", "TestErr"])
+
+        if 'TransferLearningExp_Dict' not in self.__dict__.keys():
+            self.TransferLearningExp_Dict = dict()
+
+        self.TransferLearningExp_Dict['Results_DF'] = result_obj.astype(float).transpose().sort_index()
+        self.TransferLearningExp_Dict['tr_params'] = tr_params
+        return
 
 
 
-
+########
+########
+#MAIN ENTRY POINT
 #Loading Initi Class
 test = BHC_CSMAR_TLF()
 
@@ -974,10 +1338,14 @@ test.load_BHC_CSMAR_Codes()
 test.CSMAR_Data_MergeLoad()
 
 #Load BHC files, Filter based on consecutive qtrs, top banksm data formatting and subsetting.
-test.BHC_Data_Load(checkfileexists= False, topbankslimit = 3000)
+test.BHC_Data_Load(checkfileexists= True, topbankslimit = 3000)
 
 #Load EconData CSMAR
 test.CSMAR_MacroEcon_Load()
+
+
+
+
 
 #Load EconData BHC #TODO: Get newest US Macroeconomics data
 test.BHC_MarcoEcon_Load()
@@ -990,7 +1358,7 @@ test.Data_Process_PD_Numpy3d()
 
 test.Preprocess_Y_PD_Numpy3d()
 
-test.Bank_Data_TestTrain_Splitting(training_dates = ["2003-03-31", "2015-12-31"], testing_dates = ['2016-03-31', "2017-12-31"], econ_training_dates = ["2002-12-31", "2015-12-31"], econ_testing_dates = ['2016-03-31', "2017-12-31"])
+test.Bank_Data_TestTrain_Splitting(training_dates = ["2003-03-31", "2015-12-31"], testing_dates = ['2016-03-31', "2017-12-31"], econ_training_dates = ["2003-03-31", "2015-12-31"], econ_testing_dates = ['2016-03-31', "2017-12-31"])
 
 test.Data_Modeling_Preprocess()
 
@@ -998,655 +1366,11 @@ test.Data_Modeling_Preprocess()
 
 test.Modeling_DatasetSubsets(modelTarget='BHC_Y', exclude=  ['BHC_X','Tminus2_BHC_X', 'Tminus3_BHC_X', 'Tminus4_BHC_X', 'Tminus2_BHC_Y', 'Tminus2_BHC_Y', 'Tminus3_BHC_Y', 'Tminus4_BHC_Y', 'Tminus2_BHC_ECON_X', 'Tminus3_BHC_ECON_X', 'Tminus4_BHC_ECON_X'])
 
-# test.dataset_subsets
-# inputs_train, targets_train, inputs_test, targets_test = test.Modeling_DataFormattingIO(test.dataset_subsets[-1])
 
-#test.Modeling_DatasetSubsets(modelTarget='CSMAR_Y', exclude=  ['Tminus2_CSMAR_X', 'Tminus3_CSMAR_X', 'Tminus4_CSMAR_X', 'Tminus2_CSMAR_Y', 'Tminus2_CSMAR_Y', 'Tminus3_CSMAR_Y', 'Tminus4_CSMAR_Y', 'Tminus2_CSMAR_ECON_X', 'Tminus3_CSMAR_ECON_X', 'Tminus4_CSMAR_ECON_X'])
+#Prep for Experiment
+tr_params = test.Modeling_TransferLearning_ParamsSetup()
 
-results = pd.DataFrame()
-for subset in test.dataset_subsets:
-    inputs_train, targets_train, inputs_test, targets_test = test.Modeling_DataFormattingIO(subset)
-    results_tmp = test.Modeling_PredictModel(inputs_train, targets_train, inputs_test, targets_test, predictmodel_list = ['lr', 'gru'], epoch = 50)
-    results = pd.concat([results, results_tmp], axis = 1)
-    print(results.transpose()['TestErr'].idxmin(), results.transpose()['TestErr'].min())
 
+#Run Experiment
+test.Modeling_TransferLearning_Experiment(test.TransferLearningExp_Dict['pre_exp_tr_params'])
 
-
-#bhc_prelim = results.transpose()
-
-
-
-
-
-
-
-# test.Modeling_DatasetSubsets(modelTarget='BHC_Y', exclude=  ['BHC_X','Tminus2_BHC_X', 'Tminus3_BHC_X', 'Tminus4_BHC_X', 'Tminus2_BHC_Y', 'Tminus2_BHC_Y', 'Tminus3_BHC_Y', 'Tminus4_BHC_Y', 'Tminus2_BHC_ECON_X', 'Tminus3_BHC_ECON_X', 'Tminus4_BHC_ECON_X'])
-#
-# tmp_dict_name = "&".join(["_".join(x.split("train_")[1:]) for x in test.dataset_subsets[-1]])
-# inputs_train, targets_train, inputs_test, targets_test = test.Modeling_DataFormattingIO(test.dataset_subsets[-1])
-
-#CSMAR
-test.Modeling_DatasetSubsets(modelTarget='CSMAR_Y', exclude=  ['Tminus2_CSMAR_X', 'Tminus3_CSMAR_X', 'Tminus4_CSMAR_X', 'Tminus2_CSMAR_Y', 'Tminus2_CSMAR_Y', 'Tminus3_CSMAR_Y', 'Tminus4_CSMAR_Y', 'Tminus2_CSMAR_ECON_X', 'Tminus3_CSMAR_ECON_X', 'Tminus4_CSMAR_ECON_X'])
-target_tmp_dict_name = "&".join(["_".join(x.split("train_")[1:]) for x in test.dataset_subsets[-1]])
-csmar_inputs_train, csmar_targets_train, csmar_inputs_test, csmar_targets_test = test.Modeling_DataFormattingIO(test.dataset_subsets[-1])
-target_inputs_train, target_targets_train, target_inputs_test, target_targets_test = test.Modeling_DataFormattingIO(test.dataset_subsets[-1])
-
-
-#BHC
-test.Modeling_DatasetSubsets(modelTarget='BHC_Y', exclude=  ['BHC_X','Tminus2_BHC_X', 'Tminus3_BHC_X', 'Tminus4_BHC_X', 'Tminus2_BHC_Y', 'Tminus2_BHC_Y', 'Tminus3_BHC_Y', 'Tminus4_BHC_Y', 'Tminus2_BHC_ECON_X', 'Tminus3_BHC_ECON_X', 'Tminus4_BHC_ECON_X'])
-source_tmp_dict_name = "&".join(["_".join(x.split("train_")[1:]) for x in test.dataset_subsets[-1]])
-inputs_train, targets_train, inputs_test, targets_test = test.Modeling_DataFormattingIO(test.dataset_subsets[-1])
-source_inputs_train, source_targets_train, source_inputs_test, source_targets_test = test.Modeling_DataFormattingIO(test.dataset_subsets[-1])
-
-tr_params = { 'Source': {'name':  source_tmp_dict_name,
-              'inputs_train' : source_inputs_train,
-              'targets_train': source_targets_train,
-              'inputs_test': source_inputs_test,
-              'targets_test': source_targets_test},
-
-              'Target': {'name':  target_tmp_dict_name,
-              'inputs_train' : target_inputs_train,
-              'targets_train': target_targets_train,
-              'inputs_test': target_inputs_test,
-              'targets_test': target_targets_test},
-
-              'Transfer': {}
-
-
-            }
-
-
-
-from MultiVAE import m_LSTMN
-import importlib
-importlib.reload(m_LSTMN)
-
-
-#model, train_loss, train_rmse, train_trainhist = m_LSTMN.train(inputs_train, targets_train, epoch, lstm_lr,threshold)
-
-#predictmodel_list = ['lr','lstm','gru', 'arima', 'darnn']
-#predictmodel_list = ['m_LSTM', 'm_LinReg', 'm_GRU'] #['m_LSTM', 'm_LinReg', 'm_GRU', 'm_DA_RNN']
-predictmodel_list = ['m_LSTMN','m_GRU', 'm_LinReg']
-epoch = 100
-lstm_lr = 1e-2
-threshold = 1e-4
-
-
-print("Initialize Results Objects")
-rmse_train_list = []
-rmse_lst = []
-mse_train_list = []
-mse_lst = []
-learn_types_list = []
-train_trainhist_dict = dict()
-#Model training for output.
-learnseq = ['Target', 'Source', 'Transfer']
-
-
-for learn in learnseq:
-    print("Learning for:", learn)
-
-    for predictmodel in predictmodel_list:
-
-
-        if learn in ['Target', 'Source']:
-            tmp_dict_name = learn + '&' + tr_params[learn]['name']
-            inputs_train = tr_params[learn]['inputs_train']
-            targets_train = tr_params[learn]['targets_train']
-            inputs_test = tr_params[learn]['inputs_test']
-            targets_test = tr_params[learn]['targets_test']
-
-        elif learn in ['Transfer']:
-            #print("code to be developed")
-            #break
-
-            if len([x for x in tr_params['Source'].keys() if  'model_trained' in x]) > 0:
-                for pretrainedmodel in [x for x in tr_params['Source'].keys() if  'model_trained' in x]:
-                    print(pretrainedmodel)
-                    pretrnmodel = tr_params['Source'][pretrainedmodel]
-
-                    print("Freeze Parameters")
-                    for param in pretrnmodel.parameters():
-                        param.requires_grad = False
-
-                    print("Transforming Input Data for Pre-trained Models.")
-                    hidden_batch_size = tr_params['Source']['inputs_train'].shape[1]
-                    hidden_first = torch.nn.Linear(tr_params['Target']['inputs_train'].shape[1], hidden_batch_size)
-                    inputs_train_tr = torch.zeros(tr_params['Target']['inputs_train'].shape[0], hidden_batch_size,
-                                                  tr_params['Target']['inputs_train'].shape[2])
-                    inputs_test_tr = torch.zeros(tr_params['Target']['inputs_test'].shape[0], hidden_batch_size,
-                                                 tr_params['Target']['inputs_train'].shape[2])
-                    for i in range(0, tr_params['Target']['inputs_train'].shape[2]):
-                        # print(inputs_train[:,:,i].shape)
-                        inputs_train_tr[:, :, i] = hidden_first.forward(tr_params['Target']['inputs_train'][:, :, i])
-                        inputs_test_tr[:, :, i] = hidden_first.forward(tr_params['Target']['inputs_test'][:, :, i])
-
-
-                if pretrainedmodel.startswith('m_GRU'):
-                    print('GRU IO layer updating')
-                    pretrnmodel.gru = torch.nn.GRU(inputs_train_tr.shape[2], 64, batch_first=True, dropout=0.2)
-                    # pretrnmodel.lstm2 = torch.nn.LSTMCell(64, 64)
-                    pretrnmodel.hidden_regressor = torch.nn.Linear(in_features=64,
-                                                                   out_features=inputs_train_tr.shape[2], bias=True)
-                    # pretrnmodel.time_linear = torch.nn.Linear(in_features=inputs_train_tr.shape[1], out_features=csmar_targets_train.shape[2])
-                    # Set optimizer
-                    hidden = pretrnmodel.init_hidden()
-                    # hidden.shape
-                    m_optimizer = torch.optim.Adam(pretrnmodel.parameters(), lr=lstm_lr)
-                elif pretrainedmodel.startswith('m_LSTMN'):
-                    print('LSTMN IO layer updating')
-                    # Update First layer to take CSMAR inputs inputs instead of 1000
-                    pretrnmodel.lstm = torch.nn.LSTM(inputs_train_tr.shape[2], 64, 1)
-                    # pretrnmodel.lstm2 = torch.nn.LSTMCell(64, 64)
-                    #pretrnmodel.hidden_linear = torch.nn.Linear(in_features=64, out_features=inputs_train_tr.shape[2],
-                     #                                           bias=True)
-                    pretrnmodel.linear = torch.nn.Linear(in_features=inputs_train_tr.shape[1],
-                                                              out_features=tr_params['Target']['targets_train'].shape[2])
-                    # Set optimizer
-                    m_optimizer = torch.optim.Adam(pretrnmodel.parameters(), lr=lstm_lr)
-
-                elif pretrainedmodel.startswith('m_LSTM'):
-                    print('LSTM IO layer updating')
-                    # Update First layer to take CSMAR inputs inputs instead of 1000
-                    pretrnmodel.lstm1 = torch.nn.LSTMCell(inputs_train_tr.shape[2], 64)
-                    # pretrnmodel.lstm2 = torch.nn.LSTMCell(64, 64)
-                    pretrnmodel.hidden_linear = torch.nn.Linear(in_features=64, out_features=inputs_train_tr.shape[2],
-                                                                bias=True)
-                    pretrnmodel.time_linear = torch.nn.Linear(in_features=inputs_train_tr.shape[1],
-                                                              out_features=tr_params['Target']['targets_train'])
-                    # Set optimizer
-                    m_optimizer = torch.optim.Adam(pretrnmodel.parameters(), lr=lstm_lr)
-
-                elif pretrainedmodel.startswith('m_LinReg'):
-                    print('LinReg IO layer updating')
-                    pretrnmodel.linear = torch.nn.Linear(in_features=inputs_train_tr.shape[2],
-                                                         out_features=inputs_train_tr.shape[2], bias=True)
-                    # pretrnmodel.lstm2 = torch.nn.LSTMCell(64, 64)
-                    pretrnmodel.hidden_regressor = torch.nn.Linear(in_features=1, out_features=inputs_train_tr.shape[2],
-                                                                   bias=True)
-                    # pretrnmodel.time_linear = torch.nn.Linear(in_features=inputs_train_tr.shape[1], out_features=csmar_targets_train.shape[2])
-                    # Set optimizer
-                    # hidden = pretrnmodel.init_hidden()
-                    # hidden.shape
-                    m_optimizer = torch.optim.Adam(pretrnmodel.parameters(), lr=lstm_lr)
-
-                else:
-                    print("No code for this model")
-
-                m_loss = torch.nn.MSELoss()
-                m_loss_list = []
-                t_loss = np.inf
-                t_loss_rmse = np.inf
-                for i in range(0, epoch):
-                    # if model_name in ['m_DARNN_pretrained']:
-                    #     m_optimizer_enc.zero_grad()
-                    #     m_optimizer_dec.zero_grad()
-                    #
-                    if pretrainedmodel.startswith('m_LSTM'):
-                        outputs = pretrnmodel.forward(inputs_train_tr)
-
-                    if pretrainedmodel.startswith('m_GRU'):
-                        outputs = pretrnmodel(inputs_train_tr, hidden)
-
-                    if pretrainedmodel.startswith('m_LinReg'):
-                        # outputs = pretrnmodel(inputs_train_tr, hidden)
-                        outputs = pretrnmodel.forward(inputs_train_tr)
-
-                    loss = m_loss(outputs, tr_params['Target']['targets_train'])
-                    loss_rmse = torch.sqrt(m_loss(outputs, tr_params['Target']['targets_train']))
-                    loss_rmse.backward(retain_graph=True)
-                    loss.backward(retain_graph=True)
-                    m_optimizer.step()
-                    m_loss_list.append(loss.item())
-                    print(predictmodel + '_pretrained', "Training Loss at Epoch:", i, "Loss:", str(loss.item()))
-
-                    if t_loss > loss.data and np.abs(t_loss - loss.data) > threshold:
-                        t_loss = loss.data
-                        t_loss_rmse = loss_rmse
-                    else:
-                        print(loss.item())
-                        print("Done!")
-                        break
-
-                training_hist = pd.DataFrame(m_loss_list)
-                training_hist.index.name = "EPOCH"
-                training_hist.columns = ["MSE_Loss"]
-
-                model_tmp = pretrnmodel
-                train_loss = loss.data
-                train_rmse = loss_rmse
-                train_loss = train_loss.item()
-                train_rmse = train_rmse.item()
-                train_trainhist = training_hist
-                mse_train_list.append(torch.tensor(train_loss))
-                rmse_train_list.append(torch.tensor(train_rmse))
-                if pretrainedmodel.startswith('m_GRU'):
-                    pred = model_tmp.forward(inputs_test_tr, hidden)
-                else:
-                    pred = model_tmp.forward(inputs_test_tr)
-
-                print("Calculating MSE and RMSE")
-                mse = torch.nn.functional.mse_loss(pred, tr_params['Target']['targets_test']).item()
-                rmse = torch.sqrt(torch.nn.functional.mse_loss(pred, tr_params['Target']['targets_test'])).item()
-                print("Model:", predictmodel + '_pretrainedTR' '&' + tmp_dict_name , "\tMSE:", mse, "\tRMSE:", rmse)
-                tr_params[learn][predictmodel + '_pretrainedTR' + '_' +  'model_trained'] = model_tmp
-                rmse_lst.append(torch.tensor(rmse))
-                mse_lst.append(torch.tensor(mse))
-                learn_types_list.append(predictmodel + '_pretrainedTR' '&' + tmp_dict_name)
-                gc.collect()
-            else:
-                print("No pretrained model found for Source")
-                break
-
-        else:
-            break
-        if learn in ['Source','Target']:
-            print("Formulate Model Training String")
-            #predictmodel = 'm_GRU'
-            if predictmodel.startswith('m_'):
-                #First Train and get Results for Target, then Source, transfer\edit Source to fit target, then Results.
-                model, train_loss, train_rmse, train_trainhist = eval(predictmodel + '.train(inputs_train, targets_train, epoch, lstm_lr, threshold)')
-                model_trained = eval(predictmodel)
-            else:
-                print("No Deep Learning Prediction Model Code Found:", predictmodel)
-                train_loss = torch.tensor(np.nan)
-                train_rmse = torch.tensor(np.nan)
-
-            print("Calculating Training RMSE")
-            mse_train_list.append(train_loss)
-            rmse_train_list.append(train_rmse)
-            print("%s\tMSEerror:\t%.5f\tRMSEerror:\t%.5f" % (predictmodel + '&' +  tmp_dict_name, train_loss, train_rmse))
-
-
-            print("Predicitng on Testing Data")
-            pred = model_trained.predict(model, inputs_test)
-            #print("Calculating Testing RMSE")
-            mse = torch.nn.functional.mse_loss(pred, targets_test)
-            rmse = torch.sqrt(torch.nn.functional.mse_loss(pred, targets_test))
-
-
-            print("Calculating Testing RMSE:")
-            rmse_lst.append(rmse)
-            mse_lst.append(mse)
-            learn_types_list.append(predictmodel + '&' + tmp_dict_name)
-            print("%s\tMSEerror:\t%.5f\tRMSEerror:\t%.5f" % (predictmodel + '&' + tmp_dict_name, mse, rmse))
-
-            print("Saving Trained Model for :", learn)
-            tr_params[learn][predictmodel + '_' +  'model_trained'] = model
-
-            gc.collect()
-        #elif learn in ['Target']:
-            # Set Loss Functions
-
-        else:
-            print("No Modeling code for this learn type")
-        rmse_train_lst_sk = torch.stack(rmse_train_list)
-        rmse_lst_sk = torch.stack(rmse_lst)
-        rmse_list_final = [rmse_train_lst_sk, rmse_lst_sk.data]
-        result_obj = pd.DataFrame(rmse_list_final, columns=learn_types_list, index=["TrainErr", "TestErr"])
-
-
-result_obj.astype(float).transpose().sort_index()
-
-
-
-tr_params['Transfer'].keys()
-
-tr_params['Target']['m_LSTM_model_trained']
-
-
-tr_params['Transfer']['m_LSTM_pretrainedTR_model_trained']
-
-
-
-#inputs_train.shape
-
-
-
-for predictmodel in predictmodel_list:
-    print("Training:", predictmodel.lower())
-    if predictmodel.lower() in ['lstm']:
-
-        model, train_loss, train_rmse, train_trainhist = m_LSTM.train(inputs_train, targets_train, epoch, lstm_lr, threshold)
-        #        train_trainhist_dict["_".join([tmp_dict_name, "trainhist", predictmodel, modelTarget])] = train_trainhist
-        model_trained = m_LSTM
-        model, train_loss, train_rmse, train_trainhist = m_LinReg.train(inputs_train, targets_train, epoch, lstm_lr,
-                                                                        threshold)
-        # train_trainhist_dict["_".join([tmp_dict_name, "trainhist", predictmodel])] = train_trainhist
-    elif predictmodel.lower() in ['lr', 'linearregression', 'linreg']:
-         model_trained = m_LinReg
-
-
-    elif predictmodel.lower() in ['gru']:
-
-         model, train_loss, train_rmse, train_trainhist = m_GRU.train(inputs_train, targets_train, epoch,
-                                                                      lstm_lr, threshold)
-    #     train_trainhist_dict["_".join([tmp_dict_name, "trainhist", predictmodel, modelTarget])] = train_trainhist
-         model_trained = m_GRU
-
-    #
-    elif predictmodel.lower() in ['darnn', "da-rnn", "dualstagelstm", "dual-stage-lstm"]:
-    #     # importlib.reload(m_DA_RNN)
-         model, train_loss, train_rmse, train_trainhist = m_DA_RNN.train(inputs_train, targets_train, epoch, lstm_lr,
-                                                                         threshold)
-    #     train_trainhist_dict["_".join([tmp_dict_name, "trainhist", predictmodel, modelTarget])] = train_trainhist
-         model_trained = m_DA_RNN
-
-    else:
-        print("No Deep Learning Prediction Model Code Found:", predictmodel)
-        train_loss = torch.tensor(np.nan)
-        train_rmse = torch.tensor(np.nan)
-        #return
-
-    print("Calculating Training RMSE:\t", modelTarget)
-    mse_train_list.append(train_loss)
-    rmse_train_list.append(train_rmse)
-    print("%s\tMSEerror:\t%.5f\tRMSEerror:\t%.5f" % (tmp_dict_name, train_loss, train_rmse))
-
-
-
-
-
-    if predictmodel.lower() in ['darnn', "da-rnn", "dualstagelstm", "dual-stage-lstm"] + ['gru', 'lstm'] + ['lr', 'linearregression', 'linreg']:
-        if predictmodel.lower() in ['darnn', "da-rnn", "dualstagelstm", "dual-stage-lstm"]:
-            pred = model_trained.predict(model, inputs=inputs_test, targets=targets_test)
-
-        else:
-            pred = model_trained.predict(model, inputs_test)
-        mse = torch.nn.functional.mse_loss(pred, targets_test)
-        rmse = torch.sqrt(torch.nn.functional.mse_loss(pred, targets_test))
-
-
-    elif predictmodel.lower() in ["arima"]:
-        # Setup Auto Arima
-        # from pmdarima.arima import auto_arima
-        # from math import sqrt
-        # from sklearn.metrics import mean_squared_error
-        tmp_mse_list = list()
-        tmp_rmse_list = list()
-        tmp_var_mse = list()
-        tmp_var_rmse = list()
-        print('Fitting ARIMA model')
-        if targets_train.shape[2] == 1:
-            for b in range(0, targets_train.shape[1]):
-                train_tmp = pd.DataFrame(targets_train[:, b, :].numpy())
-                model = auto_arima(train_tmp, trace=True, error_action='ignore', suppress_warnings=True)
-                model.fit(train_tmp)
-
-                valid_tmp = pd.DataFrame(targets_test[:, b, :].numpy())
-                forecast = model.predict(n_periods=len(valid_tmp))
-                test_pred = pd.DataFrame(forecast, index=valid_tmp.index, columns=['Prediction'])
-
-                mse_tmp = mean_squared_error(valid_tmp, test_pred)
-                tmp_mse_list.append(mse_tmp)
-                rmse_tmp = sqrt(mse_tmp)
-                tmp_rmse_list.append(rmse_tmp)
-
-            mse = torch.tensor(np.mean(tmp_mse_list))
-            rmse = torch.tensor(np.mean(tmp_rmse_list))
-            print(tmp_dict_name, 'MSE:', mse.item(), 'RMSE:', rmse.item())
-
-        else:
-            for j in range(0,targets_train.shape[2]):
-                for b in range(0, targets_train.shape[1]):
-                    train_tmp = pd.DataFrame(targets_train[:, b, j].numpy())
-                    model = auto_arima(train_tmp, trace=True, error_action='ignore', suppress_warnings=True)
-                    model.fit(train_tmp)
-
-                    valid_tmp = pd.DataFrame(targets_test[:, b, j].numpy())
-                    forecast = model.predict(n_periods=len(valid_tmp))
-                    test_pred = pd.DataFrame(forecast, index=valid_tmp.index, columns=['Prediction'])
-                    mse_tmp = mean_squared_error(valid_tmp, test_pred)
-                    tmp_mse_list.append(mse_tmp)
-                    rmse_tmp = sqrt(mse_tmp)
-                    tmp_rmse_list.append(rmse_tmp)
-
-
-                mse = np.mean(tmp_mse_list)
-                tmp_var_mse.append(mse)
-                rmse = np.mean(tmp_rmse_list)
-                tmp_var_rmse.append(rmse)
-
-
-            mse = torch.tensor(np.mean(tmp_var_mse))
-            rmse = torch.tensor(np.mean(tmp_var_rmse))
-            print(tmp_dict_name, 'MSE:', mse.item(), 'RMSE:', rmse.item())
-
-
-    elif predictmodel.lower() in ["var"] and targets_train.shape[2] > 1:
-        tmp_mse_list = list()
-        tmp_rmse_list = list()
-        for b in range(0, targets_train.shape[1]):
-            train_tmp = pd.DataFrame(targets_train[:, b, :].numpy())
-            cols = train_tmp.columns
-            model = VAR(endog=train_tmp)
-            #train_tmp.shape
-            model_fit = model.fit()
-            valid_tmp = pd.DataFrame(targets_test[:, b, :].numpy())
-            forecast = model_fit.forecast(model_fit.y, steps=len(valid_tmp))
-            test_pred = pd.DataFrame(forecast, index=valid_tmp.index)
-            #pred = pd.DataFrame(index=range(0, len(test_pred)), columns=[cols])
-            mse_tmp = mean_squared_error(valid_tmp, test_pred)
-            tmp_mse_list.append(mse_tmp)
-            rmse_tmp = sqrt(mse_tmp)
-            tmp_rmse_list.append(rmse_tmp)
-        mse = torch.tensor(np.mean(tmp_mse_list))
-        rmse = torch.tensor(np.mean(tmp_rmse_list))
-        print(tmp_dict_name, 'MSE:', mse.item(), 'RMSE:', rmse.item())
-    else:
-        print("no code developed for", predictmodel.lower())
-        mse = np.nan
-        rmse = np.nan
-        train_loss = np.nan
-        train_rmse = np.nan
-
-
-    print("Calculating Testing RMSE:\t", modelTarget)
-    # print(pred.shape, targes_test.shape)
-    rmse_lst.append(rmse)
-    mse_lst.append(mse)
-    learn_types_list.append(predictmodel + '_' + tmp_dict_name)
-    print("%s\tMSEerror:\t%.5f\tRMSEerror:\t%.5f" % (predictmodel + '_' + tmp_dict_name, mse, rmse))
-    gc.collect()
-
-
-rmse_train_lst_sk = torch.stack(rmse_train_list)
-rmse_lst_sk = torch.stack(rmse_lst)
-rmse_list_final = [rmse_train_lst_sk, rmse_lst_sk.data]
-result_obj = pd.DataFrame(rmse_list_final, columns = learn_types_list, index = ["TrainErr","TestErr"])
-print(result_obj.astype(float))
-print("Target:", modelTarget, "\nMinimum Training Error:", result_obj.astype(float).idxmin(axis=1)[0]
-                                                , result_obj.min(axis=1)[0], "\nMinimum Testing Error:", result_obj.astype(float).idxmin(axis=1)[1],
-                                                 result_obj.min(axis=1)[1])
-
-
-
-bhc_results = result_obj.transpose().astype(float)
-csmar_results = result_obj.transpose().astype(float)
-
-#Transfer Learning Models.
-#model_trained
-#model
-
-#LSTM
-pretrnmodel = model
-
-inputs_train.shape
-targets_train.shape
-
-
-csmar_inputs_train.shape
-csmar_targets_train.shape
-
-
-inputs_train_tr.shape
-inputs_test_tr.shape
-
-
-#May need to transform dimensions into that which fits pretrained models.
-
-# Freeze Parameters
-for param in pretrnmodel.parameters():
-    param.requires_grad = False
-
-print("Transforming Input Data for Pre-trained Models.")
-hidden_batch_size = inputs_train.shape[1]
-hidden_first = torch.nn.Linear(csmar_inputs_train.shape[1], hidden_batch_size)
-inputs_train_tr = torch.zeros(csmar_inputs_train.shape[0],hidden_batch_size,csmar_inputs_train.shape[2])
-inputs_test_tr = torch.zeros(csmar_inputs_test.shape[0], hidden_batch_size, csmar_inputs_train.shape[2])
-for i in range(0,csmar_inputs_train.shape[2]):
-    #print(inputs_train[:,:,i].shape)
-    inputs_train_tr[:,:,i] = hidden_first.forward(csmar_inputs_train[:,:,i])
-    inputs_test_tr[:, :, i] = hidden_first.forward(csmar_inputs_test[:,:,i])
-
-
-
-# Update First layer to take CSMAR inputs inputs instead of 1000
-pretrnmodel.lstm1 = torch.nn.LSTMCell(inputs_train_tr.shape[2],64)
-#pretrnmodel.lstm2 = torch.nn.LSTMCell(64, 64)
-pretrnmodel.hidden_linear = torch.nn.Linear(in_features=64, out_features=inputs_train_tr.shape[2], bias=True)
-pretrnmodel.time_linear = torch.nn.Linear(in_features=inputs_train_tr.shape[1], out_features=csmar_targets_train.shape[2])
-#Set optimizer
-m_optimizer = torch.optim.Adam(pretrnmodel.parameters(), lr=lstm_lr)
-
-
-
-#GRU
-pretrnmodel = model
-
-
-# Freeze Parameters
-for param in pretrnmodel.parameters():
-    param.requires_grad = False
-
-
-print("Transforming Input Data for Pre-trained Models.")
-hidden_batch_size = inputs_train.shape[1]
-hidden_first = torch.nn.Linear(csmar_inputs_train.shape[1], hidden_batch_size)
-inputs_train_tr = torch.zeros(csmar_inputs_train.shape[0],hidden_batch_size,csmar_inputs_train.shape[2])
-inputs_test_tr = torch.zeros(csmar_inputs_test.shape[0], hidden_batch_size, csmar_inputs_train.shape[2])
-for i in range(0,csmar_inputs_train.shape[2]):
-    #print(inputs_train[:,:,i].shape)
-    inputs_train_tr[:,:,i] = hidden_first.forward(csmar_inputs_train[:,:,i])
-    inputs_test_tr[:, :, i] = hidden_first.forward(csmar_inputs_test[:,:,i])
-
-
-#inputs_train_tr.shape
-# Update First layer to take CSMAR inputs inputs instead of 1000
-pretrnmodel.gru = torch.nn.GRU(inputs_train_tr.shape[2], 64, batch_first=True, dropout=0.2)
-#pretrnmodel.lstm2 = torch.nn.LSTMCell(64, 64)
-pretrnmodel.hidden_regressor = torch.nn.Linear(in_features=64, out_features=inputs_train_tr.shape[2], bias=True)
-#pretrnmodel.time_linear = torch.nn.Linear(in_features=inputs_train_tr.shape[1], out_features=csmar_targets_train.shape[2])
-#Set optimizer
-hidden = pretrnmodel.init_hidden()
-#hidden.shape
-m_optimizer = torch.optim.Adam(pretrnmodel.parameters(), lr=lstm_lr)
-
-
-
-
-
-
-
-#LR
-pretrnmodel = model
-
-
-# Freeze Parameters
-for param in pretrnmodel.parameters():
-    param.requires_grad = False
-
-
-print("Transforming Input Data for Pre-trained Models.")
-hidden_batch_size = inputs_train.shape[1]
-hidden_first = torch.nn.Linear(csmar_inputs_train.shape[1], hidden_batch_size)
-inputs_train_tr = torch.zeros(csmar_inputs_train.shape[0],hidden_batch_size,csmar_inputs_train.shape[2])
-inputs_test_tr = torch.zeros(csmar_inputs_test.shape[0], hidden_batch_size, csmar_inputs_train.shape[2])
-for i in range(0,csmar_inputs_train.shape[2]):
-    #print(inputs_train[:,:,i].shape)
-    inputs_train_tr[:,:,i] = hidden_first.forward(csmar_inputs_train[:,:,i])
-    inputs_test_tr[:, :, i] = hidden_first.forward(csmar_inputs_test[:,:,i])
-
-
-
-# Update First layer to take CSMAR inputs inputs instead of 1000
-pretrnmodel.linear = torch.nn.Linear(in_features=inputs_train_tr.shape[2], out_features=inputs_train_tr.shape[2], bias=True)
-#pretrnmodel.lstm2 = torch.nn.LSTMCell(64, 64)
-pretrnmodel.hidden_regressor = torch.nn.Linear(in_features=1, out_features=inputs_train_tr.shape[2], bias=True)
-#pretrnmodel.time_linear = torch.nn.Linear(in_features=inputs_train_tr.shape[1], out_features=csmar_targets_train.shape[2])
-#Set optimizer
-#hidden = pretrnmodel.init_hidden()
-#hidden.shape
-m_optimizer = torch.optim.Adam(pretrnmodel.parameters(), lr=lstm_lr)
-
-
-
-
-
-
-#Set Loss Functions
-m_loss = torch.nn.MSELoss()
-m_loss_list = []
-t_loss = np.inf
-t_loss_rmse = np.inf
-#inputs_train.shape
-#Set model parameters
-epoch = 50
-#threshold = 1e-6
-
-#model_name = 'm_LSTM_pretrained'
-model_name = 'm_GRU_pretrained'
-#model_name = 'm_LinReg_pretrained'
-
-#Training on top of transferred knowledge
-for i in range(0, epoch):
-    # if model_name in ['m_DARNN_pretrained']:
-    #     m_optimizer_enc.zero_grad()
-    #     m_optimizer_dec.zero_grad()
-    #
-    if model_name in ['m_LSTM_pretrained']:
-        outputs = pretrnmodel.forward(inputs_train_tr)
-
-    if model_name in ['m_GRU_pretrained']:
-       outputs = pretrnmodel(inputs_train_tr, hidden)
-
-    if model_name in ['m_LinReg_pretrained']:
-        #outputs = pretrnmodel(inputs_train_tr, hidden)
-        outputs = pretrnmodel.forward(inputs_train_tr)
-
-    loss = m_loss(outputs, csmar_targets_train)
-    loss_rmse = torch.sqrt(m_loss(outputs, csmar_targets_train))
-    loss_rmse.backward(retain_graph=True)
-    loss.backward(retain_graph=True)
-    m_optimizer.step()
-    m_loss_list.append(loss.item())
-    print(model_name, "Training Loss at Epoch:", i, "Loss:", str(loss.item()))
-
-    if t_loss > loss.data and np.abs(t_loss - loss.data) > threshold:
-        t_loss = loss.data
-        t_loss_rmse = loss_rmse
-    else:
-        print(loss.item())
-        print("Done!")
-        break
-
-training_hist = pd.DataFrame(m_loss_list)
-training_hist.index.name = "EPOCH"
-training_hist.columns = ["MSE_Loss"]
-
-model_tmp = pretrnmodel
-train_loss = loss.data
-train_rmse = loss_rmse
-train_loss = train_loss.item()
-train_rmse = train_rmse.item()
-train_trainhist = training_hist
-
-if model_name in  ['m_GRU_pretrained']:
-    pred = model_tmp.forward(inputs_test_tr, hidden)
-else:
-    pred = model_tmp.forward(inputs_test_tr)
-
-print("Calculating MSE and RMSE")
-mse = torch.nn.functional.mse_loss(pred, csmar_targets_test).item()
-rmse = torch.sqrt(torch.nn.functional.mse_loss(pred, csmar_targets_test)).item()
-print("Model:", model_name, "\tMSE:", mse, "\tRMSE:", rmse)
