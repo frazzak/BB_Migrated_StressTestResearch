@@ -1376,15 +1376,55 @@ test.Data_Modeling_Preprocess()
 
 
 
-test.Modeling_DatasetSubsets(modelTarget='BHC_Y', exclude=  ['BHC_X','Tminus2_BHC_X', 'Tminus3_BHC_X', 'Tminus4_BHC_X', 'Tminus2_BHC_Y', 'Tminus2_BHC_Y', 'Tminus3_BHC_Y', 'Tminus4_BHC_Y', 'Tminus2_BHC_ECON_X', 'Tminus3_BHC_ECON_X', 'Tminus4_BHC_ECON_X'])
+test.Modeling_DatasetSubsets(modelTarget='BHC_Y', exclude=  ['BHC_X'])
 
+#len(test.dataset_subsets)
+#8191 combinations of data subsets
+#May need to create loop to go through datasubsets and model
+#May need to print featuer set.
 
 #Prep for Experiment
-tr_params = test.Modeling_TransferLearning_ParamsSetup()
+tr_params = test.Modeling_TransferLearning_ParamsSetup(csmar_exclude= ['CSMAR_X','CSMAR_ECON_X'],
+                                             bhc_exclude=['BHC_X','BHC_ECON_X'])
+
+
 
 
 #Run Experiment
-test.Modeling_TransferLearning_Experiment(test.TransferLearningExp_Dict['pre_exp_tr_params'], predictmodel_list = ['m_LSTMN', 'm_GRU', 'm_LinReg'])
+test.Modeling_TransferLearning_Experiment(test.TransferLearningExp_Dict['pre_exp_tr_params'], predictmodel_list = ['m_LSTMN','m_GRU','m_LinReg','arima'], epoch = 1000, threshold = 1e-3)
+
+#TODO: Fix m_LSTM, m_DA_RNN for Transfer Learning Experiment
+#m_LSTM has some tensor int error
+#m_DA_RNN, how to transfer it's parameters properly.
+#not working atm
+
+test.TransferLearningExp_Dict['Results_DF_Fin']
+#Add source features
+
+test.TransferLearningExp_Dict['Results_DF_Fin']['SourceFeatures'] = ','.join(test.TransferLearningExp_Dict['tr_params']['Source']['name'].split('&'))
+
+#Add Target Features
+test.TransferLearningExp_Dict['Results_DF_Fin']['TargetFeatures'] = ','.join(test.TransferLearningExp_Dict['tr_params']['Target']['name'].split('&'))
+
+
+#Export
+
+test.TransferLearningExp_Dict['Results_DF_Fin'].to_csv('TransferLearning_Naive_Exp1.csv', sep = ',')
+test.TransferLearningExp_Dict['Results_DF_Fin'][['Source','Target','pretrainedTR','%Improvement']]
+#TODO:Run experiment with different date time settings
+#TODO:Run Experiment with different features
+
+#Run with DARNN with transfer learning.
+#Find ways to improve the transfer learning apporach.
+
+#Develop a better model framework to imrpove from baselines.
+
+#Investigate CNN based RNNTime Series prediction, feature fusion etc.
+#Learn based on visualization depcitions of historical data, Line Charts, etc.
+#Trained on ResNet for transfer
+
+
+
 
 
 
